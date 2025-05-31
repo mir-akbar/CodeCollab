@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Phishing URL Detection Result</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: url('https://www.isitphish.com/static/media/img-home8-other.f89fae5a.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            text-align: center;
+            padding: 50px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+
+        p {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+
+        .btn {
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1.2em;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn-legit {
+            background-color: #4CAF50;
+        }
+
+        .btn-phish {
+            background-color: #f44336;
+        }
+
+        .btn-legit:hover {
+            background-color: #45a049;
+        }
+
+        .btn-phish:hover {
+            background-color: #e74c3c;
+        }
+
+        .history {
+            text-align: left;
+            margin-top: 50px;
+            padding: 20px;
+            background-color: #1e1e1e;
+            border-radius: 5px;
+        }
+
+        .history h2 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .history ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .history ul li {
+            background-color: #2e2e2e;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            word-wrap: break-word;  
+          }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Phishing URL Detection Result</h1>
+        <p><strong>URL:</strong> {{ url }}</p>
+        <p><strong>Result:</strong> {{ result }}</p>
+        <p><strong>Confidence:</strong> {{ confidence }}%</p>
+        <a href="/" class="btn" id="resultButton">Analyze another URL</a>
+        <div class="history">
+            <h2>Last 10 Checked URLs</h2>
+            <ul id="urlHistoryList"></ul>
+        </div>
+    </div>    
+  
+    <script>
+        // Function to save the checked URL to local storage
+        function saveCheckedURL(url) {
+            let urlHistory = JSON.parse(localStorage.getItem('urlHistory')) || [];
+            urlHistory.push(url);
+            if (urlHistory.length > 10) {
+                urlHistory.shift(); // Keep only the last 10 URLs
+            }
+            localStorage.setItem('urlHistory', JSON.stringify(urlHistory));
+        }
+
+        // Function to display the last 10 checked URLs
+        function displayCheckedURLs() {
+            let urlHistory = JSON.parse(localStorage.getItem('urlHistory')) || [];
+            let urlHistoryList = document.getElementById('urlHistoryList');
+            urlHistoryList.innerHTML = '';
+            urlHistory.forEach(function(url) {
+                let listItem = document.createElement('li');
+                listItem.textContent = url;
+                urlHistoryList.appendChild(listItem);
+            });
+        }
+
+        // Example usage
+        // Call this function when the URL is checked
+        saveCheckedURL('{{ url }}');
+
+        const result = '{{ result }}';  // Get result from the template
+        const resultButton = document.getElementById('resultButton');
+
+        // Set button background color based on result
+        if (result === 'True') {
+            resultButton.style.backgroundColor = 'green';
+        } else {
+            resultButton.style.backgroundColor = 'red';
+        }
+
+        // Call this function to display the last 10 checked URLs
+        displayCheckedURLs();
+    </script>
+</body>
+</html>

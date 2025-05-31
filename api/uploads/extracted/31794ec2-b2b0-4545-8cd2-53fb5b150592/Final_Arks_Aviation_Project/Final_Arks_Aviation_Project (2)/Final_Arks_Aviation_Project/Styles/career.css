@@ -1,0 +1,840 @@
+/* @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap"); */
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap");
+:root {
+  --primary-color: #001440;
+  --secondary-color: #ffc107;
+  --hoverBtn-color: #0d6efd;
+  --transition-speed: 0.3s;
+  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --hexagon-size: 260px;
+  --input-color: #d2e4ff;
+  --orange: #ffc107;
+  --white: #ffffff;
+  --light-text: rgba(255, 255, 255, 0.8);
+}
+
+body {
+  font-family: "Roboto", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  overflow-x: hidden;
+  margin-top: 40px;
+  background-color: whitesmoke;
+}
+
+/* Top-Button ==============================================================================================================*/
+.scroll-btn {
+  position: fixed;
+  bottom: 60px;
+  right: 20px;
+  display: none;
+  background-color: var(--secondary-color);
+  border: none;
+  padding: 10px;
+  padding-top: 5px;
+  border-radius: 55%;
+  cursor: pointer;
+  box-shadow: 0 5px 6px rgba(0, 0, 0, 0.5);
+  font-size: 35px;
+  z-index: 999;
+}
+
+/* Top Info Bar */
+
+/* Hero Section */
+.hero-section {
+  position: relative;
+  min-height: 80vh;
+  /* min-height: 600px; */
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),
+    url("https://images.unsplash.com/photo-1540962351504-03099e0a754b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80");
+  background-size: cover;
+  background-position: center;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  margin-top: 40px;
+  clip-path: polygon(0 0, 100% 0, 100% 90%, 50% 100%, 0 90%);
+}
+
+.hero-content {
+  max-width: 800px;
+  padding: 0 20px;
+  z-index: 2;
+}
+
+.hero-title {
+  font-size: 4rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: fadeInUp 1s ease forwards 0.5s;
+  text-transform: uppercase;
+}
+
+.hero-title span {
+  color: var(--secondary-color);
+  margin-left: 10px;
+}
+
+.hero-subtitle {
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: fadeInUp 1s ease forwards 0.7s;
+  text-transform: uppercase;
+}
+
+.hero-text {
+  font-size: 1.2rem;
+  margin-bottom: 30px;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: fadeInUp 1s ease forwards 0.9s;
+  line-height: 2;
+}
+
+.hero-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: fadeInUp 1s ease forwards 1.1s;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  padding: 12px 30px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: #0b5ed7;
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.btn-outline-light {
+  padding: 12px 30px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn-outline-light:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+/* heading */
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.jobs-container {
+  margin: 3rem 0;
+}
+
+.jobs-container h1 {
+  color: var(--secondary-color);
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 3rem;
+  position: relative;
+  padding-bottom: 0.8rem;
+}
+.jobs-container h1::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  border-radius: 50px;
+  transform: translateX(-50%);
+  width: 180px;
+  height: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color),
+    var(--secondary-color),
+    transparent
+  );
+}
+
+/* Add the updated CSS for job cards and buttons */
+.jobs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 2fr));
+  gap: 2.5rem;
+  align-items: stretch;
+}
+
+.job-card {
+  background: var(--primary-color);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.job-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.job-title {
+  color: #ffffff;
+  font-size: 1.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.job-description {
+  margin-bottom: 1rem;
+  color: var(--light-text);
+  flex-grow: 1;
+}
+
+.requirements {
+  margin-top: 1rem;
+  margin-bottom: 1rem; /* Add space below the requirements section */
+}
+
+.requirements h4 {
+  color: var(--orange);
+  margin-bottom: 0.5rem;
+}
+
+.requirements ul {
+  list-style-type: none;
+  padding-left: 1rem;
+}
+
+.requirements li {
+  margin-bottom: 0.3rem;
+  position: relative;
+  color: var(--light-text);
+}
+
+.requirements li::before {
+  content: "•";
+  color: var(--orange);
+  position: absolute;
+  left: -1rem;
+}
+
+.requirements p {
+  color: var(--light-text);
+}
+
+.apply-btn {
+  background-color: var(--secondary-color);
+  color: var(--white);
+  padding: 0.5rem 2rem;
+  border: none;
+  border-radius: 5px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  width: 100%;
+  margin-top: 1rem; /* Add space above the button */
+  text-align: center;
+}
+
+.apply-btn:hover {
+  background-color: orange;
+  transform: translateY(-2px);
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .header h1 {
+    font-size: 2.5rem;
+  }
+
+  .header p {
+    font-size: 1rem;
+  }
+
+  .application-form {
+    padding: 2rem;
+  }
+
+  .jobs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 2rem;
+  }
+
+  main {
+    padding: 1rem;
+  }
+
+  .application-form {
+    padding: 1.5rem;
+  }
+}
+
+/* ARROW */
+
+/* New scroll-to-top button styles */
+#scrollToTop {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: #eb6e0d;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: 0.3s;
+  z-index: 1000;
+  text-decoration: none; /* Prevent underline on some browsers */
+}
+
+#scrollToTop:hover {
+  background: #eb6e0d;
+  transform: scale(1.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #scrollToTop {
+    width: 40px;
+    height: 40px;
+    bottom: 15px;
+    right: 15px;
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  #scrollToTop {
+    width: 45px;
+    height: 45px;
+    font-size: 20px;
+  }
+}
+
+@media (min-width: 1440px) {
+  #scrollToTop {
+    width: 60px;
+    height: 60px;
+    bottom: 30px;
+    right: 30px;
+    font-size: 28px;
+  }
+}
+
+/* Popup Form Styles */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1200;
+  opacity: 0;
+  visibility: hidden;
+  padding: 0 1.5rem;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.popup-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.popup-form {
+  background: whitesmoke;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 500px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0);
+}
+
+.popup-header {
+  display: flex;
+  justify-content: center; /* Center the heading */
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: var(--primary-color);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+
+  position: relative; /* Add this for positioning the close button */
+}
+
+.popup-header .close-btn {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.3s ease, transform 0.3s ease;
+  position: absolute; /* Position the close button absolutely */
+  top: 10px; /* Adjust top position */
+  right: 10px; /* Adjust right position */
+}
+
+.popup-header .close-btn:hover {
+  color: var(--secondary-color);
+  transform: scale(1.1);
+}
+
+.popup-header h2 {
+  color: var(--secondary-color);
+  font-size: 1.5rem;
+  margin: 0; /* Remove default margin */
+}
+
+.popup-content {
+  padding: 2rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.popup-content .form-group {
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.popup-content label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--primary-color);
+  font-weight: 500;
+  font-size: 1.2rem;
+}
+
+.popup-content input,
+.popup-content select,
+.popup-content textarea {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid rgba(85, 84, 84, 0.664);
+  border-radius: 5px;
+  font-size: 1.15rem;
+  font-weight: 400;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease,
+    background-color 0.3s ease;
+  background-color: var(--white) !important;
+  color: var(--primary-color);
+}
+
+.popup-content input:focus,
+.popup-content select:focus,
+.popup-content textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+
+  box-shadow: 0 0 0 2px rgb(0, 20, 64, 0.6) !important;
+}
+
+.popup-content .submit-btn {
+  background-color: var(--orange);
+  color: var(--primary-color);
+  padding: 0.8rem 0.8rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease, transform 0.3s ease;
+  width: 100%;
+}
+
+.popup-content .submit-btn:hover {
+  background-color: var(--primary-color);
+  color: var(--white);
+  transform: translateY(-2px);
+}
+
+/* Chatbot section ========================================================================================================== */
+
+.chatbot-container {
+  position: fixed;
+  bottom: 0; /* Fixed to the bottom */
+  right: 20px;
+  bottom: 20vh;
+  width: 300px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  display: none; /* Hidden by default */
+  flex-direction: column;
+  z-index: 1000;
+  max-height: 80vh; /* Limit height */
+  overflow: hidden; /* Hide overflow */
+  transition: all 0.5s ease;
+}
+
+.chatbot-header {
+  background-color: var(--secondary-color); /* Match primary color */
+  color: var(--primary-color);
+  padding: 10px;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chatbot-messages {
+  padding: 10px;
+  height: 200px; /* Fixed height */
+  overflow-y: auto; /* Scrollable */
+}
+
+.chatbot-messages p {
+  margin: 5px 0;
+}
+
+.chatbot-input-container {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+}
+
+.chatbot-input {
+  flex: 1; /* Take remaining space */
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.btn {
+  background-color: var(--primary-color); /* Match primary color */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 10px;
+  margin-left: 5px; /* Space between input and button */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn:hover {
+  background-color: #0056b3; /* Darker shade on hover */
+}
+
+.btn i {
+  color: white; /* Icon color */
+  font-size: 16px; /* Icon size */
+}
+
+.chatbot-logo {
+  position: fixed; /* Fixed position */
+  bottom: 20vh; /* Adjust this value to ensure it doesn't overlap with the chatbot */
+  right: 20px; /* Position from the right */
+  cursor: pointer;
+  z-index: 1001; /* Ensure it is above the chatbot */
+  animation: float 2s ease-in-out infinite;
+  transition: all 0.5s ease;
+}
+
+.chatbot-logo img {
+  width: 60px; /* Adjust size as needed */
+  height: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chatbot-container {
+    width: 90%; /* Full width on smaller screens */
+    right: 5%; /* Centered */
+  }
+
+  .chatbot-logo {
+    bottom: 15rem; /* Adjust for smaller screens if needed */
+  }
+}
+
+@media (max-width: 480px) {
+  .chatbot-container {
+    bottom: 20vh;
+  }
+
+  .chatbot-logo {
+    bottom: 20vh;
+  }
+}
+
+/* ======================================================================================================================== */
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .contact-info li {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .social-links {
+    justify-content: center;
+  }
+  ul.contact-info {
+    padding-top: 2.2rem;
+  }
+  h3.contact-links {
+    margin-bottom: 0 !important;
+  }
+  ul.footer-links {
+    padding-left: 1.5i rem;
+  }
+  .footer-links li {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  h3 {
+    text-align: center;
+    margin-top: 2rem;
+  }
+  h3.quick-links {
+    margin-left: 0rem;
+  }
+}
+
+/* Typography */
+.main-footer h3 {
+  color: var(--text-color);
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+  padding-bottom: 1rem;
+}
+
+.main-footer h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 250px;
+  height: 2px;
+  background-color: var(--secondary-color);
+}
+
+@media (max-width: 768px) {
+  .main-footer {
+    clip-path: polygon(100% 100%, 100% 0, 50% 8%, 0 0, 0 100%);
+  }
+  .main-footer h3::after {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  @media (max-width: 576px) {
+    .main-footer {
+      clip-path: polygon(100% 100%, 100% 0, 50% 5%, 0 0, 0 100%);
+    }
+  }
+}
+
+/* Responsive */
+@media (max-width: 992px) {
+  .hero-title {
+    font-size: 3rem;
+  }
+
+  .hero-subtitle {
+    font-size: 2rem;
+  }
+
+  .navbar {
+    top: 70px;
+  }
+
+  body {
+    margin-top: 70px;
+  }
+}
+
+@media (max-width: 768px) {
+}
+
+@media (max-width: 576px) {
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .hero-subtitle {
+    font-size: 1.2rem;
+  }
+
+  .hero-text {
+    font-size: 0.9rem;
+  }
+
+  .top-info-item {
+    margin-right: 10px;
+    font-size: 12px;
+  }
+
+  .top-info-item i {
+    margin-right: 5px;
+  }
+
+  .navbar {
+    top: 85px;
+  }
+
+  body {
+    margin-top: 85px;
+  }
+
+  .hero-section {
+    height: 80vh !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 2rem;
+  }
+
+  .courses-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .course-card {
+    max-width: 400px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 992px) {
+  .header-form-form {
+    display: none;
+  }
+
+  .navbar {
+    position: fixed;
+    top: 0;
+  }
+
+  .phone-number {
+    display: none;
+  }
+
+  .about-us {
+    flex-direction: column;
+    height: 160vh;
+  }
+
+  .about-us .background {
+    width: 65vw;
+  }
+
+  .about-us .about-content {
+    width: 80vw;
+    height: 80vh;
+    gap: 10px;
+  }
+
+  .about-us .about-content .bottom .points .point {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-form-form {
+    display: none;
+  }
+
+  .top-info-item span {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+  }
+
+  .navbar {
+    position: fixed;
+    top: 0;
+  }
+}

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing URL Detection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Open Sans', sans-serif;
+            background: url('https://www.isitphish.com/static/media/img-home8-other.f89fae5a.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            filter: brightness(0.8); /* Adjust brightness for clarity */
+        }
+    
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background-color: rgba(13, 13, 13, 0.9); /* Slightly transparent background */
+            border-bottom: 2px solid #ff9800;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+    
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+    
+        .header-left img {
+            width: 60px;
+            margin-right: 15px;
+        }
+    
+        .header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            color: #ff9800;
+        }
+    
+        .nav-links {
+            display: flex;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+    
+        .nav-links li {
+            margin: 0 10px;
+        }
+    
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+    
+        .nav-links a:hover {
+            background-color: #ff9800;
+            color: #000;
+        }
+    
+        #root {
+            margin-top: 80px;
+            flex: 1;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    
+        .container {
+            text-align: center;
+            background: rgba(26, 26, 26, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 90%;
+            max-width: 600px;
+            margin: 20px auto;
+            transition: transform 0.3s;
+        }
+    
+        .container:hover {
+            transform: scale(1.02);
+        }
+    
+        h1 {
+            margin-bottom: 20px;
+            font-size: 2em;
+            color: #ff9800;
+        }
+    
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            transition: border 0.3s;
+        }
+    
+        input[type="text"]:focus {
+            border-color: #ff9800;
+            outline: none;
+        }
+    
+        button {
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+    
+        button:hover {
+            background-color: #e68900;
+            transform: scale(1.05);
+        }
+    
+        .author {
+            margin-top: 20px;
+            font-size: 0.8em;
+            color: #777;
+        }
+    
+        .how-it-works {
+            margin-top: 20px;
+            width: 90%;
+            max-width: 800px;
+            text-align: left;
+            background: rgba(26, 26, 26, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+    
+        .how-it-works h2 {
+            color: #ff9800;
+            margin-bottom: 10px;
+        }
+    
+        .how-it-works p {
+            color: #ccc;
+            line-height: 1.6;
+        }
+    
+        .url-example {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+    
+        .url-green, .url-red {
+            padding: 10px;
+            border-radius: 5px;
+            flex: 1;
+            text-align: center;
+            margin: 0 5px;
+            transition: transform 0.3s;
+        }
+    
+        .url-green:hover, .url-red:hover {
+            transform: scale(1.05);
+        }
+    
+        .url-green {
+            background-color: #4CAF50;
+        }
+    
+        .url-red {
+            background-color: #f44336;
+        }
+    
+        .phishing-part {
+            color: #f44336;
+            font-weight: bold;
+        }
+    
+        .testimonials {
+            background: rgba(26, 26, 26, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+    
+        .testimonials h2 {
+            color: #ff9800;
+            margin-bottom: 10px;
+        }
+    
+        .testimonial {
+            margin: 10px 0;
+            color: #ccc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    
+        footer {
+            background-color: rgba(16, 16, 16, 0.9); /* Slightly transparent background */
+            color: #ccc;
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+        }
+    
+        footer p {
+            margin: 5px 0;
+        }
+    
+        .footer-content {
+            margin: 10px 0;
+        }
+    
+        .footer-content a {
+            color: #ff9800;
+            text-decoration: none;
+        }
+    
+        .footer-content a:hover {
+            text-decoration: underline;
+        }
+    
+        .section {
+            background: rgba(26, 26, 26, 0.9);
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px auto;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+    
+        .section h2 {
+            color: #ff9800;
+            margin-bottom: 15px;
+        }
+    
+        .feature {
+            background: rgba(255, 152, 0, 0.2);
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            transition: background 0.3s, transform 0.3s;
+            cursor: pointer;
+        }
+    
+        .feature:hover {
+            background: rgba(255, 152, 0, 0.5);
+            transform: translateY(-3px);
+        }
+    
+        .feature-details {
+            display: none;
+            margin-top: 10px;
+            color: #ccc;
+        }
+    
+        .feature-details.active {
+            display: block;
+        }
+    
+        .contact-info {
+            margin: 20px 0;
+            text-align: center;
+        }
+    
+        .contact-info p {
+            margin: 5px 0;
+        }
+    
+        .social-media {
+            margin: 20px 0;
+        }
+    
+        .social-media ul {
+            justify-content: center;
+        }
+    
+    </style>
+    
+    
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <img src="https://tse2.mm.bing.net/th?id=OIP.Nu-yS0TOZ6PTlWRpR2oyJgHaHa&pid=Api&P=0&h=180" alt="Logo">
+            <h1>Phishing URL Detection</h1>
+        </div>
+        <div style="display: flex; justify-content: flex-start; margin: 0 60px;">
+            <ul class="nav-links" style="display: flex; list-style: none; padding: 0; margin: 0;">
+                <li style="margin-right: 20px;"><a href="#" onclick="navigateTo('home')">Home</a></li>
+                <li style="margin-right: 20px;"><a href="#" onclick="navigateTo('about')">About</a></li>
+                <li style="margin-right: 20px;"><a href="#" onclick="navigateTo('contact')">Contact</a></li>
+                <li><a href="#" onclick="navigateTo('features')">Features</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="root"></div>
+
+    <script>
+    
+        function navigateTo(page) {
+            var root = document.getElementById('root');
+              if (page === 'home') {
+                root.innerHTML = `
+                    <div class="container">
+                        <h1>Analyze a URL</h1>
+                        <form action="/analyze" method="post">
+                            <input type="text" id="URL" name="URL" placeholder="Enter URL here" required>
+                            <button type="submit">Analyze</button>
+                        </form>
+                        <div class="author">
+                            <p>© GCC BCA</p>
+                        </div>
+                    </div>
+                    <div class="how-it-works">
+                        <h2>How it Works</h2>
+                        <p>Phishing URL Detector uses machine learning to detect phishing URLs in real-time by analyzing key features such as URL length, number of digits and special characters, and the presence of "http" or "https."
+                         It also examines domain characteristics, including dots, hyphens, and suspicious top-level domains. A pre-trained model (phishing_model.pkl) predicts if the URL is phishing or legitimate, providing a confidence percentage. 
+                         With an accuracy of 92%, it effectively identifies zero-day phishing attacks without relying on blocklists.</p>
+                        
+                        <div class="url-example">
+                            <div class="url-green">
+                                <strong>Legitimate URL:</strong>
+                                <a href="https://en.wikipedia.org/wiki/Phishing" target="_blank" style="color: white; text-decoration: underline;">https://en.wikipedia.org/wiki/Phishing</a>
+                            </div>
+                            <div class="url-red">
+                                <strong>Phishing URL:</strong>
+                                <a href="http://website.com/1https/34.237.113.11" target="_blank" style="color: white; text-decoration: underline;">http://website.com/1https/34.237.113.11</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="testimonials">
+                        <h2>What Our Users Say</h2>
+                        <div class="testimonial">
+                            <p><strong></strong> "This tool saved me from a phishing attack! Highly recommend!"-- Sneha</p>
+                        </div>
+                        <div class="testimonial">
+                            <p><strong></strong> "Simple and effective! I love the real-time analysis."--Om</p>
+                        </div>
+                        <div class="testimonial">
+                            <p><strong></strong> "A must-have tool for anyone who spends time online!"--Bharat</p>
+                        </div>
+                    </div>
+                `;
+            } else if (page === 'about') {
+                root.innerHTML = `
+                    <div class="section">
+                        <h2>About Us</h2>
+                        <p>At Phishing URL Detection, we are passionate about enhancing online security. Our dedicated team of cybersecurity experts and developers has worked tirelessly to create a tool that effectively identifies phishing threats in real-time.</p>
+                        <p>Phishing attacks have become increasingly sophisticated, targeting individuals and organizations alike. Our mission is to empower users with the knowledge and tools needed to stay safe online. With an accuracy rate of 92%, our phishing detection tool utilizes advanced machine learning algorithms to analyze URLs for potential threats, helping you navigate the web safely.</p>
+                        <p>Join us in our journey to make the internet a safer place for everyone. Together, we can combat phishing attacks and protect our digital identities!</p>
+                    </div>
+                `;
+            } else if (page === 'contact') {
+                root.innerHTML = `
+                    <div class="section">
+                        <h2>Contact Us</h2>
+                        <p>We’d love to hear from you! If you have any questions, feedback, or need assistance, please don’t hesitate to reach out to us. Our team is here to help you navigate the complexities of online security.</p>
+                        <div class="contact-info">
+                            <p><strong>Email:</strong> <a href="mailto:support@example.com" style="color: #ff9800;">support@example.com</a></p>
+                            <p><strong>Phone:</strong> <a href="tel:+1234567890" style="color: #ff9800;">+1 234 567 890</a></p>
+                        </div>
+                        <div class="social-media">
+                            <p style="text-align: center;"><strong>Follow Us:</strong></p>
+
+                            <ul style="list-style: none; padding: 0; display: flex; justify-content: center;">
+                                <li style="margin: 0 15px;"><a href="https://www.facebook.com" style="color: #ff9800;">Facebook</a></li>
+                                <li style="margin: 0 15px;"><a href="https://www.twitter.com" style="color: #ff9800;">Twitter</a></li>
+                                <li style="margin: 0 15px;"><a href="https://www.linkedin.com" style="color: #ff9800;">LinkedIn</a></li>
+                            </ul>
+                        </div>
+                        <p>Stay updated with our latest features and cybersecurity tips by subscribing to our newsletter!</p>
+                    </div>
+                `;
+            } else if (page === 'features') {
+                root.innerHTML = `
+                    <div class="section">
+                        <h2>Features</h2>
+                        <div class="features-list">
+                            <div class="feature" onclick="toggleFeatureDetails(this)">Real-time Analysis</div>
+                            <div class="feature-details">This feature allows the tool to analyze URLs as they are entered, providing immediate feedback on their safety.</div>
+                            <div class="feature" onclick="toggleFeatureDetails(this)">High Accuracy (92%)</div>
+                            <div class="feature-details">Our tool achieves an impressive accuracy rate of 92%, making it a reliable choice for detecting phishing attempts.</div>
+                            <div class="feature" onclick="toggleFeatureDetails(this)">Machine Learning Driven</div>
+                            <div class="feature-details">The detection process is powered by advanced machine learning algorithms that continuously improve.</div>
+                            <div class="feature" onclick="toggleFeatureDetails(this)">Easy-to-Use Interface</div>
+                            <div class="feature-details">The user-friendly design makes it simple for anyone to use, regardless of their technical knowledge.</div>
+                            <div class="feature" onclick="toggleFeatureDetails(this)">No Blocklists Required</div>
+                            <div class="feature-details">Unlike traditional tools, our method does not rely on blocklists, allowing it to identify new threats more effectively.</div>
+                            <div class="feature" onclick="toggleFeatureDetails(this)">Multiple URL Analysis</div>
+                            <div class="feature-details">Our tool can analyze multiple URLs simultaneously, saving users time and effort.</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function toggleFeatureDetails(featureElement) {
+            var detailsElement = featureElement.nextElementSibling;
+            if (detailsElement.classList.contains('active')) {
+                detailsElement.classList.remove('active');
+            } else {
+                // Collapse any other active details
+                var allDetails = document.querySelectorAll('.feature-details');
+                allDetails.forEach(function(detail) {
+                    detail.classList.remove('active');
+                });
+                detailsElement.classList.add('active');
+            }
+        }
+
+        // Initialize the home page
+        navigateTo('home');
+    </script>
+
+    <footer>
+        <p>© PRERANA GAYATRI PRATIKSHA</p>
+        <div class="footer-content">
+            <p>For inquiries, please reach out to us at <a href="mailto:support@phisdetect.com" style="color: #ff9800;">support@phishdetect.com</a></p>
+            <p>Follow us on social media for updates!</p>
+        </div>
+    </footer>
+    
+</body>
+</html>
