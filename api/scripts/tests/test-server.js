@@ -14,8 +14,9 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-// Connect to MongoDB
-mongoose.connect('mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438')
+// Connect to MongoDB using shared config
+const { connectDB } = require('../../config/database');
+connectDB()
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 

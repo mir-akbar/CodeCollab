@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
-const FileStorage = require('./models/FileStorage');
+const { connectDB, disconnectDB } = require('../../config/database');
+const FileStorage = require('../../models/FileStorage');
 
 async function checkTestSessionUploads() {
     try {
         // Connect to MongoDB
-        await mongoose.connect('mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438');
+        await connectDB();
         console.log('✅ Connected to MongoDB');
 
         // Find files from recent test sessions
@@ -49,7 +50,7 @@ async function checkTestSessionUploads() {
     } catch (error) {
         console.error('❌ Error:', error.message);
     } finally {
-        await mongoose.connection.close();
+        await disconnectDB();
         console.log('🔒 Database connection closed');
     }
 }

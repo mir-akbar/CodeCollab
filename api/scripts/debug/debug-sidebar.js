@@ -1,10 +1,9 @@
-const mongoose = require('mongoose');
-const FileStorage = require('./models/FileStorage');
+const { connectDB, disconnectDB } = require('../../config/database');
+const FileStorage = require('../../models/FileStorage');
 
 async function debugSidebar() {
     try {
-        await mongoose.connect('mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438');
-        console.log('✅ Connected to MongoDB');
+        await connectDB();
 
         const sessionId = '2cba80bb-bce4-4d46-961d-d37e7e836f49';
         
@@ -54,8 +53,7 @@ async function debugSidebar() {
     } catch (error) {
         console.error('❌ Error:', error.message);
     } finally {
-        await mongoose.connection.close();
-        console.log('\n🔒 Database connection closed');
+        await disconnectDB();
     }
 }
 

@@ -1,7 +1,8 @@
 const { MongoClient } = require('mongodb');
 
 async function fixIndexes() {
-  const uri = 'mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438';
+  const { getMongoUri } = require('../../config/database');
+const uri = getMongoUri();
   const client = new MongoClient(uri);
 
   try {

@@ -1,19 +1,9 @@
-const mongoose = require('mongoose');
-
-// MongoDB connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect('mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438', {
-    });
-    console.log('✅ Connected to MongoDB');
-    return true;
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error);
-    return false;
-  }
-};
+const { connectDB, disconnectDB } = require('../../config/database');
 
 const analyzeFileContents = async () => {
+  try {
+    // Connect to database
+    await connectDB();
   console.log('🔍 Analyzing file contents to identify what these files are...\n');
   
   try {
@@ -72,11 +62,12 @@ const analyzeFileContents = async () => {
 };
 
 const main = async () => {
-  const connected = await connectDB();
-  if (connected) {
+  try {
     await analyzeFileContents();
-    await mongoose.connection.close();
-    console.log('🔒 Database connection closed');
+  } catch (error) {
+    console.error('❌ Error:', error);
+  } finally {
+    await disconnectDB();
   }
 };
 

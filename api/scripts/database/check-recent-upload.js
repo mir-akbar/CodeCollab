@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
+const { connectDB, disconnectDB } = require('../../config/database');
 
 // MongoDB connection
 const connectDB = async () => {
   try {
-    await mongoose.connect('mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438', {
-    });
+    await connectDB();
     console.log('✅ Connected to MongoDB');
     return true;
   } catch (error) {
@@ -60,7 +60,7 @@ const main = async () => {
   const connected = await connectDB();
   if (connected) {
     await checkRecentFiles();
-    await mongoose.connection.close();
+    await disconnectDB();
     console.log('\n🔒 Database connection closed');
   }
 };
