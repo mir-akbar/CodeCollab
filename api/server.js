@@ -4,6 +4,7 @@ const socketIo = require("socket.io");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const Y = require('yjs');
 const fileStorageService = require("./services/fileStorageService");
 require("./db/index.js");
 const videoChat = require("./routes/videoChat");
@@ -31,6 +32,10 @@ const connectedUsers = new Map();
 const fileContents = new Map();
 const roomUsers = new Map();
 const userSessions = new Map();
+// Store YJS document states in memory (use Redis/MongoDB in production)
+const yjsRooms = new Map();
+// Store sync timers for debouncing
+yjsRooms.syncTimers = new Map();
 let sharedCode = "";
 let currentEditor = null;
 
@@ -118,9 +123,167 @@ io.on("connection", (socket) => {
     });
 
   
-  
-  socket.on("cursor-move", (data) => {
+    socket.on("cursor-move", (data) => {
     socket.broadcast.emit("remote-cursor", data);
+  });
+
+  // YJS-specific handlers
+  socket.on('yjs-join-room', ({ room }) => {
+    socket.join(room);
+    console.log(`User ${socket.id} joined YJS room: ${room}`);
+  });  socket.on('yjs-leave-room', async ({ room }) => {
+    socket.leave(room);
+    console.log(`User ${socket.id} left YJS room: ${room}`);
+    
+    // Clean up room data if no one is in the room
+    const roomClients = io.sockets.adapter.rooms.get(room);
+    if (!roomClients || roomClients.size === 0) {
+      // Extract sessionId and filePath for final sync
+      const lastDashIndex = room.lastIndexOf('-');
+      if (lastDashIndex > 0) {
+        const sessionId = room.substring(0, lastDashIndex);
+        const filePath = room.substring(lastDashIndex + 1);
+        
+        console.log(`🔍 Cleanup sync - Session: ${sessionId}, File: ${filePath}`);
+        
+        if (sessionId && filePath && yjsRooms.has(room)) {
+          try {
+            // Final sync to MongoDB before cleanup
+            const roomData = yjsRooms.get(room);
+            if (roomData.doc && roomData.isInitialized) {
+              const finalState = Y.encodeStateAsUpdate(roomData.doc);
+              await fileStorageService.syncYjsDocumentToFile(sessionId, filePath, finalState);
+              console.log(`📝 Final sync for room cleanup: ${filePath}`);
+            }
+          } catch (error) {
+            console.error('Error during final sync:', error);
+          }
+          
+          // Clean up memory
+          yjsRooms.delete(room);
+          if (yjsRooms.syncTimers) {
+            clearTimeout(yjsRooms.syncTimers.get(room));
+            yjsRooms.syncTimers.delete(room);
+          }
+          console.log(`🧹 Cleaned up YJS room: ${room}`);
+        }
+      }
+    }
+  });socket.on('yjs-update', ({ room, update, origin }) => {
+    // Initialize room data structure if it doesn't exist
+    if (!yjsRooms.has(room)) {
+      yjsRooms.set(room, {
+        doc: new Y.Doc(), // Store the actual YJS document for proper state management
+        lastSyncTime: Date.now(),
+        isInitialized: false
+      });
+    }
+    
+    const roomData = yjsRooms.get(room);
+    
+    // Apply the update to the room's YJS document
+    try {
+      Y.applyUpdate(roomData.doc, new Uint8Array(update));
+      
+      // Broadcast to others in the room (excluding the sender)
+      socket.to(room).emit('yjs-update', { update, origin });
+      
+      // Extract sessionId and filePath from room name for MongoDB sync
+      const lastDashIndex = room.lastIndexOf('-');
+      if (lastDashIndex > 0) {
+        const sessionId = room.substring(0, lastDashIndex);
+        const filePath = room.substring(lastDashIndex + 1);
+        
+        // Debounce the MongoDB sync to avoid excessive writes
+        if (!yjsRooms.syncTimers) yjsRooms.syncTimers = new Map();
+        
+        clearTimeout(yjsRooms.syncTimers.get(room));
+        yjsRooms.syncTimers.set(room, setTimeout(async () => {
+          try {
+            // Use the current document state (not accumulated updates)
+            const currentState = Y.encodeStateAsUpdate(roomData.doc);
+            await fileStorageService.syncYjsDocumentToFile(sessionId, filePath, currentState);
+            console.log(`📝 Synced YJS document to MongoDB: ${filePath}`);
+            roomData.lastSyncTime = Date.now();
+          } catch (error) {
+            console.error('Error syncing YJS document to MongoDB:', error);
+          }
+        }, 2000)); // 2 second debounce
+      }
+    } catch (error) {
+      console.error('Error applying YJS update:', error);
+    }
+  });
+
+  socket.on('yjs-awareness-update', ({ room, update, origin }) => {
+    socket.to(room).emit('yjs-awareness-update', { update, origin });
+  });  socket.on('yjs-request-sync', async ({ room }) => {
+    // Extract sessionId and filePath from room name (format: sessionId-fileName)
+    const lastDashIndex = room.lastIndexOf('-');
+    if (lastDashIndex <= 0) {
+      console.error(`❌ Invalid room format for sync request: ${room}`);
+      socket.emit('yjs-sync-response', { content: null });
+      return;
+    }
+    
+    const sessionId = room.substring(0, lastDashIndex);
+    const filePath = room.substring(lastDashIndex + 1);
+    
+    console.log(`🔍 Sync request - Session: ${sessionId}, File: ${filePath}`);
+    
+    try {
+      // Check if we have an existing YJS document in memory
+      if (yjsRooms.has(room)) {
+        const roomData = yjsRooms.get(room);
+        if (roomData.doc && roomData.isInitialized) {
+          // Return the current state of the in-memory document
+          const currentState = Y.encodeStateAsUpdate(roomData.doc);
+          socket.emit('yjs-sync-response', { content: Array.from(currentState) });
+          console.log(`📤 Sent YJS state from memory: ${filePath}`);
+          return;
+        }
+      }
+      
+      // Initialize room with document from MongoDB
+      if (!yjsRooms.has(room)) {
+        yjsRooms.set(room, {
+          doc: new Y.Doc(),
+          lastSyncTime: Date.now(),
+          isInitialized: false
+        });
+      }
+      
+      const roomData = yjsRooms.get(room);
+      
+      // Try to load the document state from MongoDB
+      try {
+        const documentState = await fileStorageService.getYjsDocumentFromFile(sessionId, filePath);
+        if (documentState && documentState.length > 0) {
+          // Apply the loaded state to our room document
+          Y.applyUpdate(roomData.doc, documentState);
+          roomData.isInitialized = true;
+          
+          // Send the loaded state to the requesting client
+          socket.emit('yjs-sync-response', { content: Array.from(documentState) });
+          console.log(`📂 Loaded and sent YJS document from MongoDB: ${filePath}`);
+          return;
+        }
+      } catch (loadError) {
+        console.warn(`Could not load YJS document from MongoDB: ${loadError.message}`);
+      }
+      
+      // If no document found in MongoDB, initialize empty document
+      roomData.doc.getText('monaco'); // Initialize the text type
+      roomData.isInitialized = true;
+      
+      const emptyState = Y.encodeStateAsUpdate(roomData.doc);
+      socket.emit('yjs-sync-response', { content: Array.from(emptyState) });
+      console.log(`📭 Sent empty YJS document for: ${filePath}`);
+      
+    } catch (error) {
+      console.error('Error handling YJS sync request:', error);
+      socket.emit('yjs-sync-response', { content: null });
+    }
   });
   
 

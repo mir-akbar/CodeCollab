@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YJS Integration Test</title>
+    <script src="https://unpkg.com/yjs@13/dist/yjs.js"></script>
+    <script src="https://unpkg.com/y-protocols@1/dist/awareness.js"></script>
+    <script src="https://unpkg.com/socket.io-client@4/dist/socket.io.js"></script>
+</head>
+<body>
+    <h1>YJS Integration Test</h1>
+    <div id="status">Initializing...</div>
+    <div id="content">Document content will appear here...</div>
+    <div id="awareness">Awareness info will appear here...</div>
+    <button onclick="addText()">Add Test Text</button>
+    
+    <script>
+        const { Doc, applyUpdate } = Y;
+        const { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } = awarenessProtocol;
+        
+        // Create YJS document and awareness
+        const doc = new Doc();
+        const awareness = new Awareness(doc);
+        const text = doc.getText('content');
+        
+        // Connect to server
+        const socket = io('http://localhost:3000');
+        const roomName = 'test-session-test-file.txt';
+        
+        socket.on('connect', () => {
+            document.getElementById('status').textContent = 'Connected to server';
+            
+            // Join room
+            socket.emit('yjs-join-room', { room: roomName });
+            
+            // Set awareness
+            awareness.setLocalStateField('user', {
+                name: 'Browser User',
+                color: '#0066cc'
+            });
+            
+            // Send awareness update
+            const clients = Array.from(awareness.getStates().keys());
+            const update = encodeAwarenessUpdate(awareness, clients);
+            socket.emit('yjs-awareness-update', {
+                room: roomName,
+                update: Array.from(update),
+                origin: socket.id
+            });
+            
+            // Request sync
+            socket.emit('yjs-request-sync', { room: roomName });
+        });
+        
+        // Handle YJS updates
+        doc.on('update', (update, origin) => {
+            if (origin !== socket.id) return;
+            socket.emit('yjs-update', {
+                room: roomName,
+                update: Array.from(update),
+                origin: socket.id
+            });
+        });
+        
+        socket.on('yjs-update', ({ update, origin }) => {
+            if (origin !== socket.id) {
+                applyUpdate(doc, new Uint8Array(update));
+                updateDisplay();
+            }
+        });
+        
+        socket.on('yjs-sync-response', ({ content }) => {
+            if (content) {
+                applyUpdate(doc, new Uint8Array(content));
+                updateDisplay();
+            }
+        });
+        
+        socket.on('yjs-awareness-update', ({ update, origin }) => {
+            if (origin !== socket.id) {
+                applyAwarenessUpdate(awareness, new Uint8Array(update), origin);
+                updateAwareness();
+            }
+        });
+        
+        function updateDisplay() {
+            document.getElementById('content').textContent = text.toString();
+        }
+        
+        function updateAwareness() {
+            const states = awareness.getStates();
+            document.getElementById('awareness').textContent = 
+                `Active users: ${states.size}`;
+        }
+        
+        function addText() {
+            text.insert(text.length, `\nAdded at ${new Date().toLocaleTimeString()}`);
+            updateDisplay();
+        }
+        
+        // Add some test content after a delay
+        setTimeout(() => {
+            text.insert(0, 'Hello from browser test! ');
+            updateDisplay();
+        }, 2000);
+        
+        // Update display initially
+        updateDisplay();
+        updateAwareness();
+    </script>
+</body>
+</html>

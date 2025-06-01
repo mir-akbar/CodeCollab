@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users, LogOut, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { isAuthenticated, logout } from '@/utils/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from "../common/Constant";
@@ -78,9 +78,15 @@ function UsersDialog({ users, onCopyLink }) {
           </div>
         </div>
       </DialogTrigger>
-      <DialogContent className="bg-[#1e1e1e] text-gray-300 border-[#444]">
+      <DialogContent 
+        className="bg-[#1e1e1e] text-gray-300 border-[#444]"
+        aria-describedby="collaboration-dialog-description"
+      >
         <DialogHeader>
           <DialogTitle>Collaboration</DialogTitle>
+          <DialogDescription id="collaboration-dialog-description">
+            View and manage active collaborators in this session.
+          </DialogDescription>
         </DialogHeader>
         <UsersDialogContent onCopyLink={onCopyLink} />
       </DialogContent>

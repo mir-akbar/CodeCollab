@@ -219,6 +219,60 @@ class OptimizedFileStorage {
     };
   }
 
+  // YJS-specific methods for real-time collaboration
+  async syncYjsDocumentToFile(sessionId, filePath, yjsDocumentState) {
+    try {
+      // Convert YJS document state to text content
+      const Y = require('yjs');
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, new Uint8Array(yjsDocumentState));
+      const ytext = doc.getText('monaco');
+      const content = ytext.toString();
+      
+      // Update the file content in MongoDB
+      const contentBuffer = Buffer.from(content, 'utf8');
+      return await this.updateFileContent(sessionId, filePath, contentBuffer);
+    } catch (error) {
+      console.error('Error syncing YJS document to file:', error);
+      throw error;
+    }
+  }
+
+  async getYjsDocumentFromFile(sessionId, filePath) {
+    try {
+      // Get the file content from MongoDB
+      const file = await this.getFile(sessionId, filePath);
+      const content = file.content.toString('utf8');
+      
+      // Only create a YJS document if the file has content
+      if (content && content.trim().length > 0) {
+        // Create YJS document with the content
+        const Y = require('yjs');
+        const doc = new Y.Doc();
+        const ytext = doc.getText('monaco');
+        ytext.insert(0, content);
+        
+        // Return the document state as a Uint8Array
+        return Y.encodeStateAsUpdate(doc);
+      } else {
+        // For empty files, return empty document state
+        const Y = require('yjs');
+        const doc = new Y.Doc();
+        doc.getText('monaco'); // Initialize the text type
+        return Y.encodeStateAsUpdate(doc);
+      }
+    } catch (error) {
+      // If file doesn't exist, return empty document state
+      if (error.message === 'File not found') {
+        const Y = require('yjs');
+        const doc = new Y.Doc();
+        doc.getText('monaco'); // Initialize the text type
+        return Y.encodeStateAsUpdate(doc);
+      }
+      throw error;
+    }
+  }
+
   _isTextFile(fileType) {
     return this.COMPRESSIBLE_TYPES.includes(fileType);
   }
