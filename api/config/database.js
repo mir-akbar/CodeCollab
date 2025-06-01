@@ -2,32 +2,22 @@
 // Uses environment variables to avoid exposing credentials
 
 const mongoose = require('mongoose');
-
-// Load MongoDB URI from environment variable or use local fallback
-const getMongoUri = () => {
-    // First try to load from environment
-    if (process.env.MONGODB_URI) {
-        return process.env.MONGODB_URI;
-    }
-    
-    // Fallback to local MongoDB for development
-    console.warn('⚠️  MONGODB_URI not found in environment variables. Using local MongoDB fallback.');
-    return 'mongodb://localhost:27017/code_colab';
-};
+const { config } = require('./environment');
 
 // Connect to MongoDB with proper error handling
 const connectDB = async (options = {}) => {
     try {
-        const uri = getMongoUri();
+        const uri = config.MONGODB_URI;
         
-        // Default connection options
+        // Modern connection options (removed deprecated options)
         const defaultOptions = {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
+            dbName: config.DB_NAME,
             ...options
         };
         
         console.log('🔗 Connecting to MongoDB...');
+        console.log(`📍 Database: ${config.DB_NAME}`);
+        
         await mongoose.connect(uri, defaultOptions);
         console.log('✅ MongoDB connection successful');
         
@@ -51,5 +41,5 @@ const disconnectDB = async () => {
 module.exports = {
     connectDB,
     disconnectDB,
-    getMongoUri
+    getMongoUri: () => config.MONGODB_URI
 };

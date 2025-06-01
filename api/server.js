@@ -1,3 +1,14 @@
+// Load and validate environment configuration
+const { config, validateEnvironment } = require('./config/environment');
+
+// Validate environment variables on startup
+try {
+  validateEnvironment();
+} catch (error) {
+  console.error('❌ Environment validation failed:', error.message);
+  process.exit(1);
+}
+
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
@@ -19,12 +30,14 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "*",
+    origin: config.CORS_ORIGIN,
   },
   transports: ["websocket", "polling"],
 });
 
-app.use(cors());
+app.use(cors({
+  origin: config.CORS_ORIGIN
+}));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -180,10 +193,12 @@ io.on("connection", (socket) => {
     }
     
     const roomData = yjsRooms.get(room);
-    
-    // Apply the update to the room's YJS document
+      // Apply the update to the room's YJS document
     try {
       Y.applyUpdate(roomData.doc, new Uint8Array(update));
+      
+      // Mark room as initialized since we have content
+      roomData.isInitialized = true;
       
       // Broadcast to others in the room (excluding the sender)
       socket.to(room).emit('yjs-update', { update, origin });
@@ -219,10 +234,9 @@ io.on("connection", (socket) => {
     socket.to(room).emit('yjs-awareness-update', { update, origin });
   });  socket.on('yjs-request-sync', async ({ room }) => {
     // Extract sessionId and filePath from room name (format: sessionId-fileName)
-    const lastDashIndex = room.lastIndexOf('-');
-    if (lastDashIndex <= 0) {
+    const lastDashIndex = room.lastIndexOf('-');    if (lastDashIndex <= 0) {
       console.error(`❌ Invalid room format for sync request: ${room}`);
-      socket.emit('yjs-sync-response', { content: null });
+      socket.emit('yjs-sync-response', { update: null, room });
       return;
     }
     
@@ -234,12 +248,11 @@ io.on("connection", (socket) => {
     try {
       // Check if we have an existing YJS document in memory
       if (yjsRooms.has(room)) {
-        const roomData = yjsRooms.get(room);
-        if (roomData.doc && roomData.isInitialized) {
+        const roomData = yjsRooms.get(room);        if (roomData.doc && roomData.isInitialized) {
           // Return the current state of the in-memory document
           const currentState = Y.encodeStateAsUpdate(roomData.doc);
-          socket.emit('yjs-sync-response', { content: Array.from(currentState) });
-          console.log(`📤 Sent YJS state from memory: ${filePath}`);
+          socket.emit('yjs-sync-response', { update: Array.from(currentState), room });
+          console.log(`📤 Sent YJS state from memory: ${filePath}, size: ${currentState.length}`);
           return;
         }
       }
@@ -262,10 +275,9 @@ io.on("connection", (socket) => {
           // Apply the loaded state to our room document
           Y.applyUpdate(roomData.doc, documentState);
           roomData.isInitialized = true;
-          
-          // Send the loaded state to the requesting client
-          socket.emit('yjs-sync-response', { content: Array.from(documentState) });
-          console.log(`📂 Loaded and sent YJS document from MongoDB: ${filePath}`);
+            // Send the loaded state to the requesting client
+          socket.emit('yjs-sync-response', { update: Array.from(documentState), room });
+          console.log(`📂 Loaded and sent YJS document from MongoDB: ${filePath}, size: ${documentState.length}`);
           return;
         }
       } catch (loadError) {
@@ -275,14 +287,12 @@ io.on("connection", (socket) => {
       // If no document found in MongoDB, initialize empty document
       roomData.doc.getText('monaco'); // Initialize the text type
       roomData.isInitialized = true;
-      
-      const emptyState = Y.encodeStateAsUpdate(roomData.doc);
-      socket.emit('yjs-sync-response', { content: Array.from(emptyState) });
+        const emptyState = Y.encodeStateAsUpdate(roomData.doc);
+      socket.emit('yjs-sync-response', { update: Array.from(emptyState), room });
       console.log(`📭 Sent empty YJS document for: ${filePath}`);
-      
-    } catch (error) {
+        } catch (error) {
       console.error('Error handling YJS sync request:', error);
-      socket.emit('yjs-sync-response', { content: null });
+      socket.emit('yjs-sync-response', { update: null, room });
     }
   });
   
@@ -360,6 +370,8 @@ app.get("/active-users", (req, res) => {
   res.json(Array.from(userSessions.keys()));
 });
 
-server.listen(3012, () => {
-  console.log("Server running on http://localhost:3012");
+server.listen(config.PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${config.PORT}`);
+  console.log(`📋 Environment: ${config.NODE_ENV}`);
+  console.log(`🔗 MongoDB: Connected`);
 });
