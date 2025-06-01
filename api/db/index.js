@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
-const url = "mongodb+srv://admin:admin@cluster91438.fvtzi.mongodb.net/code_colab?retryWrites=true&w=majority&appName=Cluster91438";
+// Use Node.js built-in process.env (no dotenv needed for server-side)
+const url = process.env.MONGODB_URI || "mongodb://localhost:27017/code_colab";
 
 mongoose.connect(url, {
 })
