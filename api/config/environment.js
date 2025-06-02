@@ -23,8 +23,10 @@ loadEnvironmentVariables();
 
 // Environment configuration with fallbacks
 const config = {
-  // MongoDB Configuration
-  MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/code_colab',
+  // MongoDB Configuration - Enhanced with Atlas + Local support
+  MONGODB_ATLAS_URI: process.env.MONGODB_ATLAS_URI,
+  MONGODB_LOCAL_URI: process.env.MONGODB_LOCAL_URI || 'mongodb://localhost:27017/code_colab',
+  MONGODB_URI: process.env.MONGODB_URI || process.env.MONGODB_LOCAL_URI || 'mongodb://localhost:27017/code_colab',
   DB_NAME: process.env.DB_NAME || 'code_colab',
   
   // Server Configuration
@@ -44,12 +46,12 @@ const config = {
 
 // Validation function for required environment variables
 const validateEnvironment = () => {
-  const required = ['MONGODB_URI'];
-  const missing = required.filter(key => !config[key] || config[key] === '');
+  // At least one MongoDB URI should be available (local fallback always exists)
+  const hasConnection = config.MONGODB_ATLAS_URI || config.MONGODB_LOCAL_URI;
   
-  if (missing.length > 0) {
-    console.error('❌ Missing required environment variables:', missing);
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  if (!hasConnection) {
+    console.error('❌ No MongoDB connection available');
+    throw new Error('No MongoDB connection URI available');
   }
   
   console.log('✅ Backend environment configuration validated successfully');
@@ -59,7 +61,9 @@ const validateEnvironment = () => {
       PORT: config.PORT,
       DB_NAME: config.DB_NAME,
       NODE_ENV: config.NODE_ENV,
-      MONGODB_URI: config.MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@') // Hide credentials in logs
+      HAS_ATLAS: !!config.MONGODB_ATLAS_URI,
+      HAS_LOCAL: !!config.MONGODB_LOCAL_URI,
+      FALLBACK_STRATEGY: 'Atlas → Local'
     });
   }
   

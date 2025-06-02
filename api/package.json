@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node --env-file=.env server.js",
     "dev": "node --env-file=.env server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +16,7 @@
     "adm-zip": "^0.5.16",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
+    "diff": "^8.0.2",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "fs-extra": "^11.3.0",
@@ -24,8 +27,15 @@
     "mysql2": "^3.12.0",
     "socket.io": "^4.8.1",
     "unzipper": "^0.12.3",
+    "uuid": "^11.1.0",
     "ws": "^8.18.1",
     "y-websocket": "^1.0.0",
     "yjs": "^13.6.26"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "mongodb-memory-server": "^10.1.4",
+    "supertest": "^7.1.1",
+    "vitest": "^3.2.0"
   }
 }

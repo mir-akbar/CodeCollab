@@ -1,6 +1,8 @@
 const FileStorage = require('../models/FileStorage');
 const zlib = require('zlib');
 const { promisify } = require('util');
+const crypto = require('crypto');
+const diff = require('diff');
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -10,6 +12,375 @@ class OptimizedFileStorage {
     this.MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB per document (MongoDB limit is 16MB)
     this.COMPRESSION_THRESHOLD = 1024; // 1KB
     this.COMPRESSIBLE_TYPES = ['.js', '.java', '.py', '.html', '.css', '.json', '.xml', '.txt', '.md'];
+    
+    // Versioning configuration
+    this.DEFAULT_MAX_VERSIONS = 10;
+    this.DEFAULT_RETENTION_DAYS = 30;
+    this.cleanupQueue = [];
+    this.isCleanupRunning = false;
+    
+    // Start background cleanup process
+    this.startCleanupScheduler();
+  }
+
+  // ===== VERSIONING METHODS =====
+  
+  /**
+   * Generate content hash for change detection
+   */
+  generateContentHash(content) {
+    return crypto.createHash('sha256').update(content).digest('hex');
+  }
+
+  /**
+   * Check if content has actually changed
+   */
+  async hasContentChanged(sessionId, filePath, newContent) {
+    try {
+      const currentFile = await FileStorage.findLatestVersion(sessionId, filePath);
+      if (!currentFile) return true; // No existing file, so it's a change
+      
+      const newHash = this.generateContentHash(newContent);
+      return currentFile.contentHash !== newHash;
+    } catch (error) {
+      console.error('Error checking content change:', error);
+      return true; // Assume changed on error
+    }
+  }
+
+  /**
+   * Create a new version of a file
+   */
+  async createFileVersion(fileData, options = {}) {
+    const { 
+      maxVersions = this.DEFAULT_MAX_VERSIONS,
+      retentionDays = this.DEFAULT_RETENTION_DAYS,
+      changeDescription = null
+    } = options;
+
+    const { sessionId, fileName, fileType, content, mimeType, parentFolder, filePath } = fileData;
+
+    // Check if content actually changed
+    const contentChanged = await this.hasContentChanged(sessionId, filePath, content);
+    if (!contentChanged) {
+      console.log(`📝 No content change detected for ${filePath}, skipping version creation`);
+      return await FileStorage.findLatestVersion(sessionId, filePath);
+    }
+
+    // Get current latest version
+    const currentLatest = await FileStorage.findLatestVersion(sessionId, filePath);
+    let newVersion = 1;
+    
+    if (currentLatest) {
+      // Mark current latest as not latest
+      currentLatest.isLatest = false;
+      await currentLatest.save();
+      newVersion = currentLatest.version + 1;
+    }
+
+    // Process content (compression, etc.)
+    let finalContent = content;
+    let isCompressed = false;
+    const originalSize = Buffer.byteLength(content);
+
+    if (this._isTextFile(fileType)) {
+      try {
+        const compressed = await gzip(content);
+        if (compressed.length < originalSize * 0.8) {
+          finalContent = compressed;
+          isCompressed = true;
+        }
+      } catch (error) {
+        console.warn('Compression failed:', error.message);
+      }
+    }
+
+    const finalSize = Buffer.byteLength(finalContent);
+    if (finalSize > this.MAX_FILE_SIZE) {
+      throw new Error(`File too large: ${finalSize} bytes. Maximum allowed: ${this.MAX_FILE_SIZE} bytes`);
+    }
+
+    // Create new version
+    const newFileVersion = new FileStorage({
+      sessionId,
+      fileName,
+      fileType,
+      mimeType,
+      fileSize: originalSize,
+      compressedSize: isCompressed ? finalSize : null,
+      content: finalContent,
+      parentFolder,
+      filePath,
+      storageType: 'document',
+      isCompressed,
+      version: newVersion,
+      isLatest: true,
+      previousVersion: currentLatest ? currentLatest._id : null,
+      changeDescription
+    });
+
+    const savedVersion = await newFileVersion.save();
+    
+    // Queue cleanup for this file
+    this.queueCleanup(sessionId, filePath, maxVersions, retentionDays);
+    
+    console.log(`✅ Created version ${newVersion} for ${filePath}`);
+    return savedVersion;
+  }
+
+  /**
+   * Get file version history
+   */
+  async getFileVersionHistory(sessionId, filePath, limit = 10) {
+    return await FileStorage.findVersionHistory(sessionId, filePath, limit);
+  }
+
+  /**
+   * Get specific version of a file
+   */
+  async getFileVersion(sessionId, filePath, version) {
+    const fileDoc = await FileStorage.findOne({ 
+      sessionId, 
+      filePath, 
+      version 
+    });
+    
+    if (!fileDoc) {
+      throw new Error(`Version ${version} of file not found`);
+    }
+
+    let content = fileDoc.content;
+    if (fileDoc.isCompressed) {
+      content = await gunzip(content);
+    }
+    
+    return {
+      ...fileDoc.toObject(),
+      content
+    };
+  }
+
+  /**
+   * Generate enhanced diff between versions
+   */
+  async generateVersionDiff(sessionId, filePath, fromVersion, toVersion) {
+    const [fromFile, toFile] = await Promise.all([
+      this.getFileVersion(sessionId, filePath, fromVersion),
+      this.getFileVersion(sessionId, filePath, toVersion)
+    ]);
+
+    const fromContent = fromFile.content.toString('utf8');
+    const toContent = toFile.content.toString('utf8');
+
+    // Generate different types of diffs
+    const lineDiff = diff.diffLines(fromContent, toContent);
+    const wordDiff = diff.diffWords(fromContent, toContent);
+    const charDiff = diff.diffChars(fromContent, toContent);
+
+    // Calculate statistics
+    let addedLines = 0, removedLines = 0, addedChars = 0, removedChars = 0;
+    
+    lineDiff.forEach(part => {
+      if (part.added) addedLines += part.count || 0;
+      if (part.removed) removedLines += part.count || 0;
+    });
+
+    charDiff.forEach(part => {
+      if (part.added) addedChars += part.value.length;
+      if (part.removed) removedChars += part.value.length;
+    });
+
+    return {
+      fromVersion: fromFile.version,
+      toVersion: toFile.version,
+      fromDate: fromFile.createdAt,
+      toDate: toFile.createdAt,
+      stats: {
+        addedLines,
+        removedLines,
+        addedChars,
+        removedChars,
+        totalChanges: addedLines + removedLines
+      },
+      diffs: {
+        lines: lineDiff,
+        words: wordDiff,
+        chars: charDiff
+      }
+    };
+  }
+
+  /**
+   * Get versioning statistics for a session
+   */
+  async getVersioningStats(sessionId) {
+    try {
+      const pipeline = [
+        { $match: { sessionId } },
+        {
+          $group: {
+            _id: '$filePath',
+            totalVersions: { $sum: 1 },
+            latestVersion: { $max: '$version' },
+            totalSize: { $sum: '$fileSize' },
+            oldestVersion: { $min: '$createdAt' },
+            newestVersion: { $max: '$createdAt' }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalFiles: { $sum: 1 },
+            totalVersions: { $sum: '$totalVersions' },
+            totalSize: { $sum: '$totalSize' },
+            avgVersionsPerFile: { $avg: '$totalVersions' },
+            filesWithMultipleVersions: {
+              $sum: { $cond: [{ $gt: ['$totalVersions', 1] }, 1, 0] }
+            }
+          }
+        }
+      ];
+
+      const result = await FileStorage.aggregate(pipeline);
+      
+      if (result.length === 0) {
+        return {
+          totalFiles: 0,
+          totalVersions: 0,
+          totalSize: 0,
+          avgVersionsPerFile: 0,
+          filesWithMultipleVersions: 0
+        };
+      }
+
+      const stats = result[0];
+      return {
+        totalFiles: stats.totalFiles,
+        totalVersions: stats.totalVersions,
+        totalSize: stats.totalSize,
+        avgVersionsPerFile: Math.round(stats.avgVersionsPerFile * 100) / 100,
+        filesWithMultipleVersions: stats.filesWithMultipleVersions,
+        versioning: {
+          maxVersionsPerFile: this.DEFAULT_MAX_VERSIONS,
+          retentionDays: this.DEFAULT_RETENTION_DAYS
+        }
+      };
+    } catch (error) {
+      console.error('Error getting versioning stats:', error);
+      throw error;
+    }
+  }
+
+  // ===== CLEANUP METHODS =====
+  
+  /**
+   * Queue cleanup for a file
+   */
+  queueCleanup(sessionId, filePath, maxVersions, retentionDays) {
+    this.cleanupQueue.push({
+      sessionId,
+      filePath,
+      maxVersions,
+      retentionDays,
+      queuedAt: new Date()
+    });
+  }
+
+  /**
+   * Process cleanup queue
+   */
+  async processCleanupQueue() {
+    if (this.isCleanupRunning || this.cleanupQueue.length === 0) {
+      return;
+    }
+
+    this.isCleanupRunning = true;
+    console.log(`🧹 Processing ${this.cleanupQueue.length} cleanup tasks`);
+
+    try {
+      const tasks = this.cleanupQueue.splice(0); // Take all tasks
+      const processedFiles = new Set();
+
+      for (const task of tasks) {
+        const fileKey = `${task.sessionId}:${task.filePath}`;
+        if (processedFiles.has(fileKey)) continue; // Skip duplicates
+        
+        processedFiles.add(fileKey);
+        await this.cleanupFileVersions(
+          task.sessionId, 
+          task.filePath, 
+          task.maxVersions, 
+          task.retentionDays
+        );
+      }
+    } catch (error) {
+      console.error('Error processing cleanup queue:', error);
+    } finally {
+      this.isCleanupRunning = false;
+    }
+  }
+
+  /**
+   * Clean up old versions for a specific file
+   */
+  async cleanupFileVersions(sessionId, filePath, maxVersions, retentionDays) {
+    try {
+      // Get all versions for this file
+      const allVersions = await FileStorage.find({ 
+        sessionId, 
+        filePath 
+      }).sort({ version: -1 });
+
+      if (allVersions.length <= 1) return; // Keep at least one version
+
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+      const versionsToDelete = [];
+
+      // Keep the latest version always
+      const versionsToCheck = allVersions.slice(1);
+
+      // Apply retention rules
+      let keptCount = 1; // Already keeping the latest
+      
+      for (const version of versionsToCheck) {
+        const shouldDelete = 
+          (keptCount >= maxVersions) || 
+          (version.createdAt < cutoffDate);
+
+        if (shouldDelete) {
+          versionsToDelete.push(version._id);
+        } else {
+          keptCount++;
+        }
+      }
+
+      if (versionsToDelete.length > 0) {
+        const deleteResult = await FileStorage.deleteMany({
+          _id: { $in: versionsToDelete }
+        });
+        
+        console.log(`🗑️ Cleaned up ${deleteResult.deletedCount} old versions for ${filePath}`);
+      }
+    } catch (error) {
+      console.error(`Error cleaning up versions for ${filePath}:`, error);
+    }
+  }
+
+  /**
+   * Start background cleanup scheduler
+   */
+  startCleanupScheduler() {
+    // Run cleanup every 5 minutes
+    setInterval(() => {
+      this.processCleanupQueue();
+    }, 5 * 60 * 1000);
+
+    // Also run cleanup on startup after 30 seconds
+    setTimeout(() => {
+      this.processCleanupQueue();
+    }, 30000);
   }
 
   // Helper method to check if a file should be ignored
@@ -36,58 +407,20 @@ class OptimizedFileStorage {
     );
   }
 
-  async storeFile(fileData) {
-    const { sessionId, fileName, fileType, content, mimeType, parentFolder, filePath } = fileData;
-
+  async storeFile(fileData, options = {}) {
     // Check if this file should be ignored
-    if (this.shouldIgnoreFile(filePath || fileName, fileName)) {
-      console.log(`🚫 Ignoring system file: ${filePath || fileName}`);
-      throw new Error(`System file ignored: ${fileName}`);
+    if (this.shouldIgnoreFile(fileData.filePath || fileData.fileName, fileData.fileName)) {
+      console.log(`🚫 Ignoring system file: ${fileData.filePath || fileData.fileName}`);
+      throw new Error(`System file ignored: ${fileData.fileName}`);
     }
 
-    let finalContent = content;
-    let isCompressed = false;
-    const originalSize = Buffer.byteLength(content);
-
-    // Always try compression for text files
-    if (this._isTextFile(fileType)) {
-      try {
-        const compressed = await gzip(content);
-        if (compressed.length < originalSize * 0.8) { // Only use if 20%+ savings
-          finalContent = compressed;
-          isCompressed = true;
-        }
-      } catch (error) {
-        console.warn('Compression failed:', error.message);
-      }
-    }
-
-    const finalSize = Buffer.byteLength(finalContent);
-
-    // Check if file fits in document
-    if (finalSize > this.MAX_FILE_SIZE) {
-      throw new Error(`File too large: ${finalSize} bytes. Maximum allowed: ${this.MAX_FILE_SIZE} bytes`);
-    }
-
-    const fileDoc = new FileStorage({
-      sessionId,
-      fileName,
-      fileType,
-      mimeType,
-      fileSize: originalSize,
-      compressedSize: isCompressed ? finalSize : null,
-      content: finalContent,
-      parentFolder,
-      filePath,
-      storageType: 'document',
-      isCompressed
-    });
-
-    return await fileDoc.save();
+    // Use the versioning system for new files
+    return await this.createFileVersion(fileData, options);
   }
 
   async getFile(sessionId, filePath) {
-    const fileDoc = await FileStorage.findOne({ sessionId, filePath });
+    // Get the latest version of the file
+    const fileDoc = await FileStorage.findLatestVersion(sessionId, filePath);
     
     if (!fileDoc) {
       throw new Error('File not found');
@@ -105,43 +438,29 @@ class OptimizedFileStorage {
     };
   }
 
-  async updateFileContent(sessionId, filePath, newContent) {
-    const fileDoc = await FileStorage.findOne({ sessionId, filePath });
+  async updateFileContent(sessionId, filePath, newContent, options = {}) {
+    // Get the current file to extract metadata
+    const currentFile = await FileStorage.findLatestVersion(sessionId, filePath);
     
-    if (!fileDoc) {
+    if (!currentFile) {
       throw new Error('File not found');
     }
 
-    let finalContent = newContent;
-    let isCompressed = false;
-    const originalSize = Buffer.byteLength(newContent);
+    // Create new version with updated content
+    const fileData = {
+      sessionId,
+      fileName: currentFile.fileName,
+      fileType: currentFile.fileType,
+      content: newContent,
+      mimeType: currentFile.mimeType,
+      parentFolder: currentFile.parentFolder,
+      filePath
+    };
 
-    // Try compression
-    if (this._isTextFile(fileDoc.fileType)) {
-      try {
-        const compressed = await gzip(newContent);
-        if (compressed.length < originalSize * 0.8) {
-          finalContent = compressed;
-          isCompressed = true;
-        }
-      } catch (error) {
-        console.warn('Compression failed:', error.message);
-      }
-    }
-
-    const finalSize = Buffer.byteLength(finalContent);
-
-    if (finalSize > this.MAX_FILE_SIZE) {
-      throw new Error(`Updated file too large: ${finalSize} bytes`);
-    }
-
-    fileDoc.content = finalContent;
-    fileDoc.fileSize = originalSize;
-    fileDoc.compressedSize = isCompressed ? finalSize : null;
-    fileDoc.isCompressed = isCompressed;
-    fileDoc.lastModified = new Date();
-    
-    return await fileDoc.save();
+    return await this.createFileVersion(fileData, {
+      ...options,
+      changeDescription: options.changeDescription || 'Content updated'
+    });
   }
 
   async deleteFile(sessionId, filePath) {
@@ -163,7 +482,7 @@ class OptimizedFileStorage {
   }
 
   async getSessionFiles(sessionId) {
-    return await FileStorage.find({ sessionId })
+    return await FileStorage.find({ sessionId, isLatest: true })
       .select('-content') // Exclude content for listing
       .sort({ filePath: 1 });
   }

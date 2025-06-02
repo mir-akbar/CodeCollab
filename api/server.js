@@ -24,6 +24,9 @@ const chat = require("./routes/chat");
 const getFile = require("./routes/getFile");
 const execute = require("./routes/execute");
 const sessionManage = require("./routes/sessionManage");
+const sessionManageV2 = require("./routes/sessionManageV2");
+const sessions = require("./routes/sessions");
+const fileVersions = require("./routes/fileVersions");
 
 
 const app = express();
@@ -58,8 +61,11 @@ videoChat(videoNamespace);
 app.use("/file-upload", fileUpload(io));
 app.use("/chat", chat(io));
 app.use("/files", getFile(io));
+app.use("/file-versions", fileVersions(io));
 app.use("/execute", execute);
 app.use("/manage_session", sessionManage);
+app.use("/session", sessionManageV2);
+app.use("/sessions", sessions);
 
 io.on("connection", (socket) => {
 
