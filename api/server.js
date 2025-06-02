@@ -18,15 +18,18 @@ const fs = require("fs");
 const Y = require('yjs');
 const fileStorageService = require("./services/fileStorageService");
 require("./db/index.js");
+
+// Import routes
 const videoChat = require("./routes/videoChat");
 const fileUpload = require("./routes/fileUpload");
 const chat = require("./routes/chat");
 const getFile = require("./routes/getFile");
 const execute = require("./routes/execute");
-const sessionManage = require("./routes/sessionManage");
-const sessionManageV2 = require("./routes/sessionManageV2");
 const sessions = require("./routes/sessions");
 const fileVersions = require("./routes/fileVersions");
+
+// Import middleware
+const { errorLogger, errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
 
 const app = express();
@@ -43,6 +46,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Apply error logging middleware
+app.use(errorLogger);
 
 const connectedUsers = new Map();
 const fileContents = new Map();
@@ -63,8 +69,6 @@ app.use("/chat", chat(io));
 app.use("/files", getFile(io));
 app.use("/file-versions", fileVersions(io));
 app.use("/execute", execute);
-app.use("/manage_session", sessionManage);
-app.use("/session", sessionManageV2);
 app.use("/sessions", sessions);
 
 io.on("connection", (socket) => {
@@ -437,8 +441,13 @@ app.get("/active-users", (req, res) => {
   res.json(Array.from(userSessions.keys()));
 });
 
+// Add error handling middleware (must be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 server.listen(config.PORT, () => {
   console.log(`🚀 Server running on http://localhost:${config.PORT}`);
   console.log(`📋 Environment: ${config.NODE_ENV}`);
   console.log(`🔗 MongoDB: Connected`);
+  console.log(`🏗️  API Structure: Enhanced with Controllers & Middleware`);
 });
