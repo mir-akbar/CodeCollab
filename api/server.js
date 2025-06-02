@@ -247,11 +247,39 @@ io.on("connection", (socket) => {
     
     try {
       // Check if we have an existing YJS document in memory
-      if (yjsRooms.has(room)) {
-        const roomData = yjsRooms.get(room);        if (roomData.doc && roomData.isInitialized) {
+      if (yjsRooms.has(room)) {        const roomData = yjsRooms.get(room);        
+        if (roomData.doc && roomData.isInitialized) {
           // Return the current state of the in-memory document
           const currentState = Y.encodeStateAsUpdate(roomData.doc);
-          socket.emit('yjs-sync-response', { update: Array.from(currentState), room });
+          
+          // Validate state size to prevent memory issues
+          if (currentState.length > 10 * 1024 * 1024) { // 10MB limit
+            console.error(`📊 In-memory YJS document too large: ${currentState.length} bytes for ${filePath}`);
+            socket.emit('yjs-sync-response', { update: null, room });
+            return;
+          }
+          
+          // Safe array conversion with chunked processing for large arrays
+          let updateArray;
+          try {
+            if (currentState.length > 1024 * 1024) { // 1MB threshold for chunked processing
+              console.log(`📊 Using chunked array conversion for large document: ${currentState.length} bytes`);
+              updateArray = [];
+              const chunkSize = 64 * 1024; // 64KB chunks
+              for (let i = 0; i < currentState.length; i += chunkSize) {
+                const chunk = currentState.slice(i, i + chunkSize);
+                updateArray.push(...Array.from(chunk));
+              }
+            } else {
+              updateArray = Array.from(currentState);
+            }
+          } catch (arrayError) {
+            console.error(`📊 Memory state array conversion failed for ${filePath}:`, arrayError.message);
+            socket.emit('yjs-sync-response', { update: null, room });
+            return;
+          }
+          
+          socket.emit('yjs-sync-response', { update: updateArray, room });
           console.log(`📤 Sent YJS state from memory: ${filePath}, size: ${currentState.length}`);
           return;
         }
@@ -267,28 +295,61 @@ io.on("connection", (socket) => {
       }
       
       const roomData = yjsRooms.get(room);
-      
-      // Try to load the document state from MongoDB
+        // Try to load the document state from MongoDB
       try {
         const documentState = await fileStorageService.getYjsDocumentFromFile(sessionId, filePath);
         if (documentState && documentState.length > 0) {
+          // Validate document state size to prevent memory issues
+          if (documentState.length > 10 * 1024 * 1024) { // 10MB limit
+            console.error(`📊 YJS document too large: ${documentState.length} bytes for ${filePath}`);
+            throw new Error('Document too large');
+          }
+          
           // Apply the loaded state to our room document
           Y.applyUpdate(roomData.doc, documentState);
           roomData.isInitialized = true;
-            // Send the loaded state to the requesting client
-          socket.emit('yjs-sync-response', { update: Array.from(documentState), room });
+            // Safe array conversion with chunked processing for large arrays
+          let updateArray;
+          try {
+            if (documentState.length > 1024 * 1024) { // 1MB threshold for chunked processing
+              console.log(`📊 Using chunked array conversion for MongoDB document: ${documentState.length} bytes`);
+              updateArray = [];
+              const chunkSize = 64 * 1024; // 64KB chunks
+              for (let i = 0; i < documentState.length; i += chunkSize) {
+                const chunk = documentState.slice(i, i + chunkSize);
+                updateArray.push(...Array.from(chunk));
+              }
+            } else {
+              updateArray = Array.from(documentState);
+            }
+          } catch (arrayError) {
+            console.error(`📊 Array conversion failed for ${filePath}:`, arrayError.message);
+            throw new Error('Invalid document state format');
+          }
+          
+          socket.emit('yjs-sync-response', { update: updateArray, room });
           console.log(`📂 Loaded and sent YJS document from MongoDB: ${filePath}, size: ${documentState.length}`);
           return;
         }
       } catch (loadError) {
         console.warn(`Could not load YJS document from MongoDB: ${loadError.message}`);
-      }
-      
-      // If no document found in MongoDB, initialize empty document
+      }      // If no document found in MongoDB, initialize empty document
       roomData.doc.getText('monaco'); // Initialize the text type
       roomData.isInitialized = true;
-        const emptyState = Y.encodeStateAsUpdate(roomData.doc);
-      socket.emit('yjs-sync-response', { update: Array.from(emptyState), room });
+      
+      const emptyState = Y.encodeStateAsUpdate(roomData.doc);
+      
+      // Safe array conversion (empty states should be small, but let's be safe)
+      let updateArray;
+      try {
+        updateArray = Array.from(emptyState);
+      } catch (arrayError) {
+        console.error(`📊 Empty state array conversion failed for ${filePath}:`, arrayError.message);
+        // Fallback to empty array
+        updateArray = [];
+      }
+      
+      socket.emit('yjs-sync-response', { update: updateArray, room });
       console.log(`📭 Sent empty YJS document for: ${filePath}`);
         } catch (error) {
       console.error('Error handling YJS sync request:', error);
