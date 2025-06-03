@@ -43,6 +43,16 @@ export const InviteDialog = ({ open = false, session = null, currentUserEmail = 
   const assignableRoles = getAssignableRoles(currentUserRole);
   const canInvite = canManageParticipants(currentUserRole);
 
+  // Debug logging
+  console.log("InviteDialog Debug:", {
+    open,
+    currentUserRole,
+    canInvite,
+    assignableRoles,
+    session: activeSession,
+    sessionError
+  });
+
   const generateLink = () => {
     const legacyAccess = roleToAccess(role); // Convert role to legacy access for URL compatibility
     const encryptedAccess = encodeURIComponent(encryptData(legacyAccess));

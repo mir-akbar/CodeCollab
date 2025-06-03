@@ -19,6 +19,7 @@ import { useDialogState } from "../../hooks/useDialogState";
 // Services and Utilities
 import { getFilteredSessions } from "../../utils/sessionUtils";
 import { toast } from "sonner";
+import { getUserRole } from "@/utils/permissions";
 
 const SessionManager = ({ userEmail }) => {
     const [activeTab, setActiveTab] = useState("all");
@@ -115,7 +116,14 @@ const SessionManager = ({ userEmail }) => {
                             sessions={filteredSessions}
                             isLoading={isLoading || isFetching}
                             userEmail={userEmail}
-                            onInvite={(session) => openDialog('invite', session)}
+                            onInvite={(session) => {
+                                console.log("SessionManager onInvite called:", {
+                                    session,
+                                    userRole: getUserRole(session, userEmail),
+                                    userEmail
+                                });
+                                openDialog('invite', session);
+                            }}
                         />
                     </div>
 
@@ -130,7 +138,7 @@ const SessionManager = ({ userEmail }) => {
                         open={isInviteDialogOpen}
                         session={selectedSession}
                         currentUserEmail={userEmail}
-                        currentUserRole={selectedSession?.isCreator ? "owner" : selectedSession?.access === "admin" ? "admin" : selectedSession?.access === "edit" ? "editor" : "viewer"}
+                        currentUserRole={selectedSession ? getUserRole(selectedSession, userEmail) : "viewer"}
                         userEmail={userEmail}
                         onClose={closeInviteDialog}
                     />

@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Calendar } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import PropTypes from "prop-types";
-import { getUserRole, canDeleteSession, canManageParticipants } from '@/utils/permissions';
+import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 import { navigateToSession } from '@/utils/sessionUtils';
-import { useDeleteSession, useLeaveSession } from '@/hooks/useSessions';
+import { useDeleteSession, useLeaveSession, useSessionDetails } from '@/hooks/useSessions';
 import { useFavorites } from '@/hooks/useFavorites';
 import { toast } from 'sonner';
 
@@ -22,18 +22,37 @@ export const SessionCard = ({
   const deleteSessionMutation = useDeleteSession();
   const leaveSessionMutation = useLeaveSession();
   
-  console.log("Session in SessionCard:", session);
+  // Real-time session data for live updates - only fetch if user has permission
+  const initialUserRole = getUserRole(session, userEmail);
+  const canFetchDetails = canManageParticipants(initialUserRole);
+  
+  // Debug logging to understand permission issues
+  console.log("SessionCard Debug:", {
+    userEmail,
+    sessionId: session?.sessionId || session?.id,
+    initialUserRole,
+    canFetchDetails,
+    sessionCreator: session?.creator,
+    sessionParticipants: session?.participants
+  });
+  
+  const { data: liveSession } = useSessionDetails(
+    canFetchDetails ? (session?.sessionId || session?.id) : null // Only fetch if user has permission
+  );
+  const activeSession = liveSession || session;
+  
+  console.log("Session in SessionCard:", activeSession);
 
-  if (!session) {
+  if (!activeSession) {
     console.log("No session object provided to SessionCard");
     return null;
   }
 
-  const participants = session.participants || [];
-  const userRole = getUserRole(session, userEmail);
-  const isCreator = session.isCreator || session.creator === userEmail;
-  const userAccess = session.access;
-  const sessionIsFavorite = isFavorite(session.id || session.sessionId);
+  const participants = activeSession.participants || [];
+  const userRole = getUserRole(activeSession, userEmail);
+  const isCreator = activeSession.isCreator || activeSession.creator === userEmail;
+  const userAccess = activeSession.access;
+  const sessionIsFavorite = isFavorite(activeSession.id || activeSession.sessionId);
 
   // Permission checks using new system
   const permissions = {
@@ -44,13 +63,13 @@ export const SessionCard = ({
 
   // Internal handlers using TanStack Query
   const handleJoin = () => {
-    navigateToSession(session);
+    navigateToSession(activeSession);
   };
 
   const handleDelete = async () => {
     try {
       await deleteSessionMutation.mutateAsync({
-        sessionId: session.sessionId || session.id,
+        sessionId: activeSession.sessionId || activeSession.id,
         userEmail
       });
       toast.success("Session deleted successfully");
@@ -62,7 +81,7 @@ export const SessionCard = ({
   const handleLeave = async () => {
     try {
       await leaveSessionMutation.mutateAsync({
-        sessionId: session.sessionId || session.id,
+        sessionId: activeSession.sessionId || activeSession.id,
         userEmail
       });
       toast.success("Left session successfully");
@@ -72,7 +91,7 @@ export const SessionCard = ({
   };
 
   const handleToggleFavorite = () => {
-    toggleFavorite(session.id || session.sessionId);
+    toggleFavorite(activeSession.id || activeSession.sessionId);
   };
 
   return (
@@ -85,7 +104,7 @@ export const SessionCard = ({
       <div className="flex justify-between items-start gap-2">
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-medium truncate">{session.name || "Unnamed Session"}</h3>
+            <h3 className="text-lg font-medium truncate">{activeSession.name || "Unnamed Session"}</h3>
             {isCreator && (
               <Badge variant="outline" className="border-purple-500 text-purple-500 shrink-0">
                 <Crown className="h-3 w-3 mr-1" />
@@ -94,7 +113,7 @@ export const SessionCard = ({
             )}
           </div>
           <p className="text-sm text-muted-foreground line-clamp-2 h-10">
-            {session.description || "No description provided"}
+            {activeSession.description || "No description provided"}
           </p>
         </div>
         <Button 
@@ -116,8 +135,8 @@ export const SessionCard = ({
         </Badge>
         <Badge variant="outline" className="flex items-center gap-1">
           <Calendar className="h-3 w-3" />
-          {session.createdAt 
-            ? new Date(session.createdAt).toLocaleDateString('en-GB', {
+          {activeSession.createdAt 
+            ? new Date(activeSession.createdAt).toLocaleDateString('en-GB', {
                 day: '2-digit', 
                 month: '2-digit', 
                 year: 'numeric'
@@ -140,7 +159,9 @@ export const SessionCard = ({
               </TooltipTrigger>
               <TooltipContent>
                 <p>{p.name || p.email || "Unknown User"}</p>
-                <p className="text-muted-foreground text-xs">{p.access} access</p>
+                <p className="text-muted-foreground text-xs">
+                  {getRoleDisplayName(p.role || (p.access === "edit" ? "editor" : "viewer"))}
+                </p>
               </TooltipContent>
             </Tooltip>
           ))}
@@ -154,7 +175,15 @@ export const SessionCard = ({
           <Button 
             variant="secondary" 
             size="sm"
-            onClick={() => onInvite(session)}
+            onClick={() => {
+              console.log("SessionCard Invite button clicked:", {
+                activeSession,
+                permissions,
+                userRole,
+                userEmail
+              });
+              onInvite(activeSession);
+            }}
             className="gap-1"
           >
             <UserPlus className="h-4 w-4" />
