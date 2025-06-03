@@ -380,6 +380,39 @@ class SessionController {
   });
 
   /**
+   * Health check endpoint for session system
+   */
+  healthCheck = asyncHandler(async (req, res) => {
+    try {
+      // If we have a healthCheck method on the service, use it
+      if (typeof this.sessionService.healthCheck === 'function') {
+        const healthStatus = await this.sessionService.healthCheck();
+        res.json({
+          success: true,
+          system: 'new',
+          ...healthStatus
+        });
+      } else {
+        // Simple health check
+        res.json({
+          success: true,
+          system: 'new',
+          status: 'healthy',
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        system: 'new',
+        status: 'unhealthy',
+        error: error.message,
+        timestamp: new Date()
+      });
+    }
+  });
+
+  /**
    * DEBUG: Check for duplicate participant records
    */
   checkParticipantRecords = asyncHandler(async (req, res) => {

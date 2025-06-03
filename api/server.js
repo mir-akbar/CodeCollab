@@ -71,6 +71,11 @@ app.use("/file-versions", fileVersions(io));
 app.use("/execute", execute);
 app.use("/sessions", sessions);
 
+// Health check endpoint for session system (frontend compatibility)
+const SessionController = require("./controllers/sessionController");
+const sessionController = new SessionController();
+app.get("/session/health", sessionController.healthCheck);
+
 io.on("connection", (socket) => {
 
   socket.on("register-user", (email) => {
