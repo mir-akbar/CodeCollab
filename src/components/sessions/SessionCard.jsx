@@ -7,18 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Calendar } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import PropTypes from "prop-types";
-import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
+import { getUserRole, canDeleteSession, canManageParticipants } from '@/utils/permissions';
+import { navigateToSession } from '@/utils/sessionUtils';
+import { useDeleteSession, useLeaveSession } from '@/hooks/useSessions';
+import { useFavorites } from '@/hooks/useFavorites';
+import { toast } from 'sonner';
 
 export const SessionCard = ({ 
-  session, 
-  onJoin, 
-  onDelete, 
-  onInvite,
-  onLeave,
-  isFavorite = false,
-  onToggleFavorite,
-  userEmail
+  session,
+  userEmail,
+  onInvite // Keep this for now since it opens a dialog managed by parent
 }) => {
+  const { toggleFavorite, isFavorite } = useFavorites();
+  const deleteSessionMutation = useDeleteSession();
+  const leaveSessionMutation = useLeaveSession();
+  
   console.log("Session in SessionCard:", session);
 
   if (!session) {
@@ -30,12 +33,46 @@ export const SessionCard = ({
   const userRole = getUserRole(session, userEmail);
   const isCreator = session.isCreator || session.creator === userEmail;
   const userAccess = session.access;
+  const sessionIsFavorite = isFavorite(session.id || session.sessionId);
 
   // Permission checks using new system
   const permissions = {
     canDelete: canDeleteSession(userRole),
     canInvite: canManageParticipants(userRole),
     canManage: canManageParticipants(userRole)
+  };
+
+  // Internal handlers using TanStack Query
+  const handleJoin = () => {
+    navigateToSession(session);
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteSessionMutation.mutateAsync({
+        sessionId: session.sessionId || session.id,
+        userEmail
+      });
+      toast.success("Session deleted successfully");
+    } catch (error) {
+      toast.error(error.message || "Failed to delete session");
+    }
+  };
+
+  const handleLeave = async () => {
+    try {
+      await leaveSessionMutation.mutateAsync({
+        sessionId: session.sessionId || session.id,
+        userEmail
+      });
+      toast.success("Left session successfully");
+    } catch (error) {
+      toast.error(error.message || "Failed to leave session");
+    }
+  };
+
+  const handleToggleFavorite = () => {
+    toggleFavorite(session.id || session.sessionId);
   };
 
   return (
@@ -63,10 +100,10 @@ export const SessionCard = ({
         <Button 
           variant="ghost" 
           size="sm" 
-          onClick={() => onToggleFavorite(session)}
+          onClick={handleToggleFavorite}
           className="self-start shrink-0"
         >
-          <Star className={`h-5 w-5 ${isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
+          <Star className={`h-5 w-5 ${sessionIsFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`} />
         </Button>
       </div>
 
@@ -130,7 +167,7 @@ export const SessionCard = ({
       <div className="flex gap-2 justify-between mt-2">
         <Button
           variant="default"
-          onClick={() => onJoin(session)}
+          onClick={handleJoin}
           className="flex-1 gap-1"
         >
           <LogIn className="h-4 w-4" />
@@ -139,20 +176,22 @@ export const SessionCard = ({
         {permissions.canDelete ? (
           <Button
             variant="destructive"
-            onClick={() => onDelete(session)}
+            onClick={handleDelete}
             className="flex-1 gap-1"
+            disabled={deleteSessionMutation.isPending}
           >
             <Trash className="h-4 w-4" />
-            Delete
+            {deleteSessionMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         ) : (
           <Button
             variant="outline"
-            onClick={() => onLeave(session)}
+            onClick={handleLeave}
             className="flex-1 gap-1 text-destructive hover:text-destructive-foreground hover:bg-destructive"
+            disabled={leaveSessionMutation.isPending}
           >
             <LogOut className="h-4 w-4" />
-            Leave
+            {leaveSessionMutation.isPending ? "Leaving..." : "Leave"}
           </Button>
         )}
       </div>
@@ -173,11 +212,6 @@ SessionCard.propTypes = {
     participants: PropTypes.array,
     createdAt: PropTypes.string
   }).isRequired,
-  onJoin: PropTypes.func.isRequired,
-  onDelete: PropTypes.func.isRequired,
-  onInvite: PropTypes.func.isRequired,
-  onLeave: PropTypes.func.isRequired,
-  isFavorite: PropTypes.bool,
-  onToggleFavorite: PropTypes.func.isRequired,
-  userEmail: PropTypes.string.isRequired
+  userEmail: PropTypes.string.isRequired,
+  onInvite: PropTypes.func.isRequired // Keep for dialog management
 };

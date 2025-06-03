@@ -6,12 +6,7 @@ export const SessionList = ({
   sessions, 
   isLoading = false, 
   userEmail, 
-  onJoin, 
-  onDelete, 
-  onInvite, 
-  onLeave,
-  onToggleFavorite,
-  favoriteSessionIds = []
+  onInvite // Only keep onInvite for dialog management
 }) => {
   // Add debugging to see what's in the sessions array
   // console.log("Sessions in SessionList:", sessions);
@@ -53,12 +48,7 @@ export const SessionList = ({
             key={uniqueKey}
             session={session}
             userEmail={userEmail}
-            onJoin={onJoin}
-            onDelete={() => onDelete(session)}
             onInvite={() => onInvite(session)}
-            onLeave={() => onLeave(session)}
-            isFavorite={favoriteSessionIds.includes(session.id) || favoriteSessionIds.includes(session.sessionId)}
-            onToggleFavorite={() => onToggleFavorite(session)}
           />
         );
       })}
@@ -70,10 +60,5 @@ SessionList.propTypes = {
   sessions: PropTypes.array.isRequired,
   isLoading: PropTypes.bool,
   userEmail: PropTypes.string.isRequired,
-  onJoin: PropTypes.func.isRequired,
-  onDelete: PropTypes.func.isRequired,
-  onInvite: PropTypes.func.isRequired,
-  onLeave: PropTypes.func.isRequired,
-  onToggleFavorite: PropTypes.func.isRequired,
-  favoriteSessionIds: PropTypes.array
+  onInvite: PropTypes.func.isRequired // Only for dialog management
 };

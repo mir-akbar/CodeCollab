@@ -232,7 +232,35 @@ class SessionController {
     res.status(200).json({ message: "Activity updated" });
   });
 
+  /**
+   * Get migration status
+   */
+  getMigrationStatus = asyncHandler(async (req, res) => {
+    const status = await this.sessionService.checkMigrationStatus();
+    res.json(status);
+  });
 
+  /**
+   * Enable new system
+   */
+  enableNewSystem = asyncHandler(async (req, res) => {
+    this.sessionService.enableNewSystem();
+    res.json({ 
+      message: "Switched to new session system",
+      systemActive: "new"
+    });
+  });
+
+  /**
+   * Enable legacy system
+   */
+  enableLegacySystem = asyncHandler(async (req, res) => {
+    this.sessionService.enableLegacySystem();
+    res.json({ 
+      message: "Switched to legacy session system",
+      systemActive: "legacy"
+    });
+  });
 
   /**
    * Remove participant from session

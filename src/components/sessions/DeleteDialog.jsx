@@ -2,8 +2,33 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/utils/dateFormatter";
 import PropTypes from "prop-types";
+import { useDeleteSession } from "@/hooks/useSessions";
+import { toast } from "sonner";
 
-export const DeleteDialog = ({ open = false, session = null, onClose, onConfirm }) => {
+export const DeleteDialog = ({ open = false, session = null, onClose, userEmail }) => {
+  
+  // Use TanStack Query mutation directly
+  const deleteSessionMutation = useDeleteSession();
+
+  const handleDelete = async () => {
+    if (!session?.sessionId && !session?.id) {
+      return;
+    }
+
+    try {
+      await deleteSessionMutation.mutateAsync({
+        sessionId: session.sessionId || session.id,
+        userEmail: userEmail || localStorage.getItem("email")
+      });
+
+      toast.success("Session deleted successfully");
+      
+      onClose();
+    } catch (error) {
+      console.error("Error deleting session:", error);
+      toast.error(error.message || "Failed to delete session");
+    }
+  };
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent 
@@ -28,8 +53,12 @@ export const DeleteDialog = ({ open = false, session = null, onClose, onConfirm 
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirm}>
-            Delete
+          <Button 
+            variant="destructive" 
+            onClick={handleDelete}
+            disabled={deleteSessionMutation.isPending}
+          >
+            {deleteSessionMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </div>
       </DialogContent>
@@ -38,10 +67,13 @@ export const DeleteDialog = ({ open = false, session = null, onClose, onConfirm 
 };
 
 DeleteDialog.propTypes = {
+  open: PropTypes.bool,
   session: PropTypes.shape({
+    id: PropTypes.string,
+    sessionId: PropTypes.string,
     name: PropTypes.string,
     createdAt: PropTypes.string
   }),
   onClose: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired
+  userEmail: PropTypes.string
 };

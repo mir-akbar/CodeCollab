@@ -5,58 +5,43 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { v4 as uuidv4 } from "uuid";
-import { API_URL } from "@/common/Constant";
-import axios from "axios";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { useCreateSession } from "@/hooks/useSessions";
 
-export const CreateSessionDialog = ({ open = false, onClose, onCreate }) => {
+export const CreateSessionDialog = ({ open = false, onClose, userEmail }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
+  
+  // Use TanStack Query mutation directly
+  const createSessionMutation = useCreateSession();
 
   const handleCreate = async () => {
     if (!name.trim()) {
       return;
     }
 
-    setIsSubmitting(true);
-    const email = localStorage.getItem("email");
-    
     try {
-      // Use onCreate prop which should use the new API
-      const result = await onCreate({
-        name: name.trim(),
-        description: description.trim(),
-        creator: email
+      await createSessionMutation.mutateAsync({
+        sessionData: {
+          name: name.trim(),
+          description: description.trim()
+        },
+        userEmail: userEmail || localStorage.getItem("email")
       });
 
-      if (result.success) {
-        toast({
-          title: "Session Created", 
-          description: "Your new session has been created" 
-        });
-        resetForm();
-        onClose();
-      }
+      toast.success("Your new session has been created successfully");
+      
+      resetForm();
+      onClose();
     } catch (error) {
       console.error("Error creating session:", error);
-      toast({
-        title: "Creation Failed", 
-        description: error.message || "Failed to create session",
-        variant: "destructive" 
-      });
-    } finally {
-      setIsSubmitting(false);
+      toast.error(error.message || "Failed to create session");
     }
   };
 
   const resetForm = () => {
     setName('');
     setDescription('');
-    setIsPrivate(false);
   };
 
   return (
@@ -106,9 +91,9 @@ export const CreateSessionDialog = ({ open = false, onClose, onCreate }) => {
           </Button>
           <Button 
             onClick={handleCreate}
-            disabled={!name.trim() || isSubmitting}
+            disabled={!name.trim() || createSessionMutation.isPending}
           >
-            {isSubmitting ? "Creating..." : "Create"}
+            {createSessionMutation.isPending ? "Creating..." : "Create"}
           </Button>
         </div>
       </DialogContent>
@@ -119,5 +104,5 @@ export const CreateSessionDialog = ({ open = false, onClose, onCreate }) => {
 CreateSessionDialog.propTypes = {
   open: PropTypes.bool,
   onClose: PropTypes.func.isRequired,
-  onCreate: PropTypes.func.isRequired
+  userEmail: PropTypes.string
 };

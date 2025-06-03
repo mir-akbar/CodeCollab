@@ -1,3 +1,17 @@
+/**
+ * File Versioning API Routes
+ * 
+ * STATUS: INFRASTRUCTURE READY - Complete implementation but no frontend integration yet
+ * This route provides comprehensive file versioning capabilities including:
+ * - Version history tracking
+ * - Content diffing between versions  
+ * - Manual version creation
+ * - Automated cleanup policies
+ * - Versioning statistics
+ * 
+ * Ready for frontend integration when versioning UI is implemented.
+ */
+
 const express = require("express");
 const fileStorageService = require("../services/fileStorageService");
 

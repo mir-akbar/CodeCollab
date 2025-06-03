@@ -1,13 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import axios from 'axios';
-import { API_URL } from '../config/api';
+import apiClient from '../utils/api';
 
 // Session API functions
 const sessionAPI = {
   // Fetch all sessions for a user
   getUserSessions: async (userEmail) => {
-    const response = await axios.get(`${API_URL}/sessions`, {
+    const response = await apiClient.get('/sessions', {
       params: { email: userEmail }
     });
     
@@ -18,9 +17,20 @@ const sessionAPI = {
     return response.data.sessions || [];
   },
 
+  // Fetch single session details
+  getSessionDetails: async (sessionId) => {
+    const response = await apiClient.get(`/sessions/${sessionId}`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch session details');
+    }
+    
+    return response.data.session;
+  },
+
   // Create a new session
   createSession: async ({ sessionData, userEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions`, {
+    const response = await apiClient.post('/sessions', {
       ...sessionData,
       creator: userEmail
     });
@@ -34,8 +44,8 @@ const sessionAPI = {
 
   // Delete a session
   deleteSession: async ({ sessionId, userEmail }) => {
-    const response = await axios.delete(`${API_URL}/sessions/${sessionId}`, {
-      data: { userEmail }
+    const response = await apiClient.delete(`/sessions/${sessionId}`, {
+      data: { email: userEmail }
     });
     
     if (!response.data.success) {
@@ -47,8 +57,8 @@ const sessionAPI = {
 
   // Invite user to session
   inviteUser: async ({ sessionId, inviteeEmail, role, inviterEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions/${sessionId}/invite`, {
-      email: inviteeEmail,
+    const response = await apiClient.post(`/sessions/${sessionId}/invite`, {
+      inviteeEmail: inviteeEmail,
       role: role,
       inviterEmail: inviterEmail
     });
@@ -62,7 +72,7 @@ const sessionAPI = {
 
   // Leave a session
   leaveSession: async ({ sessionId, userEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions/${sessionId}/leave`, {
+    const response = await apiClient.post(`/sessions/${sessionId}/leave`, {
       email: userEmail
     });
     
@@ -75,7 +85,7 @@ const sessionAPI = {
 
   // Remove participant from session
   removeParticipant: async ({ sessionId, participantEmail, userEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions/${sessionId}/remove-participant`, {
+    const response = await apiClient.post(`/sessions/${sessionId}/remove-participant`, {
       participantEmail: participantEmail,
       userEmail: userEmail
     });
@@ -89,7 +99,7 @@ const sessionAPI = {
 
   // Promote participant to owner
   promoteToOwner: async ({ sessionId, participantEmail, userEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions/${sessionId}/promote-owner`, {
+    const response = await apiClient.post(`/sessions/${sessionId}/promote-owner`, {
       participantEmail: participantEmail,
       userEmail: userEmail
     });
@@ -103,10 +113,10 @@ const sessionAPI = {
 
   // Update participant role
   updateRole: async ({ sessionId, participantEmail, newRole, userEmail }) => {
-    const response = await axios.post(`${API_URL}/sessions/${sessionId}/update-role`, {
+    const response = await apiClient.post(`/sessions/${sessionId}/update-role`, {
       participantEmail: participantEmail,
-      role: newRole,
-      userEmail: userEmail
+      newRole: newRole,
+      updaterEmail: userEmail
     });
     
     if (!response.data.success) {
@@ -137,6 +147,21 @@ export const useSessions = (userEmail) => {
     gcTime: 10 * 60 * 1000, // 10 minutes cache time
     refetchOnWindowFocus: true, // Refetch when user returns to tab
     refetchInterval: 30 * 1000, // Auto-refetch every 30 seconds for active collaboration
+  });
+};
+
+/**
+ * Hook to fetch single session details with real-time updates
+ */
+export const useSessionDetails = (sessionId) => {
+  return useQuery({
+    queryKey: sessionKeys.detail(sessionId),
+    queryFn: () => sessionAPI.getSessionDetails(sessionId),
+    enabled: !!sessionId, // Only run if sessionId exists
+    staleTime: 1 * 60 * 1000, // 1 minute - session details change frequently
+    gcTime: 5 * 60 * 1000, // 5 minutes cache time
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchInterval: 15 * 1000, // Auto-refetch every 15 seconds for real-time updates
   });
 };
 

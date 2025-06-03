@@ -15,7 +15,9 @@ async function testLeaveSession() {
         // Step 1: Get user sessions to find one to leave
         console.log('\n📋 Step 1: Getting user sessions...');
         const sessionsResponse = await axios.get(`${BASE_URL}/sessions`, {
-            params: { email: TEST_EMAIL }
+            headers: {
+                'x-user-email': TEST_EMAIL
+            }
         });
 
         if (!sessionsResponse.data.success || !sessionsResponse.data.sessions.length) {
@@ -26,8 +28,6 @@ async function testLeaveSession() {
                 creator: TEST_EMAIL, // Use 'creator' field as expected by validation
                 name: 'Test Session for Leave',
                 description: 'Test session created for leave functionality test'
-            }, {
-                params: { email: TEST_EMAIL }
             });
             
             if (!createResponse.data.success) {
@@ -38,7 +38,9 @@ async function testLeaveSession() {
             
             // Get sessions again
             const updatedSessionsResponse = await axios.get(`${BASE_URL}/sessions`, {
-                params: { email: TEST_EMAIL }
+                headers: {
+                    'x-user-email': TEST_EMAIL
+                }
             });
             
             sessionsResponse.data = updatedSessionsResponse.data;
@@ -97,7 +99,9 @@ async function testLeaveSession() {
             // Step 3: Verify the user no longer has access
             console.log('\n📋 Step 3: Verifying user no longer has access...');
             const verifyResponse = await axios.get(`${BASE_URL}/sessions`, {
-                params: { email: TEST_EMAIL }
+                headers: {
+                    'x-user-email': TEST_EMAIL
+                }
             });
             
             const remainingSessions = verifyResponse.data.sessions;

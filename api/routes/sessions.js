@@ -64,17 +64,4 @@ router.post("/active-users", sessionController.getActiveUsers);
 // UPDATE LAST ACTIVE (for user activity tracking)
 router.post("/update-activity", sessionController.updateActivity);
 
-// =============================================================================
-// MIGRATION AND DEBUGGING ROUTES
-// =============================================================================
-
-// GET MIGRATION STATUS
-router.get("/migration-status", sessionController.getMigrationStatus);
-
-// SWITCH TO NEW SYSTEM (for gradual migration)
-router.post("/enable-new-system", sessionController.enableNewSystem);
-
-// SWITCH TO LEGACY SYSTEM (for rollback)
-router.post("/enable-legacy-system", sessionController.enableLegacySystem);
-
 module.exports = router;

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { SessionManager } from '@/components/sessions/SessionManager'
+import SessionManager from '@/components/sessions/SessionManager'
 
 // Mock the hooks and dependencies
-vi.mock('@/hooks/useSessionManager', () => ({
-  default: () => ({
-    sessions: [
+vi.mock('@/hooks/useSessions', () => ({
+  useSessions: () => ({
+    data: [
       {
         id: 'test-session-1',
         sessionId: 'test-session-1',
@@ -19,10 +19,24 @@ vi.mock('@/hooks/useSessionManager', () => ({
     ],
     isLoading: false,
     error: null,
-    createSession: vi.fn(),
-    inviteUser: vi.fn(),
-    deleteSession: vi.fn(),
-    refreshSessions: vi.fn(),
+    refetch: vi.fn(),
+  }),
+  useCreateSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useDeleteSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useInviteUser: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useLeaveSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useSessionActions: () => ({
+    removeParticipant: { mutateAsync: vi.fn() },
+    promoteToOwner: { mutateAsync: vi.fn() },
+    updateRole: { mutateAsync: vi.fn() },
   }),
 }))
 

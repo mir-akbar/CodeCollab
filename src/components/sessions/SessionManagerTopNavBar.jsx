@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate, useLocation } from "react-router-dom";
 import { userPool, logout } from "@/utils/auth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,7 +23,6 @@ export default function SessionManagerTopNavBar() {
         email: "",
     });
     const [sessionData, setSessionData] = useState(null);
-    const { toast } = useToast();
     const navigate = useNavigate();
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
@@ -92,10 +91,7 @@ export default function SessionManagerTopNavBar() {
 
     const handleLogout = () => {
         logout();
-        toast({
-            title: "Logged out",
-            description: "You have been successfully logged out",
-        });
+        toast.success("You have been successfully logged out");
         navigate("/login");
     };
 

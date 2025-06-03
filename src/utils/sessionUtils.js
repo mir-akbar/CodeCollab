@@ -1,4 +1,5 @@
 import CryptoJS from 'crypto-js';
+import { toast } from 'sonner';
 
 const SECRET_KEY = "f9a8b7c6d5e4f3a2b1c0d9e8f7g6h5i4j3k2l1m0n9o8p7q6";
 
@@ -8,15 +9,12 @@ export const encryptData = (text) => {
 };
 
 // Navigate to session workspace
-export const navigateToSession = (session, toast) => {
+export const navigateToSession = (session) => {
     console.log(session);
     const workspaceUrl = window.location.origin;
     const sessionUrl = `${workspaceUrl}/workspace?session=${session.sessionId}&access=${encodeURIComponent(encryptData(session.access))}`;
     window.location.href = sessionUrl;
-    toast({ 
-        title: "Joining Session", 
-        description: `You would navigate to session` 
-    });
+    toast.success("Joining session...");
 };
 
 export const processSessions = (data, userEmail) => {

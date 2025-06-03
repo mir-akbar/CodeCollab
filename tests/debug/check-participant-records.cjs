@@ -1,7 +1,7 @@
 /**
  * Direct database check for participant records
  */
-require('dotenv').config({ path: '../../api/.env' });
+require('dotenv').config();
 const mongoose = require('mongoose');
 const SessionParticipant = require('../../api/models/SessionParticipant');
 

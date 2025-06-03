@@ -12,13 +12,29 @@ vi.mock('@/hooks/useSessions', () => ({
   }),
 }))
 
-vi.mock('@/hooks/useSessionManager', () => ({
-  default: () => ({
-    createSession: vi.fn(),
-    inviteUser: vi.fn(),
-    deleteSession: vi.fn(),
-    leaveSession: vi.fn(),
-    refreshSessions: vi.fn(),
+vi.mock('@/hooks/useSessions', () => ({
+  useSessions: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useCreateSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useDeleteSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useInviteUser: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useLeaveSession: () => ({
+    mutateAsync: vi.fn(),
+  }),
+  useSessionActions: () => ({
+    removeParticipant: { mutateAsync: vi.fn() },
+    promoteToOwner: { mutateAsync: vi.fn() },
+    updateRole: { mutateAsync: vi.fn() },
   }),
 }))
 

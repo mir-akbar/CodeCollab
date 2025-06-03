@@ -11,6 +11,7 @@ import SessionsPage from './pages/SessionsPage'
 import DebugPage from './pages/DebugPage'
 import PrivateRoute from './components/PrivateRoute';
 import QueryProvider from './providers/QueryProvider';
+import { Toaster } from './components/ui/sonner';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
         <Route path="/verify" element={<VerificationPage />} />
         <Route path="/welcome" element={<CodeCollabWelcome />} />
       </Routes>
+      <Toaster />
     </Router>
     </QueryProvider>
   );
