@@ -48,12 +48,15 @@ const SessionManager = ({ userEmail }) => {
         
     // Handle refresh
     const handleRefresh = async () => {
+        let loadingToast;
         try {
-            toast.loading("Updating session list...");
+            loadingToast = toast.loading("Updating session list...");
             await refetch();
+            toast.dismiss(loadingToast);
             toast.success("Session list refreshed successfully");
         } catch (error) {
             console.error('Refresh error:', error);
+            if (loadingToast) toast.dismiss(loadingToast);
             toast.error("Failed to refresh sessions");
         }
     };
