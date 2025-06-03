@@ -52,12 +52,13 @@ class SessionController {
    * Create a new session
    */
   createSession = asyncHandler(async (req, res) => {
-    const { name, description, creator } = req.body;
+    const { name, description, creator, sessionId } = req.body;
     
     const result = await this.sessionService.createSession({
       name: name.trim(),
       description: description?.trim() || '',
-      creator: creator
+      creator: creator,
+      sessionId: sessionId // Pass through if provided
     });
 
     if (result.success) {
@@ -81,31 +82,61 @@ class SessionController {
    */
   inviteToSession = asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
-    const { email: inviteeEmail, access = 'edit' } = req.body;
-    const inviterEmail = req.body.inviterEmail || req.userEmail;
+    const { inviteeEmail, role, inviterEmail } = req.body; // Validation middleware normalizes these fields
 
-    // Convert legacy access to role
-    const role = access === 'edit' ? 'editor' : 'viewer';
-    
-    const result = await this.sessionService.inviteUserToSession(
-      sessionId, 
-      inviterEmail, 
-      inviteeEmail, 
-      role
-    );
-
-    if (result.success) {
-      res.status(200).json({ 
-        success: true,
-        message: "Invitation sent successfully",
-        action: result.action 
-      });
-    } else {
-      res.status(400).json({ 
+    if (!inviteeEmail) {
+      return res.status(400).json({ 
         success: false,
-        error: "Failed to send invitation",
-        details: result.error 
+        error: "Invitee email is required" 
       });
+    }
+
+    if (!inviterEmail) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Inviter email is required" 
+      });
+    }
+
+    try {
+      const result = await this.sessionService.inviteUserToSession(
+        sessionId, 
+        inviterEmail, 
+        inviteeEmail, 
+        role
+      );
+
+      if (result.success) {
+        res.status(200).json({ 
+          success: true,
+          message: "Invitation sent successfully",
+          action: result.action 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false,
+          error: "Failed to send invitation",
+          details: result.error 
+        });
+      }
+    } catch (error) {
+      console.error("Error inviting user:", error);
+      
+      // Handle specific error types with appropriate status codes
+      if (error.message.includes('Permission denied') || 
+          error.message.includes('already invited') ||
+          error.message.includes('already a participant')) {
+        res.status(403).json({ 
+          success: false,
+          error: error.message 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false,
+          error: "Internal server error",
+          details: error.message
+        });
+      }
     }
   });
 
@@ -228,6 +259,148 @@ class SessionController {
     res.json({ 
       message: "Switched to legacy session system",
       systemActive: "legacy"
+    });
+  });
+
+  /**
+   * Remove participant from session
+   */
+  removeParticipant = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { participantEmail, removerEmail } = req.body;
+    const userEmail = removerEmail || req.userEmail;
+
+    if (!participantEmail) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Participant email is required" 
+      });
+    }
+
+    try {
+      const result = await this.sessionService.removeParticipant(sessionId, userEmail, participantEmail);
+
+      if (result.success) {
+        res.status(200).json({ 
+          success: true,
+          message: "Participant removed successfully" 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false,
+          error: result.error || "Failed to remove participant"
+        });
+      }
+    } catch (error) {
+      console.error("Error removing participant:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Internal server error",
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * Transfer ownership of session
+   */
+  transferOwnership = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { newOwnerEmail, currentOwnerEmail } = req.body;
+    const userEmail = currentOwnerEmail || req.userEmail;
+
+    if (!newOwnerEmail) {
+      return res.status(400).json({ 
+        success: false,
+        error: "New owner email is required" 
+      });
+    }
+
+    try {
+      const result = await this.sessionService.transferOwnership(sessionId, userEmail, newOwnerEmail);
+
+      if (result.success) {
+        res.status(200).json({ 
+          success: true,
+          message: "Ownership transferred successfully" 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false,
+          error: result.error || "Failed to transfer ownership"
+        });
+      }
+    } catch (error) {
+      console.error("Error transferring ownership:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Internal server error",
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * Update participant role
+   */
+  updateParticipantRole = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { participantEmail, newRole, updaterEmail } = req.body;
+    const userEmail = updaterEmail || req.userEmail;
+
+    if (!participantEmail || !newRole) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Participant email and new role are required" 
+      });
+    }
+
+    try {
+      const result = await this.sessionService.updateParticipantRole(sessionId, userEmail, participantEmail, newRole);
+
+      if (result.success) {
+        res.status(200).json({ 
+          success: true,
+          message: "Participant role updated successfully" 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false,
+          error: result.error || "Failed to update participant role"
+        });
+      }
+    } catch (error) {
+      console.error("Error updating participant role:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Internal server error",
+        details: error.message
+      });
+    }
+  });
+
+  /**
+   * DEBUG: Check for duplicate participant records
+   */
+  checkParticipantRecords = asyncHandler(async (req, res) => {
+    const { sessionId, userEmail: targetEmail } = req.params;
+    const SessionParticipant = require("../models/SessionParticipant");
+    
+    const participants = await SessionParticipant.find({
+      sessionId,
+      userEmail: targetEmail
+    }).sort({ createdAt: 1 });
+    
+    res.json({
+      success: true,
+      count: participants.length,
+      participants: participants.map(p => ({
+        _id: p._id,
+        status: p.status,
+        role: p.role,
+        createdAt: p.createdAt,
+        leftAt: p.leftAt
+      }))
     });
   });
 }

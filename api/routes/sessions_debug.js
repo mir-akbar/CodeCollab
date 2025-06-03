@@ -7,6 +7,15 @@ const { validateSessionCreation, validateSessionInvitation } = require("../middl
 // Initialize controller
 const sessionController = new SessionController();
 
+// Debug imports
+console.log('🔍 Debugging route imports:');
+console.log('  requireAuth:', typeof requireAuth);
+console.log('  validateSessionAccess:', typeof validateSessionAccess);
+console.log('  validateSessionCreation:', typeof validateSessionCreation);
+console.log('  validateSessionInvitation:', typeof validateSessionInvitation);
+console.log('  sessionController.createSession:', typeof sessionController.createSession);
+console.log('  sessionController.inviteToSession:', typeof sessionController.inviteToSession);
+
 // =============================================================================
 // NEW SESSION MANAGEMENT ROUTES (Using Controller Pattern)
 // =============================================================================
@@ -57,6 +66,9 @@ router.delete("/:sessionId", validateSessionAccess, sessionController.deleteSess
 
 // CHECK SESSION ACCESS
 router.get("/check-access", sessionController.checkAccess);
+
+// GET SESSION DETAILS
+router.get("/:sessionId/details", validateSessionAccess, sessionController.getSessionById);
 
 // GET ACTIVE USERS IN SESSION
 router.post("/active-users", sessionController.getActiveUsers);

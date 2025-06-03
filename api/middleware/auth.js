@@ -27,9 +27,9 @@ const validateSessionAccess = async (req, res, next) => {
     }
 
     // Check if user has access to the session
-    const hasAccess = await sessionService.checkSessionAccess(sessionId, userEmail);
+    const accessResult = await sessionService.checkSessionAccess(sessionId, userEmail);
     
-    if (!hasAccess) {
+    if (!accessResult.hasAccess) {
       return res.status(403).json({ 
         error: 'Access denied to this session' 
       });

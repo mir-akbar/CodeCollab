@@ -1,115 +1,119 @@
 const Session = require('../models/Session');
 const SessionParticipant = require('../models/SessionParticipant');
-const SessionManagement = require('../models/SessionManagement'); // Legacy model
 const { generateSessionId } = require('../utils/sessionUtils');
 
 class SessionService {
   constructor() {
-    // Enable new system by default for migration completion
-    this.useNewSystem = process.env.USE_NEW_SESSION_SYSTEM !== 'false';
-    console.log(`📊 Session system mode: ${this.useNewSystem ? 'NEW' : 'LEGACY'}`);
+    console.log('📊 Session system: NEW (Legacy system removed)');
   }
 
   /**
    * Get user sessions (created + invited)
    */
   async getUserSessions(userEmail) {
-    if (this.useNewSystem) {
-      return await this._getUserSessionsNew(userEmail);
-    } else {
-      return await this._getUserSessionsLegacy(userEmail);
-    }
+    return await this._getUserSessionsNew(userEmail);
   }
 
   /**
-   * Create a new session (handles both systems)
+   * Create a new session
    */
   async createSession(sessionData) {
-    if (this.useNewSystem) {
-      return await this._createSessionNew(sessionData);
-    } else {
-      return await this._createSessionLegacy(sessionData);
-    }
+    return await this._createSessionNew(sessionData);
   }
 
   /**
-   * Invite user to session (handles both systems)
+   * Invite user to session
    */
   async inviteUserToSession(sessionId, inviterEmail, inviteeEmail, role = 'editor') {
-    if (this.useNewSystem) {
-      return await this._inviteUserNew(sessionId, inviterEmail, inviteeEmail, role);
-    } else {
-      return await this._inviteUserLegacy(sessionId, inviterEmail, inviteeEmail, role);
-    }
+    return await this._inviteUserNew(sessionId, inviterEmail, inviteeEmail, role);
   }
 
   /**
-   * Delete session (handles both systems)
+   * Delete session
    */
   async deleteSession(sessionId, userEmail) {
-    if (this.useNewSystem) {
-      return await this._deleteSessionNew(sessionId, userEmail);
-    } else {
-      return await this._deleteSessionLegacy(sessionId, userEmail);
-    }
+    return await this._deleteSessionNew(sessionId, userEmail);
   }
 
   /**
    * Leave session (user leaves themselves)
    */
   async leaveSession(sessionId, userEmail) {
-    if (this.useNewSystem) {
-      return await this._leaveSessionNew(sessionId, userEmail);
-    } else {
-      return await this._leaveSessionLegacy(sessionId, userEmail);
-    }
+    return await this._leaveSessionNew(sessionId, userEmail);
   }
 
   /**
    * Check if user has access to session
    */
   async checkSessionAccess(sessionId, userEmail) {
-    if (this.useNewSystem) {
-      return await this._checkSessionAccessNew(sessionId, userEmail);
-    } else {
-      return await this._checkSessionAccessLegacy(sessionId, userEmail);
-    }
+    return await this._checkSessionAccessNew(sessionId, userEmail);
   }
 
   /**
    * Get active users in session
    */
   async getActiveUsers(sessionId) {
-    if (this.useNewSystem) {
-      return await this._getActiveUsersNew(sessionId);
-    } else {
-      return await this._getActiveUsersLegacy(sessionId);
-    }
+    return await this._getActiveUsersNew(sessionId);
   }
 
   /**
    * Update user's last active timestamp
    */
   async updateLastActive(sessionId, userEmail) {
-    if (this.useNewSystem) {
-      await this._updateLastActiveNew(sessionId, userEmail);
-    }
-    // Legacy system doesn't track last active
+    await this._updateLastActiveNew(sessionId, userEmail);
   }
 
   /**
    * Get session details with participants
    */
   async getSessionDetails(sessionId) {
-    if (this.useNewSystem) {
-      return await this._getSessionDetailsNew(sessionId);
-    } else {
-      return await this._getSessionDetailsLegacy(sessionId);
-    }
+    return await this._getSessionDetailsNew(sessionId);
+  }
+
+  /**
+   * Remove participant from session
+   */
+  async removeParticipant(sessionId, removerEmail, participantEmail) {
+    return await this._removeParticipantNew(sessionId, removerEmail, participantEmail);
+  }
+
+  /**
+   * Transfer session ownership
+   */
+  async transferOwnership(sessionId, currentOwnerEmail, newOwnerEmail) {
+    return await this._transferOwnershipNew(sessionId, currentOwnerEmail, newOwnerEmail);
+  }
+
+  /**
+   * Update participant role
+   */
+  async updateParticipantRole(sessionId, updaterEmail, participantEmail, newRole) {
+    return await this._updateParticipantRoleNew(sessionId, updaterEmail, participantEmail, newRole);
+  }
+
+  /**
+   * Self-invite to session (if allowed by session settings)
+   */
+  async selfInviteToSession(sessionId, userEmail, requestedRole = 'viewer') {
+    return await this._selfInviteNew(sessionId, userEmail, requestedRole);
+  }
+
+  /**
+   * Request role change (if allowed by session settings)
+   */
+  async requestRoleChange(sessionId, userEmail, requestedRole) {
+    return await this._requestRoleChangeNew(sessionId, userEmail, requestedRole);
+  }
+
+  /**
+   * Update session settings
+   */
+  async updateSessionSettings(sessionId, updaterEmail, newSettings) {
+    return await this._updateSessionSettingsNew(sessionId, updaterEmail, newSettings);
   }
 
   // =============================================================================
-  // NEW SYSTEM METHODS
+  // NEW SYSTEM IMPLEMENTATION
   // =============================================================================
 
   async _getUserSessionsNew(userEmail) {
@@ -123,7 +127,7 @@ class SessionService {
             status: { $in: ['active', 'invited'] }
           }
         },
-        // Lookup session details
+        // Lookup session details using sessionId string
         {
           $lookup: {
             from: 'sessions',
@@ -202,11 +206,11 @@ class SessionService {
   }
 
   async _createSessionNew(sessionData) {
-    const { name, description, creator } = sessionData;
-    const sessionId = generateSessionId();
-
     try {
-      // Create session
+      const { name, description, creator, sessionId: providedSessionId } = sessionData;
+      const sessionId = providedSessionId || generateSessionId();
+
+      // Create the session
       const session = new Session({
         sessionId,
         name,
@@ -217,20 +221,22 @@ class SessionService {
 
       await session.save();
 
-      // Add creator as owner
-      const ownerParticipant = new SessionParticipant({
-        sessionId,
+      // Add creator as owner participant
+      const participant = new SessionParticipant({
+        sessionId: session.sessionId, // Use sessionId instead of _id for consistency
         userEmail: creator,
+        userName: creator.split('@')[0], // Extract username from email
         role: 'owner',
         status: 'active',
-        invitedBy: creator,
-        joinedAt: new Date()
+        joinedAt: new Date(),
+        invitedBy: creator // Creator invites themselves
       });
 
-      await ownerParticipant.save();
+      await participant.save();
 
       return {
         success: true,
+        sessionId,
         session: {
           id: session._id,
           sessionId: session.sessionId,
@@ -238,226 +244,275 @@ class SessionService {
           description: session.description,
           creator: session.creator,
           createdAt: session.createdAt,
-          isCreator: true,
           participants: [{
             email: creator,
-            name: creator.split('@')[0],
             role: 'owner',
-            access: 'edit'
+            status: 'active'
           }]
-        }
+        },
+        message: 'Session created successfully'
       };
 
     } catch (error) {
-      console.error('Error creating session (new system):', error);
+      console.error('Error creating session:', error);
       throw error;
     }
   }
 
   async _inviteUserNew(sessionId, inviterEmail, inviteeEmail, role = 'editor') {
     try {
-      // Check if inviter has permission
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Check if inviter has permission to invite users
       const inviterParticipant = await SessionParticipant.findOne({
-        sessionId,
+        sessionId: session.sessionId, // Use sessionId string for consistency
         userEmail: inviterEmail,
-        status: 'active',
-        role: { $in: ['owner', 'admin'] }
+        status: 'active'
       });
 
       if (!inviterParticipant) {
-        throw new Error('Permission denied: Only owners and admins can invite users');
+        throw new Error('You are not a participant in this session');
       }
 
-      // Check if user is already invited/active
+      // Use new permission system to check invite permission
+      if (!inviterParticipant.hasPermission('invite')) {
+        throw new Error('Insufficient permissions to invite users');
+      }
+
+      // Check if inviter can assign the requested role
+      if (!inviterParticipant.canAssignRole(role)) {
+        throw new Error(`Insufficient permissions to assign ${role} role`);
+      }
+
+      // Check if user is already a participant
       const existingParticipant = await SessionParticipant.findOne({
-        sessionId,
+        sessionId: session.sessionId, // Use sessionId string for consistency
         userEmail: inviteeEmail
       });
 
       if (existingParticipant) {
         if (existingParticipant.status === 'active') {
           throw new Error('User is already a participant in this session');
-        } else if (existingParticipant.status === 'invited') {
-          throw new Error('User is already invited to this session');
         } else {
-          // Reactivate removed user
-          existingParticipant.status = 'invited';
+          // Reactivate the participant
+          existingParticipant.status = 'active';
           existingParticipant.role = role;
-          existingParticipant.invitedBy = inviterEmail;
+          existingParticipant.joinedAt = new Date();
           await existingParticipant.save();
-          return { success: true, action: 'reactivated' };
         }
+      } else {
+        // Create new participant
+        const participant = new SessionParticipant({
+          sessionId: session.sessionId, // Use sessionId string for consistency
+          userEmail: inviteeEmail,
+          userName: inviteeEmail.split('@')[0], // Extract username from email
+          role,
+          status: 'active',
+          joinedAt: new Date(),
+          invitedBy: inviterEmail
+        });
+
+        await participant.save();
       }
 
-      // Create new invitation
-      const newParticipant = new SessionParticipant({
-        sessionId,
-        userEmail: inviteeEmail,
-        role,
-        status: 'invited',
-        invitedBy: inviterEmail
-      });
-
-      await newParticipant.save();
-
-      return { success: true, action: 'invited' };
+      return {
+        success: true,
+        message: 'User invited successfully'
+      };
 
     } catch (error) {
-      console.error('Error inviting user (new system):', error);
+      console.error('Error inviting user:', error);
       throw error;
     }
   }
 
   async _deleteSessionNew(sessionId, userEmail) {
     try {
-      // Check if user is the owner OR has admin privileges
-      const session = await Session.findOne({ sessionId, status: 'active' });
-      
+      // Find the session
+      const session = await Session.findOne({ sessionId });
       if (!session) {
         throw new Error('Session not found');
       }
 
-      // Check permissions - allow owners and admin participants
-      const participant = await SessionParticipant.findOne({
-        sessionId,
-        userEmail,
-        status: 'active',
-        role: { $in: ['owner', 'admin'] }
+      // Check if user has permission to delete the session (must be current owner)
+      const userParticipant = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: userEmail,
+        status: 'active'
       });
 
-      if (!participant && session.creator !== userEmail) {
-        throw new Error('Permission denied - only owners and admins can delete sessions');
+      if (!userParticipant) {
+        throw new Error('You are not a participant in this session');
+      }
+
+      if (!userParticipant.hasPermission('delete')) {
+        throw new Error('Only session owner can delete the session');
       }
 
       // Mark session as deleted
       session.status = 'deleted';
       await session.save();
 
-      // Mark all participants as removed
+      // Remove all participants
       await SessionParticipant.updateMany(
-        { sessionId, status: { $in: ['active', 'invited'] } },
+        { sessionId: session.sessionId }, // Use sessionId string for consistency
         { status: 'removed' }
       );
 
-      return { success: true };
+      return {
+        success: true,
+        message: 'Session deleted successfully'
+      };
 
     } catch (error) {
-      console.error('Error deleting session (new system):', error);
+      console.error('Error deleting session:', error);
       throw error;
     }
   }
 
   async _leaveSessionNew(sessionId, userEmail) {
     try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Find the participant
       const participant = await SessionParticipant.findOne({
-        sessionId,
-        userEmail,
+        sessionId: session.sessionId, // Use sessionId string for consistency
+        userEmail: userEmail,
         status: 'active'
       });
-      
+
       if (!participant) {
-        throw new Error('User not found in session or already left');
+        throw new Error('User is not a participant in this session');
       }
-      
+
+      // If user is the owner, they cannot leave (must transfer ownership first)
       if (participant.role === 'owner') {
-        throw new Error('Session owner cannot leave. Transfer ownership or delete the session instead.');
+        throw new Error('Session owner cannot leave. Transfer ownership first.');
       }
-      
+
+      // Remove the participant
       participant.status = 'left';
-      participant.leftAt = new Date();
       await participant.save();
-      
-      return { success: true, message: 'Left session successfully' };
-      
+
+      return {
+        success: true,
+        message: 'Left session successfully'
+      };
+
     } catch (error) {
-      console.error('Error leaving session (new system):', error);
+      console.error('Error leaving session:', error);
       throw error;
     }
   }
 
   async _checkSessionAccessNew(sessionId, userEmail) {
     try {
+      // Find the session
+      const session = await Session.findOne({ sessionId, status: 'active' });
+      if (!session) {
+        return { hasAccess: false, reason: 'Session not found or inactive' };
+      }
+
+      // Find the participant
       const participant = await SessionParticipant.findOne({
-        sessionId,
-        userEmail,
-        status: { $in: ['active', 'invited'] }
+        sessionId: session.sessionId,
+        userEmail: userEmail,
+        status: 'active'
       });
-      
-      return participant ? {
+
+      if (!participant) {
+        return { hasAccess: false, reason: 'User is not a participant' };
+      }
+
+      return {
         hasAccess: true,
         role: participant.role,
-        status: participant.status,
-        access: this._roleToAccess(participant.role)
-      } : {
-        hasAccess: false,
-        role: null,
-        status: null,
-        access: null
+        access: this._roleToAccess(participant.role),
+        sessionData: {
+          id: session._id,
+          sessionId: session.sessionId,
+          name: session.name,
+          description: session.description,
+          creator: session.creator
+        }
       };
+
     } catch (error) {
-      console.error('Error checking session access (new system):', error);
-      return { hasAccess: false, role: null, status: null, access: null };
+      console.error('Error checking session access:', error);
+      return { hasAccess: false, reason: 'Error checking access' };
     }
   }
 
   async _getActiveUsersNew(sessionId) {
     try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        return [];
+      }
+
+      // Get active participants
       const participants = await SessionParticipant.find({
-        sessionId,
-        status: 'active',
-        lastActive: { 
-          $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
-        }
-      }).sort({ lastActive: -1 }).lean();
-      
+        sessionId: session.sessionId,
+        status: 'active'
+      });
+
       return participants.map(p => ({
         email: p.userEmail,
         name: p.userName,
         role: p.role,
         access: this._roleToAccess(p.role),
-        lastActive: p.lastActive
+        joinedAt: p.joinedAt,
+        lastActiveAt: p.lastActiveAt
       }));
+
     } catch (error) {
-      console.error('Error getting active users (new system):', error);
+      console.error('Error getting active users:', error);
       return [];
     }
   }
 
   async _updateLastActiveNew(sessionId, userEmail) {
     try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        return;
+      }
+
+      // Update participant's last active time
       await SessionParticipant.updateOne(
-        { sessionId, userEmail, status: 'active' },
-        { 
-          lastActive: new Date(),
-          $setOnInsert: { 
-            // Only set these if document doesn't exist (shouldn't happen, but safety)
-            joinedAt: new Date(),
-            status: 'active' 
-          }
+        {
+          sessionId: session.sessionId,
+          userEmail: userEmail,
+          status: 'active'
         },
-        { upsert: false } // Don't create if doesn't exist
+        {
+          lastActiveAt: new Date()
+        }
       );
+
     } catch (error) {
-      console.error('Error updating last active (new system):', error);
-      // Don't throw error for this operation
+      console.error('Error updating last active:', error);
     }
   }
 
   async _getSessionDetailsNew(sessionId) {
     try {
-      // Get session and all its participants
+      // Find session with participants
       const sessionDetails = await Session.aggregate([
-        // Match the specific session
-        {
-          $match: {
-            sessionId: sessionId,
-            status: 'active'
-          }
-        },
-        // Lookup all participants
+        { $match: { sessionId: sessionId, status: 'active' } },
         {
           $lookup: {
-            from: 'sessionparticipants',
+            from: 'session_participants',
             localField: 'sessionId',
             foreignField: 'sessionId',
             as: 'participants',
@@ -472,8 +527,8 @@ class SessionService {
         }
       ]);
 
-      if (!sessionDetails || sessionDetails.length === 0) {
-        return null;
+      if (!sessionDetails.length) {
+        throw new Error('Session not found');
       }
 
       const session = sessionDetails[0];
@@ -498,178 +553,352 @@ class SessionService {
       };
 
     } catch (error) {
-      console.error('Error fetching session details (new system):', error);
+      console.error('Error fetching session details:', error);
       throw error;
     }
   }
 
-  // =============================================================================
-  // LEGACY SYSTEM METHODS (Keep existing logic)
-  // =============================================================================
-
-  async _getUserSessionsLegacy(userEmail) {
-    // This is the existing complex logic from sessionManage.js
+  async _removeParticipantNew(sessionId, removerEmail, participantEmail) {
     try {
-      const myResults = await SessionManagement.find({ email: userEmail });
-      const sharedResults = await SessionManagement.find({ invited_email: userEmail });
-
-      const sessionsMap = {};
-
-      // Process "my sessions"
-      for (const row of myResults) {
-        const { session_id, _id: id, name, description, uploaded_at, email, invited_email, access } = row;
-
-        if (!sessionsMap[session_id]) {
-          sessionsMap[session_id] = {
-            id,
-            sessionId: session_id,
-            name,
-            createdAt: uploaded_at,
-            isCreator: email === userEmail,
-            status: "active",
-            type: "mySessions",
-            access: "edit",
-            description,
-            participants: [],
-            creator: email
-          };
-        }
-
-        if (invited_email) {
-          sessionsMap[session_id].participants.push({
-            email: invited_email,
-            name: invited_email.split("@")[0],
-            access
-          });
-        }
-
-        if (!sessionsMap[session_id].participants.some(p => p.email === email)) {
-          sessionsMap[session_id].participants.unshift({
-            email,
-            name: email.split("@")[0],
-            access
-          });
-        }
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
       }
 
-      // Process shared sessions
-      for (const row of sharedResults) {
-        const { session_id, _id: id, name, description, uploaded_at, email, invited_email, access } = row;
+      // Check if remover has permission to remove participants
+      const remover = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: removerEmail,
+        status: 'active'
+      });
 
-        if (!sessionsMap[session_id]) {
-          sessionsMap[session_id] = {
-            id,
-            sessionId: session_id,
-            name,
-            createdAt: uploaded_at,
-            isCreator: false,
-            status: "active",
-            type: "sharedFromOthers",
-            access,
-            description,
-            participants: [],
-            creator: email
-          };
-        }
-
-        if (invited_email) {
-          sessionsMap[session_id].participants.push({
-            email: invited_email,
-            name: invited_email.split("@")[0],
-            access
-          });
-        }
-
-        if (!sessionsMap[session_id].participants.some(p => p.email === email)) {
-          sessionsMap[session_id].participants.unshift({
-            email,
-            name: email.split("@")[0],
-            access
-          });
-        }
+      if (!remover) {
+        throw new Error('You are not a participant in this session');
       }
 
-      return Object.values(sessionsMap);
+      // Use new permission system to check remove permission
+      if (!remover.hasPermission('remove')) {
+        throw new Error('Insufficient permissions to remove participants');
+      }
+
+      // Find and remove the participant
+      const participant = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: participantEmail,
+        status: 'active'
+      });
+
+      if (!participant) {
+        throw new Error('Participant not found');
+      }
+
+      // Cannot remove the owner
+      if (participant.role === 'owner') {
+        throw new Error('Cannot remove the session owner');
+      }
+
+      participant.status = 'removed';
+      await participant.save();
+
+      return {
+        success: true,
+        message: 'Participant removed successfully'
+      };
 
     } catch (error) {
-      console.error('Error fetching user sessions (legacy system):', error);
+      console.error('Error removing participant:', error);
       throw error;
     }
   }
 
-  async _createSessionLegacy(sessionData) {
-    // Existing legacy creation logic
-    const { name, description, creator } = sessionData;
-    const sessionId = generateSessionId();
-
-    const sessionRecord = new SessionManagement({
-      name,
-      description,
-      email: creator,
-      session_id: sessionId,
-      access: 'edit'
-    });
-
-    await sessionRecord.save();
-
-    return {
-      success: true,
-      session: {
-        id: sessionRecord._id,
-        sessionId: sessionId,
-        name,
-        description,
-        creator,
-        createdAt: sessionRecord.uploaded_at,
-        isCreator: true,
-        participants: [{
-          email: creator,
-          name: creator.split('@')[0],
-          access: 'edit'
-        }]
+  async _transferOwnershipNew(sessionId, currentOwnerEmail, newOwnerEmail) {
+    try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
       }
-    };
+
+      // Verify current owner
+      const currentOwner = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: currentOwnerEmail,
+        role: 'owner',
+        status: 'active'
+      });
+
+      if (!currentOwner) {
+        throw new Error('Current user is not the owner');
+      }
+
+      // Find new owner participant
+      const newOwner = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: newOwnerEmail,
+        status: 'active'
+      });
+
+      if (!newOwner) {
+        throw new Error('New owner is not a participant in this session');
+      }
+
+      // Update roles
+      currentOwner.role = 'admin';
+      await currentOwner.save();
+
+      newOwner.role = 'owner';
+      await newOwner.save();
+
+      // Update session creator
+      session.creator = newOwnerEmail;
+      await session.save();
+
+      return {
+        success: true,
+        message: 'Ownership transferred successfully'
+      };
+
+    } catch (error) {
+      console.error('Error transferring ownership:', error);
+      throw error;
+    }
   }
 
-  async _inviteUserLegacy(sessionId, inviterEmail, inviteeEmail, access = 'edit') {
-    // Existing legacy invite logic
-    const existing = await SessionManagement.findOne({ 
-      session_id: sessionId, 
-      invited_email: inviteeEmail 
-    });
+  async _updateParticipantRoleNew(sessionId, updaterEmail, participantEmail, newRole) {
+    try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
 
-    if (existing) {
-      throw new Error('User already invited to this session');
+      // Check if updater has permission to change roles
+      const updater = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: updaterEmail,
+        status: 'active'
+      });
+
+      if (!updater) {
+        throw new Error('You are not a participant in this session');
+      }
+
+      // Use new permission system to check role change permission
+      if (!updater.hasPermission('changeRoles')) {
+        throw new Error('Insufficient permissions to update roles');
+      }
+
+      // Check if updater can assign the new role
+      if (!updater.canAssignRole(newRole)) {
+        throw new Error(`Insufficient permissions to assign ${newRole} role`);
+      }
+
+      // Find the participant to update
+      const participant = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: participantEmail,
+        status: 'active'
+      });
+
+      if (!participant) {
+        throw new Error('Participant not found');
+      }
+
+      // Cannot change owner role
+      if (participant.role === 'owner') {
+        throw new Error('Cannot change owner role');
+      }
+
+      // Validate new role
+      const validRoles = ['viewer', 'editor', 'admin'];
+      if (!validRoles.includes(newRole)) {
+        throw new Error('Invalid role');
+      }
+
+      participant.role = newRole;
+      await participant.save();
+
+      return {
+        success: true,
+        message: 'Role updated successfully'
+      };
+
+    } catch (error) {
+      console.error('Error updating participant role:', error);
+      throw error;
     }
-
-    const sourceSession = await SessionManagement.findOne({ 
-      session_id: sessionId, 
-      email: inviterEmail 
-    });
-
-    if (!sourceSession) {
-      throw new Error('Session not found or permission denied');
-    }
-
-    const inviteRecord = new SessionManagement({
-      name: sourceSession.name,
-      email: sourceSession.email,
-      invited_email: inviteeEmail,
-      description: sourceSession.description,
-      file_name: sourceSession.file_name,
-      file_path: sourceSession.file_path,
-      session_id: sessionId,
-      access
-    });
-
-    await inviteRecord.save();
-    return { success: true };
   }
 
-  async _deleteSessionLegacy(sessionId, userEmail) {
-    // Existing legacy delete logic
-    const result = await SessionManagement.deleteMany({ session_id: sessionId });
-    return { success: result.deletedCount > 0 };
+  async _selfInviteNew(sessionId, userEmail, requestedRole = 'viewer') {
+    try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Phase 3: Check if self-invite is allowed by session settings
+      if (!session.allowsSelfInvite(userEmail)) {
+        if (!session.settings.allowSelfInvite) {
+          throw new Error('Self-invitation is not allowed for this session');
+        } else {
+          throw new Error('Your email domain is not allowed for this session');
+        }
+      }
+
+      // Check session capacity
+      const currentParticipantCount = await SessionParticipant.countDocuments({
+        sessionId: session.sessionId,
+        status: { $in: ['active', 'invited'] }
+      });
+
+      if (session.isAtCapacity(currentParticipantCount)) {
+        throw new Error('Session has reached maximum participant capacity');
+      }
+
+      // Check if user is already a participant
+      const existingParticipant = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: userEmail
+      });
+
+      if (existingParticipant) {
+        if (existingParticipant.status === 'active') {
+          throw new Error('User is already a participant in this session');
+        } else {
+          // Reactivate the participant
+          existingParticipant.status = 'active';
+          existingParticipant.role = requestedRole;
+          existingParticipant.joinedAt = new Date();
+          await existingParticipant.save();
+        }
+      } else {
+        // Create new participant
+        const participant = new SessionParticipant({
+          sessionId: session.sessionId,
+          userEmail: userEmail,
+          userName: userEmail.split('@')[0], // Extract username from email
+          role: requestedRole,
+          status: 'active',
+          joinedAt: new Date(),
+          invitedBy: userEmail // Self-invite
+        });
+
+        await participant.save();
+      }
+
+      return {
+        success: true,
+        message: 'Self-invited to session successfully'
+      };
+
+    } catch (error) {
+      console.error('Error self-inviting to session:', error);
+      throw error;
+    }
+  }
+
+  async _requestRoleChangeNew(sessionId, userEmail, requestedRole) {
+    try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Phase 3: Check if role requests are allowed by session settings
+      if (!session.settings.allowRoleRequests) {
+        throw new Error('Role requests are not allowed for this session');
+      }
+
+      // Find the participant
+      const participant = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: userEmail,
+        status: 'active'
+      });
+
+      if (!participant) {
+        throw new Error('User is not a participant in this session');
+      }
+
+      // Validate the requested role
+      const validRoles = ['viewer', 'editor']; // Users can only request lower-level roles
+      if (!validRoles.includes(requestedRole)) {
+        throw new Error(`Cannot request ${requestedRole} role. Only viewer and editor roles can be requested.`);
+      }
+
+      // Cannot request a role higher than current role
+      const currentRoleLevel = { viewer: 1, editor: 2, admin: 3, owner: 4 };
+      if (currentRoleLevel[requestedRole] > currentRoleLevel[participant.role]) {
+        throw new Error('Cannot request a role higher than your current role');
+      }
+
+      // For now, auto-approve role requests (in production, this could create pending requests)
+      participant.role = requestedRole;
+      await participant.save();
+
+      return {
+        success: true,
+        message: 'Role change applied successfully'
+      };
+
+    } catch (error) {
+      console.error('Error requesting role change:', error);
+      throw error;
+    }
+  }
+
+  async _updateSessionSettingsNew(sessionId, updaterEmail, newSettings) {
+    try {
+      // Find the session
+      const session = await Session.findOne({ sessionId });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Check if updater has permission to update settings
+      const updater = await SessionParticipant.findOne({
+        sessionId: session.sessionId,
+        userEmail: updaterEmail,
+        status: 'active'
+      });
+
+      if (!updater) {
+        throw new Error('You are not a participant in this session');
+      }
+
+      // Use new permission system to check settings update permission
+      if (!updater.hasPermission('manageSession')) {
+        throw new Error('Insufficient permissions to update session settings');
+      }
+
+      // Validate the new settings
+      const tempSession = { ...session.toObject(), settings: { ...session.settings, ...newSettings.settings } };
+      const validation = session.validateSettings.call({ settings: tempSession.settings });
+      if (!validation.success) {
+        throw new Error(`Invalid settings: ${validation.errors.join(', ')}`);
+      }
+
+      // Update session settings
+      if (newSettings.settings) {
+        Object.assign(session.settings, newSettings.settings);
+      }
+      if (newSettings.name) session.name = newSettings.name;
+      if (newSettings.description) session.description = newSettings.description;
+      
+      await session.save();
+
+      return {
+        success: true,
+        message: 'Session settings updated successfully'
+      };
+
+    } catch (error) {
+      console.error('Error updating session settings:', error);
+      throw error;
+    }
   }
 
   // =============================================================================
@@ -677,60 +906,23 @@ class SessionService {
   // =============================================================================
 
   _roleToAccess(role) {
-    switch (role) {
-      case 'owner':
-      case 'admin':
-      case 'editor':
-        return 'edit';
-      case 'viewer':
-        return 'view';
-      default:
-        return 'view';
-    }
+    const roleMap = {
+      'owner': 'edit',
+      'admin': 'edit',
+      'editor': 'edit',
+      'viewer': 'view'
+    };
+    return roleMap[role] || 'view';
   }
 
-  _accessToRole(access) {
-    switch (access) {
-      case 'edit':
-        return 'editor';
-      case 'view':
-        return 'viewer';
-      default:
-        return 'viewer';
-    }
-  }
-
-  /**
-   * Switch to new system (for gradual migration)
-   */
-  enableNewSystem() {
-    this.useNewSystem = true;
-    console.log('✅ Switched to new session system');
-  }
-
-  /**
-   * Switch back to legacy system
-   */
-  enableLegacySystem() {
-    this.useNewSystem = false;
-    console.log('🔄 Switched to legacy session system');
-  }
-
-  /**
-   * Check if migration is needed
-   */
+  // Migration status check (always returns complete since legacy is removed)
   async checkMigrationStatus() {
-    const totalLegacySessions = await SessionManagement.distinct('session_id').then(ids => 
-      ids.filter(id => id != null).length
-    );
-    
-    const migratedSessions = await Session.countDocuments({ 'legacy.migrationComplete': true });
-    
     return {
-      totalLegacySessions,
-      migratedSessions,
-      migrationComplete: migratedSessions >= totalLegacySessions,
-      migrationProgress: totalLegacySessions > 0 ? (migratedSessions / totalLegacySessions * 100).toFixed(1) : 100
+      isComplete: true,
+      canSafelyRemoveLegacy: true,
+      newSystemActive: true,
+      legacySystemActive: false,
+      message: 'Migration complete - legacy system removed'
     };
   }
 }

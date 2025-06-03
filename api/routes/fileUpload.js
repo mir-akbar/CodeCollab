@@ -8,7 +8,6 @@ const { Buffer } = require("buffer");
 const fileStorageService = require("../services/fileStorageService");
 
 const router = express.Router();
-const SessionManagement = require("../models/SessionManagement");
 const SessionService = require("../services/sessionService");
 
 // Initialize session service
@@ -90,18 +89,6 @@ module.exports = (io) => {
         });
         
         const extractedFiles = await handleZipFile(req.file, sessionID, io);
-        
-        // Update MongoDB session record
-        await SessionManagement.findOneAndUpdate(
-          { email, session_id: sessionID },
-          {
-            $set: {
-              file_name: req.file.originalname,
-              file_path: `mongodb://${sessionID}` // Indicate MongoDB storage
-            }
-          },
-          { upsert: true, new: true }
-        );
 
         console.log(`✅ ZIP file extraction completed: ${extractedFiles.length} files processed`);
 
@@ -123,18 +110,6 @@ module.exports = (io) => {
           parentFolder: null,
           filePath: req.file.originalname
         });
-
-        // Update MongoDB session record
-        await SessionManagement.findOneAndUpdate(
-          { email, session_id: sessionID },
-          {
-            $set: {
-              file_name: req.file.originalname,
-              file_path: `mongodb://${sessionID}` // Indicate MongoDB storage
-            }
-          },
-          { upsert: true, new: true }
-        );
 
         console.log("✅ Single file updated in MongoDB.");
 

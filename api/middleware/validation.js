@@ -48,8 +48,35 @@ const validateSessionCreation = (req, res, next) => {
  */
 const validateSessionInvitation = (req, res, next) => {
   const { sessionId } = req.params;
-  const { email: inviteeEmail, access = 'edit' } = req.body;
-  const inviterEmail = req.body.inviterEmail || req.headers['x-user-email'];
+  
+  // Determine invitee email with clear priority
+  let inviteeEmail;
+  if (req.body.inviteeEmail) {
+    // New API pattern: explicit inviteeEmail field
+    inviteeEmail = req.body.inviteeEmail;
+  } else if (req.body.email && !req.body.inviterEmail) {
+    // Legacy API pattern: email field is invitee when no explicit inviterEmail
+    inviteeEmail = req.body.email;
+  } else {
+    inviteeEmail = null;
+  }
+  
+  // Determine inviter email with clear priority  
+  let inviterEmail;
+  if (req.body.inviterEmail) {
+    // Explicit inviter email provided
+    inviterEmail = req.body.inviterEmail;
+  } else if (req.body.email && req.body.inviteeEmail) {
+    // When both exist, email field is the inviter for auth
+    inviterEmail = req.body.email;
+  } else {
+    // Fall back to header
+    inviterEmail = req.headers['x-user-email'];
+  }
+  
+  // Support both 'role' and 'access' fields for backward compatibility
+  const { role, access } = req.body;
+  
   const errors = [];
 
   if (!sessionId || typeof sessionId !== 'string') {
@@ -64,8 +91,10 @@ const validateSessionInvitation = (req, res, next) => {
     errors.push('Inviter email is required and must be valid');
   }
 
-  if (!['edit', 'view', 'editor', 'viewer'].includes(access)) {
-    errors.push('Access level must be edit, view, editor, or viewer');
+  const userRole = role || access || 'editor';
+  
+  if (!['owner', 'admin', 'editor', 'viewer', 'edit', 'view'].includes(userRole)) {
+    errors.push('Role must be owner, admin, editor, viewer, edit, or view');
   }
 
   if (errors.length > 0) {
@@ -75,9 +104,18 @@ const validateSessionInvitation = (req, res, next) => {
     });
   }
 
-  // Sanitize inputs
-  req.body.email = inviteeEmail.trim().toLowerCase();
+  // Sanitize and normalize inputs - standardize field names
+  req.body.inviteeEmail = inviteeEmail.trim().toLowerCase();
   req.body.inviterEmail = inviterEmail.trim().toLowerCase();
+  
+  // Normalize role field (convert legacy access values)
+  if (userRole === 'edit') {
+    req.body.role = 'editor';
+  } else if (userRole === 'view') {
+    req.body.role = 'viewer'; 
+  } else {
+    req.body.role = userRole;
+  }
 
   next();
 };
