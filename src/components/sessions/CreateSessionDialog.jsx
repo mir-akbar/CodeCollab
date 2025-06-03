@@ -22,26 +22,32 @@ export const CreateSessionDialog = ({ open = false, onClose, onCreate }) => {
       return;
     }
 
-    const sessionId = uuidv4();
     setIsSubmitting(true);
     const email = localStorage.getItem("email");
+    
     try {
-      const response = await axios.post(`${API_URL}/manage_session/create-session`, {
-        name,
-        description,
-        sessionId,
-        email
+      // Use onCreate prop which should use the new API
+      const result = await onCreate({
+        name: name.trim(),
+        description: description.trim(),
+        creator: email
       });
 
-      toast({
-        title: "Session Created", 
-        description: "Your new session has been created" 
-    });
-
-      resetForm();
-      onClose();
+      if (result.success) {
+        toast({
+          title: "Session Created", 
+          description: "Your new session has been created" 
+        });
+        resetForm();
+        onClose();
+      }
     } catch (error) {
       console.error("Error creating session:", error);
+      toast({
+        title: "Creation Failed", 
+        description: error.message || "Failed to create session",
+        variant: "destructive" 
+      });
     } finally {
       setIsSubmitting(false);
     }

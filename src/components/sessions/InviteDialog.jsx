@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,17 +7,29 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { encryptData } from "@/utils/encryption";
 import { ParticipantsList } from "./ParticipantsList";
 import PropTypes from "prop-types";
+import { getAssignableRoles, canManageParticipants, roleToAccess } from '@/utils/permissions';
+import { validateInvite, formatPermissionError } from '@/utils/permissionValidation';
+import { useToast } from "@/hooks/use-toast";
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
-export const InviteDialog = ({ open = false, session = null, onClose, onInviteSent }) => {
+export const InviteDialog = ({ open = false, session = null, currentUserEmail = "", currentUserRole = "viewer", onClose, onInviteSent, onRemoveParticipant, onPromoteToOwner, onUpdateRole }) => {
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [access, setAccess] = useState("view");
+  const [role, setRole] = useState("viewer");
   const [method, setMethod] = useState("email");
   const [link, setLink] = useState("");
   const [isLinkCopied, setIsLinkCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // Get roles that current user can assign
+  const assignableRoles = getAssignableRoles(currentUserRole);
+  const canInvite = canManageParticipants(currentUserRole);
 
   const generateLink = () => {
-    const encryptedAccess = encodeURIComponent(encryptData(access));
+    const legacyAccess = roleToAccess(role); // Convert role to legacy access for URL compatibility
+    const encryptedAccess = encodeURIComponent(encryptData(legacyAccess));
     const sessionId = encodeURIComponent(session.sessionId);
     const baseUrl = window.location.origin;
     const newLink = `${baseUrl}/workspace?session=${sessionId}&access=${encryptedAccess}`;
@@ -32,16 +44,46 @@ export const InviteDialog = ({ open = false, session = null, onClose, onInviteSe
 
   const handleSendInvite = async () => {
     if (method === "email" && (!email || !email.includes('@'))) {
+      setErrorMessage("Please enter a valid email address");
       return;
+    }
+    
+    // Clear previous errors
+    setErrorMessage("");
+    
+    // Pre-validate the invite operation
+    if (method === "email" && session) {
+      const validation = validateInvite(session, currentUserEmail, email, role);
+      if (!validation.valid) {
+        setErrorMessage(validation.message);
+        return;
+      }
     }
     
     setIsSubmitting(true);
     try {
-      await onInviteSent(session.id, email, access);
+      // Use sessionId for the API call, fallback to id if sessionId doesn't exist
+      const sessionIdentifier = session.sessionId || session.id;
+      await onInviteSent(sessionIdentifier, email, role);
+      
+      // Show success toast
+      toast({
+        title: "Invitation sent",
+        description: `${email} has been invited as ${role}`,
+      });
+      
       setEmail("");
       onClose();
     } catch (error) {
       console.error("Error sending invite:", error);
+      const formattedError = formatPermissionError(error);
+      setErrorMessage(formattedError);
+      
+      toast({
+        title: "Invitation failed",
+        description: formattedError,
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -51,8 +93,14 @@ export const InviteDialog = ({ open = false, session = null, onClose, onInviteSe
     setEmail("");
     setLink("");
     setMethod("email");
-    setAccess("view");
+    setRole("viewer");
+    setErrorMessage("");
   };
+
+  // Don't render if user doesn't have permission to invite
+  if (!canInvite) {
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -71,6 +119,14 @@ export const InviteDialog = ({ open = false, session = null, onClose, onInviteSe
             Invite others to join this session by email or generate a sharable link.
           </DialogDescription>
         </DialogHeader>
+
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
 
         <div className="py-4 space-y-4">
           <RadioGroup value={method} onValueChange={setMethod} className="flex gap-4">
@@ -98,16 +154,23 @@ export const InviteDialog = ({ open = false, session = null, onClose, onInviteSe
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="access-level">Access Level</Label>
+            <Label htmlFor="role-select">Role</Label>
             <select
-              id="access-level"
-              value={access}
-              onChange={(e) => setAccess(e.target.value)}
+              id="role-select"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
               style={{ backgroundColor: 'black', color: 'white', padding: '0.5rem', borderRadius: '0.25rem', width: '100%' }}
             >
-              <option value="view">View (Can only view code)</option>
-              <option value="edit">Edit (Can make changes)</option>
-              {/* <option value="admin">Admin (Full control)</option> */}
+              {assignableRoles.includes('viewer') && (
+                <option value="viewer">Viewer (Can only view code)</option>
+              )}
+              {assignableRoles.includes('editor') && (
+                <option value="editor">Editor (Can make changes)</option>
+              )}
+              {assignableRoles.includes('admin') && (
+                <option value="admin">Admin (Can manage participants)</option>
+              )}
+              {/* Owner role cannot be assigned directly through invites */}
             </select>
           </div>
 
@@ -134,21 +197,25 @@ export const InviteDialog = ({ open = false, session = null, onClose, onInviteSe
             <ParticipantsList
               participants={session.participants}
               sessionId={session.id}
-              onUpdateAccess={onInviteSent}
+              currentUserEmail={currentUserEmail}
+              currentUserRole={currentUserRole}
+              onUpdateAccess={onUpdateRole}
+              onRemoveParticipant={onRemoveParticipant}
+              onPromoteToOwner={onPromoteToOwner}
             />
           </div>
         )}
 
-        <div className="flex justify-end gap-2 mt-4">
+        <div className="mt-4 flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           {method === "email" && (
             <Button 
               onClick={handleSendInvite} 
-              disabled={!email || !email.includes('@') || isSubmitting}
+              disabled={isSubmitting || !email || !email.includes('@')}
             >
-              {isSubmitting ? "Sending..." : "Send Invite"}
+              {isSubmitting ? "Sending..." : "Send Invitation"}
             </Button>
           )}
         </div>
@@ -161,9 +228,15 @@ InviteDialog.propTypes = {
   open: PropTypes.bool.isRequired,
   session: PropTypes.shape({
     id: PropTypes.string,
+    sessionId: PropTypes.string,
     name: PropTypes.string,
     participants: PropTypes.array
   }),
+  currentUserEmail: PropTypes.string,
+  currentUserRole: PropTypes.string,
   onClose: PropTypes.func.isRequired,
-  onInviteSent: PropTypes.func.isRequired
+  onInviteSent: PropTypes.func.isRequired,
+  onRemoveParticipant: PropTypes.func,
+  onPromoteToOwner: PropTypes.func,
+  onUpdateRole: PropTypes.func
 };

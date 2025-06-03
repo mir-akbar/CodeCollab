@@ -1,3 +1,24 @@
+import CryptoJS from 'crypto-js';
+
+const SECRET_KEY = "f9a8b7c6d5e4f3a2b1c0d9e8f7g6h5i4j3k2l1m0n9o8p7q6";
+
+// Encryption function for session access
+export const encryptData = (text) => {
+    return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+};
+
+// Navigate to session workspace
+export const navigateToSession = (session, toast) => {
+    console.log(session);
+    const workspaceUrl = window.location.origin;
+    const sessionUrl = `${workspaceUrl}/workspace?session=${session.sessionId}&access=${encodeURIComponent(encryptData(session.access))}`;
+    window.location.href = sessionUrl;
+    toast({ 
+        title: "Joining Session", 
+        description: `You would navigate to session` 
+    });
+};
+
 export const processSessions = (data, userEmail) => {
     console.log("Processing raw session data:", data);
     
@@ -7,10 +28,10 @@ export const processSessions = (data, userEmail) => {
       return [];
     }
     
-    // First, process all sessions
+    // Process all sessions - new API should already provide clean data
     const processedSessions = data.sessions.map(session => {
       // Handle possible different id formats (id vs sessionId)
-      const id = session.id || session.sessionId;
+      const id = session._id || session.id || session.sessionId;
       
       // Log individual session processing
       console.log("Processing session:", session);
@@ -18,7 +39,7 @@ export const processSessions = (data, userEmail) => {
       // Create a standardized session object
       return {
         id: id,
-        sessionId: id, // Include both for compatibility
+        sessionId: session.sessionId || id, // Include both for compatibility
         name: session.name || "Unnamed Session",
         description: session.description || "",
         creator: session.creator || "",
@@ -32,29 +53,8 @@ export const processSessions = (data, userEmail) => {
       };
     });
     
-    // Then, remove duplicates by ID
-    const sessionMap = new Map();
-    
-    // For each session, keep only the most recently updated one if duplicates exist
-    processedSessions.forEach(session => {
-      const existingSession = sessionMap.get(session.id);
-      
-      // If this session doesn't exist in our map yet, or it's newer than the existing one, update the map
-      if (!existingSession || 
-          (new Date(session.lastActive) > new Date(existingSession.lastActive))) {
-        sessionMap.set(session.id, session);
-      }
-    });
-    
-    // Convert map values back to array
-    const uniqueSessions = Array.from(sessionMap.values());
-    
-    // Log how many duplicates were removed
-    if (uniqueSessions.length < processedSessions.length) {
-      console.warn(`Removed ${processedSessions.length - uniqueSessions.length} duplicate session(s)`);
-    }
-    
-    return uniqueSessions;
+    console.log(`Processed ${processedSessions.length} session(s)`);
+    return processedSessions;
   };
   
   export const filterSessions = (sessions, { search, status, sort }, activeTab) => {
@@ -74,3 +74,31 @@ export const processSessions = (data, userEmail) => {
       ? new Date(b.lastActive || Date.now()) - new Date(a.lastActive || Date.now())
       : (a.name || "").localeCompare(b.name || ""));
   };
+
+// Filter sessions based on tab and search criteria
+export const getFilteredSessions = (sessions, filters, activeTab, favoriteSessionIds) => {
+    return sessions.filter(session => {
+        // Filter by tab
+        if (activeTab === "created" && !session.isCreator) return false;
+        if (activeTab === "invited" && session.isCreator) return false;
+        if (activeTab === "favorites" && !favoriteSessionIds.includes(session.id) && !favoriteSessionIds.includes(session.sessionId)) return false;
+        
+        // Filter by search term
+        if (filters.search) {
+            const searchTerm = filters.search.toLowerCase();
+            const matchesName = session.name?.toLowerCase().includes(searchTerm);
+            const matchesDescription = session.description?.toLowerCase().includes(searchTerm);
+            if (!matchesName && !matchesDescription) return false;
+        }
+        
+        return true;
+    }).sort((a, b) => {
+        // Sort sessions
+        if (filters.sort === "recent") {
+            return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+        } else if (filters.sort === "alphabetical") {
+            return (a.name || "").localeCompare(b.name || "");
+        }
+        return 0;
+    });
+};

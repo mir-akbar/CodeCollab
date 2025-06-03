@@ -22,6 +22,8 @@ import { API_URL } from "../common/Constant";
 export function AppSidebar({ onFileSelect }) {
   const [files, setFiles] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastClickedFile, setLastClickedFile] = useState(null);
+  const [lastClickTime, setLastClickTime] = useState(0);
   const socketRef = useRef(null);
 
   useEffect(() => {
@@ -206,6 +208,17 @@ export function AppSidebar({ onFileSelect }) {
   };
 
   const handleFileClick = async (file) => {
+    const currentTime = Date.now();
+    
+    // Prevent rapid successive clicks of the same file (debounce with 500ms)
+    if (lastClickedFile === file.path && (currentTime - lastClickTime) < 500) {
+      console.log(`📄 Ignoring rapid successive click on ${file.name}`);
+      return;
+    }
+    
+    console.log(`📂 Opening file: ${file.name} (${file.path})`);
+    setLastClickedFile(file.path);
+    setLastClickTime(currentTime);
     await fetchFileContent(file.name, file.path);
   };
 
@@ -300,8 +313,10 @@ export function AppSidebar({ onFileSelect }) {
       // Update local state by removing the deleted file
       setFiles(prevFiles => prevFiles.filter(f => f.path !== file.path));
       
-      // Clear the editor if the deleted file was currently open
-      // We'll pass a special signal to indicate the file was deleted
+      // Clear the last clicked file if the deleted file was the last one clicked
+      if (lastClickedFile === file.path) {
+        setLastClickedFile(null);
+      }
       onFileSelect(null, "// File was deleted. Please select another file to edit.", null, { deleted: true, deletedFile: file });
       
       console.log(`✅ Successfully deleted file: ${file.name}`);

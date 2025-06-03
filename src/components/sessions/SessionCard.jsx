@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Calendar } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import PropTypes from "prop-types";
+import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 
 export const SessionCard = ({ 
   session, 
@@ -25,12 +26,17 @@ export const SessionCard = ({
     return null;
   }
 
-  
-
   const participants = session.participants || [];
-  const isCreator = session.isCreator;
-  const isCreatorEdit = session.isCreator === userEmail;
+  const userRole = getUserRole(session, userEmail);
+  const isCreator = session.isCreator || session.creator === userEmail;
   const userAccess = session.access;
+
+  // Permission checks using new system
+  const permissions = {
+    canDelete: canDeleteSession(userRole),
+    canInvite: canManageParticipants(userRole),
+    canManage: canManageParticipants(userRole)
+  };
 
   return (
     <motion.div 
@@ -66,7 +72,7 @@ export const SessionCard = ({
 
       {/* Metadata Section */}
       <div className="flex flex-wrap gap-2">
-        <AccessLevelBadge access={userAccess} isCreator={isCreatorEdit} />
+        <AccessLevelBadge access={userAccess} role={userRole} isCreator={isCreator} />
         <Badge variant="outline" className="flex items-center gap-1">
           <Users className="h-3 w-3" />
           {participants.length} participant{participants.length !== 1 ? 's' : ''}
@@ -107,15 +113,17 @@ export const SessionCard = ({
             </div>
           )}
         </div>
-        <Button 
-          variant="secondary" 
-          size="sm"
-          onClick={() => onInvite(session)}
-          className="gap-1"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>Invite</span>
-        </Button>
+        {permissions.canInvite && (
+          <Button 
+            variant="secondary" 
+            size="sm"
+            onClick={() => onInvite(session)}
+            className="gap-1"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span>Invite</span>
+          </Button>
+        )}
       </div>
 
       {/* Action Buttons */}
@@ -128,7 +136,7 @@ export const SessionCard = ({
           <LogIn className="h-4 w-4" />
           Join Session
         </Button>
-        {isCreator ? (
+        {permissions.canDelete ? (
           <Button
             variant="destructive"
             onClick={() => onDelete(session)}
@@ -159,6 +167,9 @@ SessionCard.propTypes = {
     name: PropTypes.string,
     description: PropTypes.string,
     creator: PropTypes.string,
+    isCreator: PropTypes.bool,
+    access: PropTypes.string,
+    role: PropTypes.string,
     participants: PropTypes.array,
     createdAt: PropTypes.string
   }).isRequired,

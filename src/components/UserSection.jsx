@@ -1,96 +1,381 @@
 import { useEffect, useState } from 'react';
-import { Users, LogOut, Copy } from 'lucide-react';
+import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { isAuthenticated, logout } from '@/utils/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from "../common/Constant";
-import CryptoJS from 'crypto-js';
 import axios from "axios";
-
-const SECRET_KEY = "f9a8b7c6d5e4f3a2b1c0d9e8f7g6h5i4j3k2l1m0n9o8p7q6";
+import { 
+  getUserRole, 
+  canManageParticipants, 
+  getAssignableRoles, 
+  roleToAccess 
+} from '@/utils/permissions';
 
 export function UserSection() {
   const navigate = useNavigate();
-  
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-  };
-
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+  const sessionId = searchParams.get("session");
+  const [sessionData, setSessionData] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const loggedInUser = localStorage.getItem("email");
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const [users, setUsers] = useState([]);
-  const session = searchParams.get("session");
-
+  // Fetch session details and participants
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await axios.post(`${API_URL}/manage_session/active-users`, {
-          session_id: session
-        });
+    if (!sessionId) return;
 
-        const emails = response.data.map(user => user.email);
-        setUsers(emails);
+    const fetchSessionData = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/sessions/${sessionId}?email=${loggedInUser}`);
+        if (response.data.success) {
+          setSessionData(response.data.session);
+          setParticipants(response.data.session.participants || []);
+        }
       } catch (error) {
-        console.error("Error fetching active users:", error);
+        console.error("Error fetching session data:", error);
+        // Fallback to active users endpoint for backward compatibility
+        try {
+          const fallbackResponse = await axios.post(`${API_URL}/sessions/active-users`, {
+            session_id: sessionId
+          });
+          const emails = fallbackResponse.data.map(user => user.email);
+          setParticipants(emails.map(email => ({
+            userEmail: email,
+            userName: email.split('@')[0],
+            role: 'editor',
+            status: 'active'
+          })));
+        } catch (fallbackError) {
+          console.error("Error fetching active users:", fallbackError);
+        }
       }
     };
-  
-    fetchUsers();
-    const interval = setInterval(fetchUsers, 5000);
+
+    fetchSessionData();
+    const interval = setInterval(fetchSessionData, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [session]);
-  
+  }, [sessionId, loggedInUser]);
+
+  const activeParticipants = participants.filter(p => p.status === 'active');
 
   return (
     <div className="flex items-center gap-4">
-      <UsersDialog users={users} onCopyLink={handleCopyLink} />
+      <CollaborationDialog 
+        sessionData={sessionData}
+        participants={participants}
+        activeParticipants={activeParticipants}
+        sessionId={sessionId}
+        loggedInUser={loggedInUser}
+      />
       <AuthButton handleLogout={handleLogout} navigate={navigate} />
     </div>
   );
 }
 
-function UsersDialog({ users, onCopyLink }) {
+function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId, loggedInUser }) {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+    // Force a page refresh to update session data
+    window.location.reload();
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
         <div className="flex items-center gap-2 cursor-pointer hover:bg-[#333] p-2 rounded-md">
           <Users size={18} className="text-gray-400" />
           <div className="flex -space-x-2">
-            {users.length > 0 ? (
-              users.map(user => {
-                const trimmedEmail = user.slice(0, 1);
-                return (
-                  <div key={user} className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm">
-                    {trimmedEmail.toUpperCase()}
-                  </div>
-                );
-              })
+            {activeParticipants && activeParticipants.length > 0 ? (
+              activeParticipants.slice(0, 3).map((participant, index) => (
+                <div 
+                  key={participant.userEmail || index} 
+                  className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e]"
+                  title={participant.userName || participant.userEmail}
+                >
+                  {((participant.userName || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                </div>
+              ))
             ) : (
-              <p className="text-gray-400 text-sm">No active users</p>
+              <div className="text-gray-400 text-sm">No active users</div>
+            )}
+            {activeParticipants && activeParticipants.length > 3 && (
+              <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e]">
+                +{activeParticipants.length - 3}
+              </div>
             )}
           </div>
         </div>
       </DialogTrigger>
       <DialogContent 
-        className="bg-[#1e1e1e] text-gray-300 border-[#444]"
+        className="bg-[#1e1e1e] text-gray-300 border-[#444] max-w-md"
         aria-describedby="collaboration-dialog-description"
       >
         <DialogHeader>
-          <DialogTitle>Collaboration</DialogTitle>
+          <DialogTitle>Session Collaboration</DialogTitle>
           <DialogDescription id="collaboration-dialog-description">
-            View and manage active collaborators in this session.
+            Manage participants and collaboration settings for this session.
           </DialogDescription>
         </DialogHeader>
-        <UsersDialogContent onCopyLink={onCopyLink} />
+        <CollaborationContent 
+          sessionData={sessionData}
+          participants={participants}
+          sessionId={sessionId}
+          loggedInUser={loggedInUser}
+          onRefresh={handleRefresh}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CollaborationContent({ sessionData, participants, onRefresh }) {
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('editor');
+  const [isInviting, setIsInviting] = useState(false);
+  const loggedInUser = localStorage.getItem("email");
+
+  if (!sessionData) {
+    return <div className="text-center text-gray-400">Loading session data...</div>;
+  }
+
+  // Use permission utility functions instead of hardcoded role checks
+  const currentUserRole = getUserRole(sessionData, loggedInUser);
+  const canInvite = canManageParticipants(currentUserRole);
+  const assignableRoles = getAssignableRoles(currentUserRole);
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !sessionData.sessionId) return;
+
+    setIsInviting(true);
+    try {
+      const response = await axios.post(`${API_URL}/sessions/${sessionData.sessionId}/invite`, {
+        email: inviteEmail.trim(),
+        access: roleToAccess(inviteRole), // Convert role to legacy access
+        role: inviteRole, // Send the actual role
+        inviterEmail: loggedInUser
+      });
+
+      if (response.data.success) {
+        setInviteEmail('');
+        onRefresh();
+      } else {
+        alert(response.data.error || 'Failed to send invitation');
+      }
+    } catch (error) {
+      console.error("Error inviting user:", error);
+      alert('Failed to send invitation. Please try again.');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'owner':
+        return <Crown size={14} className="text-yellow-500" />;
+      case 'admin':
+        return <Shield size={14} className="text-orange-500" />;
+      case 'editor':
+        return <Edit size={14} className="text-blue-500" />;
+      case 'viewer':
+        return <Eye size={14} className="text-gray-500" />;
+      default:
+        return <Eye size={14} className="text-gray-500" />;
+    }
+  };
+
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
+      case 'owner':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'admin':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'editor':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'viewer':
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active':
+        return 'bg-green-500';
+      case 'invited':
+        return 'bg-yellow-500';
+      case 'left':
+        return 'bg-gray-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const activeParticipants = participants.filter(p => p.status === 'active');
+  const invitedParticipants = participants.filter(p => p.status === 'invited');
+
+  return (
+    <div className="space-y-4">
+      {/* Session Info */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Session: {sessionData.name}</h3>
+        <p className="text-xs text-gray-400">
+          Created by {sessionData.creator === loggedInUser ? 'you' : sessionData.creator}
+        </p>
+        <p className="text-xs text-gray-400">
+          Your role: {currentUserRole}
+        </p>
+      </div>
+
+      <Separator className="bg-[#444]" />
+
+      {/* Active Participants */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          Active Participants ({activeParticipants.length})
+        </h3>
+        <div className="space-y-2 max-h-32 overflow-y-auto">
+          {activeParticipants.length > 0 ? (
+            activeParticipants.map((participant, index) => (
+              <div key={participant.userEmail || `active-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d]">
+                <div className="relative">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
+                    {((participant.userName || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                  </div>
+                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {participant.userName || (participant.userEmail ? participant.userEmail.split('@')[0] : 'Unknown')}
+                    {participant.userEmail === loggedInUser && ' (you)'}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">{participant.userEmail || 'No email'}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
+                    <span className="flex items-center gap-1">
+                      {getRoleIcon(participant.role)}
+                      {participant.role}
+                    </span>
+                  </Badge>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400 text-sm">No active participants</p>
+          )}
+        </div>
+      </div>
+
+      {/* Pending Invitations */}
+      {invitedParticipants.length > 0 && (
+        <>
+          <Separator className="bg-[#444]" />
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              Pending Invitations ({invitedParticipants.length})
+            </h3>
+            <div className="space-y-2 max-h-24 overflow-y-auto">
+              {invitedParticipants.map((participant, index) => (
+                <div key={participant.userEmail || `invited-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d] opacity-75">
+                  <div className="relative">
+                    <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm">
+                      {(participant.userEmail || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{participant.userEmail || 'Pending user'}</div>
+                    <div className="text-xs text-gray-400">Invitation pending</div>
+                  </div>
+                  <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
+                    <span className="flex items-center gap-1">
+                      {getRoleIcon(participant.role)}
+                      {participant.role}
+                    </span>
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Invite New User */}
+      {canInvite && (
+        <>
+          <Separator className="bg-[#444]" />
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <UserPlus size={16} />
+              Invite Collaborator
+            </h3>
+            <div className="space-y-2">
+              <Input
+                type="email"
+                placeholder="Enter email address"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="bg-[#2d2d2d] border-[#444] text-white placeholder-gray-400"
+              />
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger className="bg-[#2d2d2d] border-[#444] text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#2d2d2d] border-[#444]">
+                  {assignableRoles.includes('admin') && (
+                    <SelectItem value="admin" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Shield size={14} className="text-orange-500" />
+                        Admin - Can manage users and content
+                      </span>
+                    </SelectItem>
+                  )}
+                  {assignableRoles.includes('editor') && (
+                    <SelectItem value="editor" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Edit size={14} className="text-blue-500" />
+                        Editor - Can edit and save
+                      </span>
+                    </SelectItem>
+                  )}
+                  {assignableRoles.includes('viewer') && (
+                    <SelectItem value="viewer" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Eye size={14} className="text-gray-500" />
+                        Viewer - Read only
+                      </span>
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button 
+                onClick={handleInvite}
+                disabled={!inviteEmail.trim() || isInviting}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Mail size={16} className="mr-2" />
+                {isInviting ? 'Sending...' : 'Send Invitation'}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -114,133 +399,5 @@ function AuthButton({ handleLogout, navigate }) {
     >
       Login
     </Button>
-  );
-}
-
-function UsersDialogContent({ onCopyLink }) {
-  return (
-    <div className="space-y-4">
-      <ActiveUsersList />
-      {/* <ShareSession onCopyLink={onCopyLink} /> */}
-    </div>
-  );
-}
-
-function encryptData(text) {
-  return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-}
-
-function decryptData(cipherText) {
-  try {
-    const bytes = CryptoJS.AES.decrypt(cipherText, SECRET_KEY);
-    return bytes.toString(CryptoJS.enc.Utf8);
-  } catch (error) {
-    console.error("Decryption error:", error);
-    return "";
-  }
-}
-
-function ActiveUsersList() {
-  const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  
-  const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState("");
-  const [accessLevel, setAccessLevel] = useState("");
-  const [shareableLink, setShareableLink] = useState(window.location.href);
-  const loggedInUser = localStorage.getItem("email");
-
-  const encryptedUser = searchParams.get("user");
-  const session = searchParams.get("session");
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await axios.post(`${API_URL}/manage_session/active-users`, {
-          session_id: session
-        });
-
-        const emails = response.data.map(user => user.email);
-        setUsers(emails);
-      } catch (error) {
-        console.error("Error fetching active users:", error);
-      }
-    };
-  
-    fetchUsers();
-    const interval = setInterval(fetchUsers, 5000);
-    return () => clearInterval(interval);
-  }, [session]);
-
-  useEffect(() => {
-    if (selectedUser && accessLevel) {
-      const encryptedUser = encodeURIComponent(encryptData(selectedUser));
-      const encryptedAccess = encodeURIComponent(encryptData(accessLevel));
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set("user", encryptedUser);
-      currentUrl.searchParams.set("access", encryptedAccess);
-      setShareableLink(currentUrl.toString());
-    }
-  }, [selectedUser, accessLevel]);
-
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium">Active Users</h3>
-      <div className="space-y-2">
-        {users.length > 0 ? (
-          users.map(user => (
-            <div key={user} className="flex items-center gap-2 p-2 rounded bg-[#2d2d2d]">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white bg-blue-500">
-                {user.charAt(0).toUpperCase()}
-              </div>
-              <span>{user.split("@")[0]}</span>
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-400 text-sm">No active users</p>
-        )}
-      </div>
-      {!encryptedUser && (
-        <>
-          <select className="mt-2 p-2 bg-[#2d2d2d] text-white border border-[#444] rounded w-full" value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)}>
-            <option value="">Select an active user</option>
-            {users.filter(user => user !== loggedInUser).map(user => (
-              <option key={user} value={user}>{user.split("@")[0]}</option>
-            ))}
-          </select>
-          <select className="mt-2 p-2 bg-[#2d2d2d] text-white border border-[#444] rounded w-full" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value)}>
-            <option value="">Select access level</option>
-            <option value="edit">Edit</option>
-            <option value="view">View</option>
-          </select>
-          <ShareSession shareableLink={shareableLink} />
-        </>
-      )}
-    </div>
-  );
-
-}
-
-
-function ShareSession({ shareableLink }) {
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium">Share Session</h3>
-      <div className="flex items-center gap-2">
-        <input 
-          type="text" 
-          value={shareableLink} 
-          readOnly 
-          className="flex-1 bg-[#2d2d2d] border border-[#444] rounded p-2 text-sm"
-        />
-        <Button 
-          onClick={() => navigator.clipboard.writeText(shareableLink)}
-          variant="outline" 
-          size="icon"
-        >
-          <Copy size={16} />
-        </Button>
-      </div>
-    </div>
   );
 }

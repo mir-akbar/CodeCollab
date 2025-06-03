@@ -17,6 +17,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
   const providerRef = useRef(null);
   const bindingRef = useRef(null);
   const [isYjsReady, setIsYjsReady] = useState(false);
+  const [hasInitializedContent, setHasInitializedContent] = useState(false);
 
   const setupYjsBinding = useCallback(() => {
     if (!yjsDocRef.current || !providerRef.current || !editorRef.current || !providerRef.current.awareness) return;
@@ -32,11 +33,6 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
     );
     bindingRef.current = binding;
 
-    // Initialize content if this is a new document and we have initial content
-    if (content && ytext.length === 0) {
-      ytext.insert(0, content);
-    }
-
     // Listen for changes to call the onCodeChange callback
     ytext.observe((event, transaction) => {
       if (transaction.local) {
@@ -46,7 +42,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
     });
 
     // Set up cursor tracking
-    editorRef.current.onDidChangeCursorPosition((e) => {
+    editorRef.current.onDidChangeCursorPosition(() => {
       if (providerRef.current?.awareness) {
         const selection = editorRef.current.getSelection();
         providerRef.current.awareness.setLocalStateField('cursor', {
@@ -79,7 +75,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
     });
 
     console.log('✅ YJS MonacoBinding setup complete with awareness');
-  }, [content, onCodeChange]);
+  }, [onCodeChange]);
 
   const stringToColor = (str) => {
     let hash = 0;
@@ -128,7 +124,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
     yjsDocRef.current = doc;
 
     // Create provider for this specific file
-    const roomName = `${sessionId}-${currentFile}`;
+    const roomName = `file-sync-${currentFile}`;
     const provider = new SocketIOProvider(roomName, socket, doc);
     providerRef.current = provider;
 
@@ -151,6 +147,10 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
 
     // Wait for sync before setting up binding
     const handleSynced = () => {
+      console.log('🔄 YJS provider synced for:', currentFile);
+      const ytext = yjsDocRef.current.getText('monaco');
+      console.log(`📏 YJS document length after sync: ${ytext.length}`);
+      
       setIsYjsReady(true);
       if (editorRef.current) {
         setupYjsBinding();
@@ -195,8 +195,43 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
       }
       
       setIsYjsReady(false);
+      setHasInitializedContent(false);
     };
   }, [sessionId, currentFile, email, setupYjsBinding]);
+
+  // Handle content initialization through YJS sync mechanism  
+  useEffect(() => {
+    // Reset initialization flag when file changes
+    setHasInitializedContent(false);
+  }, [currentFile]);
+
+  useEffect(() => {
+    if (!isYjsReady || !yjsDocRef.current || hasInitializedContent) return;
+    
+    // Add a small delay to ensure YJS sync is complete
+    const initTimer = setTimeout(() => {
+      const ytext = yjsDocRef.current.getText('monaco');
+      
+      // Check if YJS document already has content (from other users)
+      if (ytext.length > 0) {
+        console.log('📄 YJS document already has content, skipping initialization for:', currentFile);
+        setHasInitializedContent(true);
+        return;
+      }
+      
+      // Only insert content if YJS document is completely empty AND we have content to insert
+      if (content && content.trim().length > 0) {
+        console.log('📝 First user - initializing YJS document for:', currentFile);
+        ytext.insert(0, content);
+        setHasInitializedContent(true);
+      } else {
+        // Mark as initialized even if no content to prevent future attempts
+        setHasInitializedContent(true);
+      }
+    }, 100); // Small delay to ensure sync is complete
+    
+    return () => clearTimeout(initTimer);
+  }, [content, isYjsReady, currentFile, hasInitializedContent]);
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -256,6 +291,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
           // YJS-specific options
           scrollBeyondLastLine: false,
           wordWrap: 'on',
+          padding: { top: 0, bottom: 40 },
         }}
       />
     </div>

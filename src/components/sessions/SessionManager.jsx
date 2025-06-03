@@ -1,339 +1,97 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { SessionTabs } from "@/components/sessions/SessionTabs";
 import { SessionFilters } from "@/components/sessions/SessionFilters";
 import { SessionList } from "@/components/sessions/SessionList";
 import { CreateSessionDialog } from "@/components/sessions/CreateSessionDialog";
 import { InviteDialog } from "@/components/sessions/InviteDialog";
 import { DeleteDialog } from "@/components/sessions/DeleteDialog";
-import { useToast } from "@/hooks/use-toast";
-import { API_URL } from "@/common/Constant";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw } from "lucide-react";
 import PropTypes from "prop-types";
 import { SessionFooter } from "@/components/sessions/SessionFooter";
-import CryptoJS from 'crypto-js';
 
-const SECRET_KEY = "f9a8b7c6d5e4f3a2b1c0d9e8f7g6h5i4j3k2l1m0n9o8p7q6";
+// Custom Hooks
+import useSessionManager from "../../hooks/useSessionManager";
+import { useDialogState } from "../../hooks/useDialogState";
 
-export const SessionManager = ({ userEmail }) => {
+// Services and Utilities
+import { SessionActions } from "../../services/sessionActions";
+import { navigateToSession, getFilteredSessions } from "../../utils/sessionUtils";
+import { useToast } from "../../hooks/use-toast";
+
+const SessionManager = ({ userEmail }) => {
     const { toast } = useToast();
-    const [sessions, setSessions] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("all");
     const [filters, setFilters] = useState({ search: "", sort: "recent" });
     
-    const email = userEmail || localStorage.getItem("email") || "";
+    // Custom hooks for state management
+    const { 
+        sessions, 
+        setSessions, 
+        isLoading, 
+        favoriteSessionIds, 
+        toggleFavorite, 
+        fetchUserSessions, 
+        email,
+        systemInfo // Add systemInfo from useSessionManager
+    } = useSessionManager(userEmail);
     
-    // Dialog states
-    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-    const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [selectedSession, setSelectedSession] = useState(null);
-
-    const [selectedSessionId, setSelectedSessionId] = useState(null);
+    const {
+        isCreateDialogOpen,
+        isInviteDialogOpen,
+        isDeleteDialogOpen,
+        selectedSession,
+        openDialog,
+        closeCreateDialog,
+        closeInviteDialog,
+        closeDeleteDialog
+    } = useDialogState();
     
-    // Favorites
-    const [favoriteSessionIds, setFavoriteSessionIds] = useState([]);
+    // Initialize session actions service
+    const sessionActions = new SessionActions(toast, fetchUserSessions);
     
-    // Load favorite sessions from localStorage
-    useEffect(() => {
-        const storedFavorites = localStorage.getItem("favoriteSessionIds");
-        if (storedFavorites) {
-            try {
-                setFavoriteSessionIds(JSON.parse(storedFavorites));
-            } catch (error) {
-                console.error("Error parsing favorites from localStorage:", error);
-            }
-        }
-        
-        fetchUserSessions();
-    }, [email]);
-    
-    // Fetch sessions from the backend
-    const fetchUserSessions = async () => {
-        setIsLoading(true);
-        
-        try {
-            const mySessionsRes = await axios.get(`${API_URL}/manage_session/get-my-sessions`, {
-                params: { email: email },
-            });
-
-            const sharedSessionsRes = await axios.get(`${API_URL}/manage_session/get-shared-sessions`, {
-                params: { email: email },
-            });
-
-            const mySessions = mySessionsRes.data.map((item, index) => ({
-                id: item.id,
-                sessionId: item.sessionId,
-                name: item.name,
-                createdAt: item.createdAt,
-                isCreator: true,
-                status: "active",
-                type: "mySessions",
-                access: item.access,
-                description: item.description,
-                participants: item.participants
-            }));
-
-            const sharedSessions = sharedSessionsRes.data.map((item, index) => ({
-                id: item.id,
-                sessionId: item.sessionId,
-                name: item.name,
-                createdAt: item.createdAt,
-                isCreator: false,
-                status: "active",
-                type: "sharedFromOthers",
-                access: item.access,
-                description: item.description,
-                participants: item.participants
-            }));
-            setSessions([...mySessions, ...sharedSessions]);
-            setIsLoading(false);
-            
-        } catch (error) {
-            console.error("Failed to fetch sessions:", error);
-            toast({
-                title: "Error",
-                description: "Failed to fetch sessions",
-                variant: "destructive"
-            });
-            setIsLoading(false);
-        }
-    };
-    
-    // Helper function to ensure only one dialog is open at a time
-    const openDialog = (dialogType, session = null) => {
-        setIsCreateDialogOpen(false);
-        setIsInviteDialogOpen(false);
-        setIsDeleteDialogOpen(false);
-        
-        setSelectedSession(session);
-        
-        // Open the requested dialog after a small delay to ensure clean transition
-        setTimeout(() => {
-            switch (dialogType) {
-                case 'create':
-                    setIsCreateDialogOpen(true);
-                    break;
-                case 'invite':
-                    setIsInviteDialogOpen(true);
-                    break;
-                case 'delete':
-                    setIsDeleteDialogOpen(true);
-                    break;
-                default:
-                    break;
-            }
-        }, 50);
-    };
-    
-    // Reset UI state when dialogs close
-    const resetUIState = () => {
-        setSelectedSession(null);
-        
-        // Force blur any active element to prevent selection issues
-        if (document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur();
-        }
-    };
-    
-    // Close dialog handlers with proper cleanup
-    const closeCreateDialog = () => {
-        setIsCreateDialogOpen(false);
-        setTimeout(resetUIState, 100);
-    };
-    
-    const closeInviteDialog = () => {
-        setIsInviteDialogOpen(false);
-        setTimeout(resetUIState, 100);
-    };
-    
-    const closeDeleteDialog = () => {
-        setIsDeleteDialogOpen(false);
-        setTimeout(resetUIState, 100);
-    };
-
-    const handleCreateSession = async () => {
-        try {
-            // For demo purposes, add a new dummy session
-            const newSession = {
-                id: `session-${sessions.length + 1}`,
-                sessionId: `s-000${sessions.length + 1}`,
-                name: `New Session ${sessions.length + 1}`,
-                createdAt: new Date().toISOString(),
-                isCreator: true,
-                status: "active",
-                type: "mySessions",
-                access: "edit",
-                description: "Newly created session",
-                participants: [
-                    { email: email, name: "Me", access: "edit" }
-                ],
-                creator: email
-            };
-            
-            setSessions([newSession, ...sessions]);
-            
-            toast({ 
-                title: "Session Created", 
-                description: "Your new session has been created" 
-            });
-            await fetchUserSessions();
+    // Action handlers using the session actions service
+    const handleCreateSession = async (sessionData) => {
+        const result = await sessionActions.createSession(sessionData, email);
+        if (result.success) {
             closeCreateDialog();
-        
-            
-            return { success: true };
-        } catch (error) {
-            toast({ 
-                title: "Creation Failed", 
-                description: error.message,
-                variant: "destructive" 
-            });
-            throw error;
         }
+        return result;
     };
 
     const handleDelete = async (sessionId) => {
-        if (!sessionId) return;
-        
-        try {
-            // For demo purposes, filter out the deleted session
-            setSessions(sessions.filter(session => session.id !== sessionId && session.sessionId !== sessionId));
-            
-            // Remove from favorites if present
-            if (favoriteSessionIds.includes(sessionId)) {
-                toggleFavorite(sessionId);
-            }
-
-            await axios.post(`${API_URL}/manage_session/delete-session`, {
-                sessionId: sessionId,
-            });
-            await fetchUserSessions();
-            
-            toast({ 
-                title: "Session Deleted", 
-                description: "The session has been deleted successfully" 
-            });
-            
-            // Close dialog
-            closeDeleteDialog();
-            
-            
-            // Real implementation
-           
-        
-        } catch (error) {
-            toast({ 
-                title: "Deletion Failed", 
-                description: error.message,
-                variant: "destructive" 
-            });
-        }
+        await sessionActions.deleteSession(sessionId, email, sessions, setSessions, favoriteSessionIds, toggleFavorite);
+        closeDeleteDialog();
     };
 
-    const handleInvite = async (sessionId, inviteeEmail, access) => {
-        try {
-            // Real implementation
-            await axios.post(`${API_URL}/manage_session/invite-session`, {
-                id: selectedSession.id,
-                sessionId: sessionId,
-                email: inviteeEmail,
-                access:access
-            });
-            await fetchUserSessions();
-            toast({ 
-                title: "Invite Sent", 
-                description: `Invitation sent to ${inviteeEmail}` 
-            });
-            
-            closeInviteDialog();
-            
-            
-        } catch (error) {
-            toast({ 
-                title: "Invite Failed", 
-                description: error.message,
-                variant: "destructive" 
-            });
-            console.error("Invite failed:", error);
-            throw error;
-        }
+    const handleInvite = async (sessionId, inviteeEmail, role) => {
+        await sessionActions.inviteUser(sessionId, inviteeEmail, role, email);
+        closeInviteDialog();
     };
 
-    const handleLeaveSession = async (id) => {
-        
-        try {
-            if (id) {
-                await axios.post(`${API_URL}/manage_session/leave-session`, {
-                    id: id,
-                });
-                await fetchUserSessions();
-                toast({ 
-                    title: "Left Session", 
-                    description: `You have left session"` 
-                });
-            } else {
-                toast({ 
-                    title: "Cannot Leave", 
-                    description: "You cannot leave sessions you created. Delete them instead." 
-                });
-            }
-            
-        } catch (error) {
-            toast({ 
-                title: "Failed to leave session", 
-                description: error.message,
-                variant: "destructive" 
-            });
-        }
-    };
-    
-    // Toggle favorite status
-    const toggleFavorite = (sessionId) => {
-        setFavoriteSessionIds((prev) => {
-            const newFavorites = prev.includes(sessionId) 
-                ? prev.filter((id) => id !== sessionId) 
-                : [...prev, sessionId];
-
-            // Save to localStorage
-            localStorage.setItem("favoriteSessionIds", JSON.stringify(newFavorites));
-            return newFavorites;
-        });
+    const handleRemoveParticipant = async (sessionId, participantEmail) => {
+        await sessionActions.removeParticipant(sessionId, participantEmail, email);
     };
 
-    function encryptData(text) {
-        return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-      }
-    
-    // Navigate to session
-    const navigateToSession = (session) => {
-        console.log(session);
-        const workspaceUrl = window.location.origin;
-        const sessionUrl = `${workspaceUrl}/workspace?session=${session.sessionId}&access=${encodeURIComponent(encryptData(session.access))}`;
-        window.location.href = sessionUrl;
-        toast({ 
-            title: "Joining Session", 
-            description: `You would navigate to session` 
-        });
-        
-        
+    const handlePromoteToOwner = async (sessionId, participantEmail) => {
+        await sessionActions.promoteToOwner(sessionId, participantEmail, email);
     };
 
-    // Filter sessions based on tab and other criteria
-    const filteredSessions = sessions.filter(session => {
-        // Filter by tab
-        if (activeTab === "created" && !session.isCreator) return false;
-        if (activeTab === "invited" && session.isCreator) return false;
-        if (activeTab === "favorites" && !favoriteSessionIds.includes(session.id) && !favoriteSessionIds.includes(session.sessionId)) return false;
-        
-        // Filter by search term
-        if (filters.search && !session.name?.toLowerCase().includes(filters.search.toLowerCase())) {
-            return false;
-        }
-        
-        return true;
-    });
+    const handleUpdateRole = async (sessionId, participantEmail, newRole) => {
+        await sessionActions.updateRole(sessionId, participantEmail, newRole, email);
+    };
+
+    const handleLeaveSession = async (sessionId) => {
+        await sessionActions.leaveSession(sessionId, email);
+    };
+
+    // Navigation helper
+    const handleJoinSession = (session) => {
+        navigateToSession(session, toast);
+    };
+
+    // Get filtered sessions
+    const filteredSessions = getFilteredSessions(sessions, filters, activeTab, favoriteSessionIds);
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -344,6 +102,12 @@ export const SessionManager = ({ userEmail }) => {
                         <div>
                             <h1 className="text-3xl font-bold">Collaboration Hub</h1>
                             <p className="text-muted-foreground">Manage your coding sessions</p>
+                            {/* Temporary debug info */}
+                            {systemInfo && (
+                                <p className="text-xs mt-1 text-blue-400">
+                                    System: {systemInfo.usingNewSystem ? 'NEW' : 'LEGACY'} | Status: {systemInfo.status || 'Unknown'}
+                                </p>
+                            )}
                         </div>
                         <div className="flex space-x-2">
                             <Button
@@ -380,10 +144,10 @@ export const SessionManager = ({ userEmail }) => {
                             sessions={filteredSessions}
                             isLoading={isLoading}
                             userEmail={email}
-                            onJoin={(session) => navigateToSession(session)}
+                            onJoin={handleJoinSession}
                             onDelete={(session) => openDialog('delete', session)}
                             onInvite={(session) => openDialog('invite', session)}
-                            onLeave={(session) => handleLeaveSession(session.id)}
+                            onLeave={(session) => handleLeaveSession(session.sessionId)}
                             onToggleFavorite={(session) => toggleFavorite(session.id)}
                             favoriteSessionIds={favoriteSessionIds}
                         />
@@ -399,8 +163,13 @@ export const SessionManager = ({ userEmail }) => {
                     <InviteDialog
                         open={isInviteDialogOpen}
                         session={selectedSession}
+                        currentUserEmail={email}
+                        currentUserRole={selectedSession?.isCreator ? "owner" : selectedSession?.access === "admin" ? "admin" : selectedSession?.access === "edit" ? "editor" : "viewer"}
                         onClose={closeInviteDialog}
                         onInviteSent={handleInvite}
+                        onRemoveParticipant={handleRemoveParticipant}
+                        onPromoteToOwner={handlePromoteToOwner}
+                        onUpdateRole={handleUpdateRole}
                     />
 
                     <DeleteDialog
@@ -421,3 +190,5 @@ export const SessionManager = ({ userEmail }) => {
 SessionManager.propTypes = {
   userEmail: PropTypes.string
 };
+
+export default SessionManager;

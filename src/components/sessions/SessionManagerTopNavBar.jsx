@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Users, LogOut, ChevronDown} from "lucide-react";
+import { Users, LogOut, ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import { useNavigate, useLocation } from "react-router-dom";
 import { userPool, logout } from "@/utils/auth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -10,15 +11,23 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
+import { getUserRole, canManageSettings } from "@/utils/permissions";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function SessionManagerTopNavBar() {
     const [userData, setUserData] = useState({
         name: "",
         email: "",
     });
+    const [sessionData, setSessionData] = useState(null);
     const { toast } = useToast();
     const navigate = useNavigate();
+    const location = useLocation();
+    const searchParams = new URLSearchParams(location.search);
+    const sessionId = searchParams.get("session");
 
     useEffect(() => {
         // Get current user from Cognito user pool
@@ -60,7 +69,26 @@ export default function SessionManagerTopNavBar() {
                 });
             }
         }
-    }, []);
+
+        // If we have a session ID, fetch the session data to determine user permissions
+        if (sessionId) {
+            const fetchSessionData = async () => {
+                try {
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}?email=${userData.email}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success) {
+                            setSessionData(data.session);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching session data:", error);
+                }
+            };
+
+            fetchSessionData();
+        }
+    }, [sessionId, userData.email]);
 
     const handleLogout = () => {
         logout();
@@ -71,18 +99,40 @@ export default function SessionManagerTopNavBar() {
         navigate("/login");
     };
 
+    // Determine user's role and permissions if in a session
+    const userRole = sessionData ? getUserRole(sessionData, userData.email) : null;
+    const showAdminSettings = userRole && canManageSettings(userRole);
+
     return (
         <div className="fixed top-0 left-0 right-0 z-50 h-16 border-b bg-background/80 backdrop-blur-md flex items-center justify-between px-8 shadow-md">
             <div className="flex items-center gap-4">
-                    <Users size={24} className="text-primary" />
-                    <h1 className="text-xl font-semibold">Session Manager</h1>
+                <Users size={24} className="text-primary" />
+                <h1 className="text-xl font-semibold">Session Manager</h1>
+                {userRole && (
+                    <Badge variant="outline" className="ml-2">
+                        Role: {userRole}
+                    </Badge>
+                )}
             </div>
 
-            <div className="">
-                {/* <Button variant="default" size="sm" className="hidden md:flex gap-1">
-                    <Plus size={16} />
-                    New Session
-                </Button> */}
+            <div className="flex items-center gap-2">
+                {/* Admin Settings Button - Only shown for owner/admin */}
+                {showAdminSettings && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => navigate(`/settings?session=${sessionId}`)}
+                            >
+                                <Settings className="h-5 w-5" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Session Settings
+                        </TooltipContent>
+                    </Tooltip>
+                )}
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -97,6 +147,12 @@ export default function SessionManagerTopNavBar() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
+                        {userRole && (
+                            <>
+                                <DropdownMenuLabel>Role: {userRole}</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                            </>
+                        )}
                         <DropdownMenuItem className="text-red-500" onClick={handleLogout}>
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Log out</span>

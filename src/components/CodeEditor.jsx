@@ -58,7 +58,7 @@ export default function CodeEditor() {
 
     const fetchUsers = async () => {
       try {
-        const response = await axios.post(`${API_URL}/manage_session/active-users`, {
+        const response = await axios.post(`${API_URL}/sessions/active-users`, {
           session_id: sessionID
         });
         console.log(response);
