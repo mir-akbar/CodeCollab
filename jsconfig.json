@@ -5,7 +5,7 @@
         "@/*": ["./src/*"]
       }
     },
-    "include": ["src/**/*"],
+    "include": ["src/**/*", "backups/src/hooks/useAPIContext.js", "backups/src/hooks/useFavorites.js", "backups/src/hooks/useSessionsWithFetch.js", "backups/src/hooks/useSessionsWithoutAPI.js", "backups/src/hooks/useUserProfile.js"],
     "exclude": ["node_modules"]
   }
   

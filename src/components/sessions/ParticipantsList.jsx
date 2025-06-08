@@ -68,7 +68,7 @@ export const ParticipantsList = ({
       <h4 className="text-sm font-medium">Participants</h4>
       {participants.map((participant) => {
         const isCurrentUser = participant.email === currentUserEmail;
-        const participantRole = participant.role || (participant.access === "edit" ? "editor" : "viewer");
+        const participantRole = participant.role || "viewer";
         
         return (
           <div key={participant.email} className="flex items-center justify-between">

@@ -1,53 +1,31 @@
 import { useState, useEffect, useRef } from "react";
-import { io } from "socket.io-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send } from "lucide-react";
-import { API_URL } from "../common/Constant";
-
-const socket = io(`${API_URL}`);
+import { useUser } from "@/contexts/UserContext";
 
 function ChatPanel() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef(null);
-  const userEmail = localStorage.getItem("email") || "";
+  const { userEmail } = useUser();
   const searchParams = new URLSearchParams(location.search);
   const session = searchParams.get("session");
 
-  // Fetch messages on load
+  // Placeholder for y-websocket integration
   useEffect(() => {
     if (!session) return;
-
-    fetch(`${API_URL}/chat/messages`)
-      .then((res) => res.json())
-      .then((data) => {
-        const filtered = data.filter((msg) => msg.session === session);
-        setMessages(filtered);
-      })
-      .catch((err) => console.error("Failed to fetch messages:", err));
+    
+    // TODO: Initialize y-websocket for chat functionality
+    console.log("Chat will be integrated with y-websocket for session:", session);
+    
+    // Placeholder message to indicate pending integration
+    setMessages([{
+      sender: "System",
+      content: "Chat functionality will be available once y-websocket integration is complete.",
+      timestamp: new Date(),
+    }]);
   }, [session]);
-
-  // Register user and socket listener
-  useEffect(() => {
-    if (!userEmail || !session) return;
-
-    socket.emit("register-user", userEmail);
-
-    const handleReceiveMessage = (message) => {
-      // console.log("Received socket message:", message);
-      console.log(message.session);
-      if (message.session === session) {
-        setMessages((prev) => [...prev, message]);
-      }
-    };
-
-    socket.on("receiveMessage", handleReceiveMessage);
-
-    return () => {
-      socket.off("receiveMessage", handleReceiveMessage);
-    };
-  }, [userEmail, session]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -56,14 +34,18 @@ function ChatPanel() {
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
 
+    // TODO: Implement y-websocket chat sending
+    console.log("Message will be sent via y-websocket:", newMessage);
+    
+    // Placeholder for development - show sent message locally
     const sender = userEmail.replace("@gmail.com", "");
     const message = {
       sender,
       content: newMessage.trim(),
-      sessionId: session,
+      timestamp: new Date(),
     };
-
-    socket.emit("sendMessage", message);
+    
+    setMessages((prev) => [...prev, message]);
     setNewMessage("");
   };
 
@@ -81,21 +63,30 @@ function ChatPanel() {
           const isOwnMessage =
             message.sender.replace("@gmail.com", "") ===
             userEmail.replace("@gmail.com", "");
+          const isSystemMessage = message.sender === "System";
 
           return (
             <div
               key={index}
-              className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+              className={`flex ${
+                isSystemMessage 
+                  ? "justify-center" 
+                  : isOwnMessage 
+                    ? "justify-end" 
+                    : "justify-start"
+              }`}
             >
               <div
                 className={`max-w-[70%] rounded-lg p-2 ${
-                  isOwnMessage
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-700 text-gray-200"
+                  isSystemMessage
+                    ? "bg-yellow-600 text-white text-center"
+                    : isOwnMessage
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-700 text-gray-200"
                 }`}
               >
                 <p className="font-semibold text-sm">
-                  {isOwnMessage ? "You" : message.sender}
+                  {isSystemMessage ? message.sender : isOwnMessage ? "You" : message.sender}
                 </p>
                 <p className="text-sm">{message.content}</p>
               </div>

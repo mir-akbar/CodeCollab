@@ -4,13 +4,10 @@
  */
 
 const fileStorageService = require("../services/fileStorageService");
-const SessionService = require("../services/sessionService");
+const accessService = require("../services/accessService");
 const { asyncHandler } = require("../middleware/errorHandler");
 
 class FileController {
-  constructor() {
-    this.sessionService = new SessionService();
-  }
 
   /**
    * Get file content
@@ -101,16 +98,13 @@ class FileController {
     const { sessionID, email } = req.body;
 
     // Validate session access
-    const hasAccess = await this.sessionService.checkSessionAccess(sessionID, email);
+    const hasAccess = await accessService.checkSessionAccess(sessionID, email);
     if (!hasAccess) {
       return res.status(403).json({ error: "Access denied to session" });
     }
 
-    // Update user activity
-    await this.sessionService.updateLastActive(sessionID, email);
-
     // Process file upload
-    const result = await this.processFileUpload(req.file, sessionID, email);
+    const result = await this.processFileUpload(req.file, sessionID);
     
     res.json(result);
   });
@@ -118,7 +112,7 @@ class FileController {
   /**
    * Process file upload (helper method)
    */
-  async processFileUpload(file, sessionID, email) {
+  async processFileUpload(file, sessionID) {
     const fileExt = require('path').extname(file.originalname).toLowerCase();
     
     if (fileExt === ".zip") {

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Resend Verification</title>
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+</head>
+<body>
+    <h1>Debug Resend Verification Code</h1>
+    <div>
+        <h2>User Pool Configuration</h2>
+        <p><strong>User Pool ID:</strong> ap-south-1_NmX1a5CZS</p>
+        <p><strong>Client ID:</strong> 1511s4si4okckl0nn4v94ogv3o</p>
+        <p><strong>Username:</strong> akbar</p>
+        <p><strong>Email:</strong> akbarmir02@gmail.com</p>
+    </div>
+    
+    <div>
+        <h2>Test Resend</h2>
+        <button onclick="testResendWithUsername()">Test Resend with Username (akbar)</button>
+        <button onclick="testResendWithEmail()">Test Resend with Email</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const poolData = {
+            UserPoolId: 'ap-south-1_NmX1a5CZS',
+            ClientId: '1511s4si4okckl0nn4v94ogv3o'
+        };
+        const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+        function testResendWithUsername() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Testing resend with username "akbar"...</p>';
+            
+            const cognitoUser = new AmazonCognitoIdentity.CognitoUser({
+                Username: 'akbar',
+                Pool: userPool,
+            });
+
+            cognitoUser.resendConfirmationCode((err, result) => {
+                if (err) {
+                    console.error('Resend error:', err);
+                    resultDiv.innerHTML += `<p style="color: red;">Error: ${err.message}</p>`;
+                    return;
+                }
+                console.log('Resend success:', result);
+                resultDiv.innerHTML += `<p style="color: green;">Success! Code sent to: ${result.CodeDeliveryDetails.Destination}</p>`;
+            });
+        }
+
+        function testResendWithEmail() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Testing resend with email "akbarmir02@gmail.com"...</p>';
+            
+            const cognitoUser = new AmazonCognitoIdentity.CognitoUser({
+                Username: 'akbarmir02@gmail.com',
+                Pool: userPool,
+            });
+
+            cognitoUser.resendConfirmationCode((err, result) => {
+                if (err) {
+                    console.error('Resend error:', err);
+                    resultDiv.innerHTML += `<p style="color: red;">Error: ${err.message}</p>`;
+                    return;
+                }
+                console.log('Resend success:', result);
+                resultDiv.innerHTML += `<p style="color: green;">Success! Code sent to: ${result.CodeDeliveryDetails.Destination}</p>`;
+            });
+        }
+    </script>
+</body>
+</html>

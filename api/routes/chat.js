@@ -1,42 +1,24 @@
 const express = require("express");
-const Message = require("../models/Message");
 
 module.exports = (io) => {
   const router = express.Router();
 
-  // Get Messages
+  // Placeholder for y-websocket chat integration
+  // This endpoint will be updated when y-websocket is fully integrated
   router.get("/messages", async (req, res) => {
-    try {
-      const messages = await Message.find().sort({ timestamp: 1 });
-      res.json(messages);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    res.json({
+      message: "Chat functionality will be handled by y-websocket",
+      status: "pending_integration"
+    });
   });
 
-  // WebSocket for Chat
+  // WebSocket for Chat - Placeholder for y-websocket integration
+  // y-websocket will handle real-time chat collaboration
   io.on("connection", (socket) => {
-    console.log("A user connected to chat");
-
-    socket.on("sendMessage", async (message) => {
-      const { sender, content, sessionId } = message;
-
-      try {
-        const newMessage = new Message({
-          sender,
-          content,
-          session: sessionId
-        });
-
-        const savedMessage = await newMessage.save();
-        io.emit("receiveMessage", savedMessage);
-      } catch (err) {
-        console.error("Error saving message:", err.message);
-      }
-    });
+    console.log("User connected - chat will be handled by y-websocket");
 
     socket.on("disconnect", () => {
-      console.log("User disconnected from chat");
+      console.log("User disconnected");
     });
   });
 

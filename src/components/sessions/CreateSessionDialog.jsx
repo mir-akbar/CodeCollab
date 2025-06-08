@@ -7,10 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from "sonner";
 import { useCreateSession } from "@/hooks/useSessions";
+import { useUser } from '@/contexts/UserContext';
 
-export const CreateSessionDialog = ({ open = false, onClose, userEmail }) => {
+export const CreateSessionDialog = ({ open = false, onClose }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const { userEmail } = useUser();
   
   // Use TanStack Query mutation directly
   const createSessionMutation = useCreateSession();
@@ -26,7 +28,7 @@ export const CreateSessionDialog = ({ open = false, onClose, userEmail }) => {
           name: name.trim(),
           description: description.trim()
         },
-        userEmail: userEmail || localStorage.getItem("email")
+        userEmail: userEmail
       });
 
       toast.success("Your new session has been created successfully");
@@ -103,6 +105,5 @@ export const CreateSessionDialog = ({ open = false, onClose, userEmail }) => {
 
 CreateSessionDialog.propTypes = {
   open: PropTypes.bool,
-  onClose: PropTypes.func.isRequired,
-  userEmail: PropTypes.string
+  onClose: PropTypes.func.isRequired
 };

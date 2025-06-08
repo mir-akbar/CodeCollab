@@ -1,0 +1,479 @@
+import { useEffect, useState } from 'react';
+import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { API_URL } from "../common/Constant";
+import axios from "axios";
+import { useAuth } from '@/contexts/AuthContext';
+import { useUser } from '@/contexts/UserContext';
+import { 
+  getUserRole, 
+  canManageParticipants, 
+  getAssignableRoles 
+} from '@/utils/permissions';
+
+// Helper function to get display name with intelligent fallback
+const getDisplayName = (participant) => {
+  if (!participant) return 'Unknown User';
+  
+  // Use the enhanced name resolution logic matching backend
+  return participant.name || 
+         participant.displayName || 
+         (participant.given_name && participant.family_name ? 
+           `${participant.given_name} ${participant.family_name}` : 
+           participant.given_name) ||
+         (participant.email || participant.userEmail || '').split('@')[0] ||
+         'Unknown User';
+};
+
+// Helper function to get user initials for avatars
+const getUserInitials = (participant) => {
+  const displayName = getDisplayName(participant);
+  return displayName.split(' ')
+    .map(word => word.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+export function UserSection() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const sessionId = searchParams.get("session");
+  const [sessionData, setSessionData] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const { logout } = useAuth();
+  const { userEmail } = useUser();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Fetch session details and participants
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const fetchSessionData = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/sessions/${sessionId}?email=${loggedInUser}`);
+        if (response.data.success) {
+          setSessionData(response.data.session);
+          setParticipants(response.data.session.participants || []);
+        }
+      } catch (error) {
+        console.error("Error fetching session data:", error);
+        // Fallback to active users endpoint for backward compatibility
+        try {
+          const fallbackResponse = await axios.post(`${API_URL}/sessions/active-users`, {
+            session_id: sessionId
+          });
+          const emails = fallbackResponse.data.map(user => user.email);
+          setParticipants(emails.map(email => ({
+            userEmail: email,
+            userName: email.split('@')[0],
+            role: 'editor',
+            status: 'active'
+          })));
+        } catch (fallbackError) {
+          console.error("Error fetching active users:", fallbackError);
+        }
+      }
+    };
+
+    fetchSessionData();
+    const interval = setInterval(fetchSessionData, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [sessionId, loggedInUser]);
+
+  const activeParticipants = participants.filter(p => p.status === 'active');
+
+  return (
+    <div className="flex items-center gap-4">
+      <CollaborationDialog 
+        sessionData={sessionData}
+        participants={participants}
+        activeParticipants={activeParticipants}
+        sessionId={sessionId}
+        loggedInUser={loggedInUser}
+      />
+      <AuthButton handleLogout={handleLogout} navigate={navigate} />
+    </div>
+  );
+}
+
+function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId, loggedInUser }) {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+    // Force a page refresh to update session data
+    window.location.reload();
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <div className="flex items-center gap-2 cursor-pointer hover:bg-[#333] p-2 rounded-md">
+          <Users size={18} className="text-gray-400" />
+          <div className="flex -space-x-2">
+            {activeParticipants && activeParticipants.length > 0 ? (
+              activeParticipants.slice(0, 3).map((participant, index) => (
+                <div 
+                  key={participant.email || participant.userEmail || index} 
+                  className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e] overflow-hidden"
+                  title={participant.name || participant.userName || participant.email || participant.userEmail}
+                >
+                  {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                    <img 
+                      src={participant.profile.avatar.url} 
+                      alt={participant.name || participant.userName || ""} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                      }}
+                    />
+                  ) : (
+                    <span>
+                      {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-400 text-sm">No active users</div>
+            )}
+            {activeParticipants && activeParticipants.length > 3 && (
+              <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e]">
+                +{activeParticipants.length - 3}
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogTrigger>
+      <DialogContent 
+        className="bg-[#1e1e1e] text-gray-300 border-[#444] max-w-md"
+        aria-describedby="collaboration-dialog-description"
+      >
+        <DialogHeader>
+          <DialogTitle>Session Collaboration</DialogTitle>
+          <DialogDescription id="collaboration-dialog-description">
+            Manage participants and collaboration settings for this session.
+          </DialogDescription>
+        </DialogHeader>
+        <CollaborationContent 
+          sessionData={sessionData}
+          participants={participants}
+          sessionId={sessionId}
+          loggedInUser={loggedInUser}
+          onRefresh={handleRefresh}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CollaborationContent({ sessionData, participants, onRefresh }) {
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('editor');
+  const [isInviting, setIsInviting] = useState(false);
+  const loggedInUser = localStorage.getItem("email");
+
+  if (!sessionData) {
+    return <div className="text-center text-gray-400">Loading session data...</div>;
+  }
+
+  // Use permission utility functions instead of hardcoded role checks
+  const currentUserRole = getUserRole(sessionData, loggedInUser);
+  const canInvite = canManageParticipants(currentUserRole);
+  const assignableRoles = getAssignableRoles(currentUserRole);
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !sessionData.sessionId) return;
+
+    setIsInviting(true);
+    try {
+      const response = await axios.post(`${API_URL}/sessions/${sessionData.sessionId}/invite`, {
+        email: inviteEmail.trim(),
+        role: inviteRole, // Send the actual role
+        inviterEmail: loggedInUser
+      });
+
+      if (response.data.success) {
+        setInviteEmail('');
+        onRefresh();
+      } else {
+        alert(response.data.error || 'Failed to send invitation');
+      }
+    } catch (error) {
+      console.error("Error inviting user:", error);
+      alert('Failed to send invitation. Please try again.');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'owner':
+        return <Crown size={14} className="text-yellow-500" />;
+      case 'admin':
+        return <Shield size={14} className="text-orange-500" />;
+      case 'editor':
+        return <Edit size={14} className="text-blue-500" />;
+      case 'viewer':
+        return <Eye size={14} className="text-gray-500" />;
+      default:
+        return <Eye size={14} className="text-gray-500" />;
+    }
+  };
+
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
+      case 'owner':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'admin':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'editor':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'viewer':
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active':
+        return 'bg-green-500';
+      case 'invited':
+        return 'bg-yellow-500';
+      case 'left':
+        return 'bg-gray-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const activeParticipants = participants.filter(p => p.status === 'active');
+  const invitedParticipants = participants.filter(p => p.status === 'invited');
+
+  return (
+    <div className="space-y-4">
+      {/* Session Info */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Session: {sessionData.name}</h3>
+        <p className="text-xs text-gray-400">
+          Created by {sessionData.creator === loggedInUser ? 'you' : sessionData.creator}
+        </p>
+        <p className="text-xs text-gray-400">
+          Your role: {currentUserRole}
+        </p>
+      </div>
+
+      <Separator className="bg-[#444]" />
+
+      {/* Active Participants */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          Active Participants ({activeParticipants.length})
+        </h3>
+        <div className="space-y-2 max-h-32 overflow-y-auto">
+          {activeParticipants.length > 0 ? (
+            activeParticipants.map((participant, index) => (
+              <div key={participant.email || participant.userEmail || `active-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d]">
+                <div className="relative">
+                  {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                    <div className="w-8 h-8 rounded-full overflow-hidden">
+                      <img
+                        src={participant.profile.avatar.url}
+                        alt={participant.name || participant.userName || ""}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
+                      {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                    </div>
+                  )}
+                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {participant.name || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Unknown')}
+                    {(participant.email || participant.userEmail) === loggedInUser && ' (you)'}
+                    {participant.profile && participant.profile.bio && (
+                      <span className="block text-xs text-gray-400 truncate">{participant.profile.bio}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">{participant.email || participant.userEmail || 'No email'}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
+                    <span className="flex items-center gap-1">
+                      {getRoleIcon(participant.role)}
+                      {participant.role}
+                    </span>
+                  </Badge>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400 text-sm">No active participants</p>
+          )}
+        </div>
+      </div>
+
+      {/* Pending Invitations */}
+      {invitedParticipants.length > 0 && (
+        <>
+          <Separator className="bg-[#444]" />
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              Pending Invitations ({invitedParticipants.length})
+            </h3>
+            <div className="space-y-2 max-h-24 overflow-y-auto">
+              {invitedParticipants.map((participant, index) => (
+                <div key={participant.email || participant.userEmail || `invited-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d] opacity-75">
+                  <div className="relative">
+                    {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                      <div className="w-8 h-8 rounded-full overflow-hidden">
+                        <img
+                          src={participant.profile.avatar.url}
+                          alt={participant.name || participant.userName || ""}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm">
+                        {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                      </div>
+                    )}
+                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">
+                      {participant.name || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Pending user')}
+                    </div>
+                    <div className="text-xs text-gray-400">{participant.email || participant.userEmail}</div>
+                    <div className="text-xs text-gray-400">Invitation pending</div>
+                  </div>
+                  <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
+                    <span className="flex items-center gap-1">
+                      {getRoleIcon(participant.role)}
+                      {participant.role}
+                    </span>
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Invite New User */}
+      {canInvite && (
+        <>
+          <Separator className="bg-[#444]" />
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <UserPlus size={16} />
+              Invite Collaborator
+            </h3>
+            <div className="space-y-2">
+              <Input
+                type="email"
+                placeholder="Enter email address"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="bg-[#2d2d2d] border-[#444] text-white placeholder-gray-400"
+              />
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger className="bg-[#2d2d2d] border-[#444] text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#2d2d2d] border-[#444]">
+                  {assignableRoles.includes('admin') && (
+                    <SelectItem value="admin" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Shield size={14} className="text-orange-500" />
+                        Admin - Can manage users and content
+                      </span>
+                    </SelectItem>
+                  )}
+                  {assignableRoles.includes('editor') && (
+                    <SelectItem value="editor" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Edit size={14} className="text-blue-500" />
+                        Editor - Can edit and save
+                      </span>
+                    </SelectItem>
+                  )}
+                  {assignableRoles.includes('viewer') && (
+                    <SelectItem value="viewer" className="text-white hover:bg-[#333]">
+                      <span className="flex items-center gap-2">
+                        <Eye size={14} className="text-gray-500" />
+                        Viewer - Read only
+                      </span>
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button 
+                onClick={handleInvite}
+                disabled={!inviteEmail.trim() || isInviting}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Mail size={16} className="mr-2" />
+                {isInviting ? 'Sending...' : 'Send Invitation'}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AuthButton({ handleLogout, navigate }) {
+  const isLoggedIn = isAuthenticated();
+
+  return isLoggedIn ? (
+    <Button 
+      onClick={handleLogout}
+      variant="outline" 
+      className="border-red-500 text-red-500 hover:bg-red-500/10 gap-2"
+    >
+      <LogOut size={16} />
+      Logout
+    </Button>
+  ) : (
+    <Button 
+      onClick={() => navigate('/login')}
+      variant="outline" 
+      className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+    >
+      Login
+    </Button>
+  );
+}

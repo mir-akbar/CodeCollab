@@ -4,8 +4,10 @@ import { formatDate } from "@/utils/dateFormatter";
 import PropTypes from "prop-types";
 import { useDeleteSession } from "@/hooks/useSessions";
 import { toast } from "sonner";
+import { useUser } from '@/contexts/UserContext';
 
-export const DeleteDialog = ({ open = false, session = null, onClose, userEmail }) => {
+export const DeleteDialog = ({ open = false, session = null, onClose }) => {
+  const { userEmail } = useUser();
   
   // Use TanStack Query mutation directly
   const deleteSessionMutation = useDeleteSession();
@@ -18,7 +20,7 @@ export const DeleteDialog = ({ open = false, session = null, onClose, userEmail 
     try {
       await deleteSessionMutation.mutateAsync({
         sessionId: session.sessionId || session.id,
-        userEmail: userEmail || localStorage.getItem("email")
+        userEmail: userEmail
       });
 
       toast.success("Session deleted successfully");
@@ -74,6 +76,5 @@ DeleteDialog.propTypes = {
     name: PropTypes.string,
     createdAt: PropTypes.string
   }),
-  onClose: PropTypes.func.isRequired,
-  userEmail: PropTypes.string
+  onClose: PropTypes.func.isRequired
 };

@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate, useLocation } from "react-router-dom";
-import { userPool, logout } from "@/utils/auth";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/contexts/UserContext";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,6 +19,8 @@ import { getUserRole, canManageSettings } from "@/utils/permissions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function SessionManagerTopNavBar() {
+    const { logout } = useAuth();
+    const { userEmail, userProfile } = useUser();
     const [userData, setUserData] = useState({
         name: "",
         email: "",
@@ -29,51 +32,23 @@ export default function SessionManagerTopNavBar() {
     const sessionId = searchParams.get("session");
 
     useEffect(() => {
-        // Get current user from Cognito user pool
-        const cognitoUser = userPool.getCurrentUser();
-        
-        if (cognitoUser) {
-            cognitoUser.getSession((err) => {
-                if (err) {
-                    console.error("Error getting session:", err);
-                    return;
-                }
-                
-                // Session is valid, get user attributes
-                cognitoUser.getUserAttributes((err, attributes) => {
-                    if (err) {
-                        console.error("Error getting user attributes:", err);
-                        return;
-                    }
-                    
-                    // Process the attributes
-                    const userInfo = {};
-                    attributes.forEach(attr => {
-                        userInfo[attr.getName()] = attr.getValue();
-                    });
-                    
-                    setUserData({
-                        name: userInfo.name || userInfo.email?.split('@')[0] || "User",
-                        email: userInfo.email || "",
-                    });
-                });
+        // Update user data when auth context changes
+        if (userProfile && userEmail) {
+            setUserData({
+                name: userProfile.name || userProfile.displayName || userEmail.split('@')[0] || "User",
+                email: userEmail,
             });
-        } else {
-            // No authenticated user found, try to get from localStorage
-            const email = localStorage.getItem("email");
-            if (email) {
-                setUserData({
-                    name: email.split('@')[0] || "User",
-                    email: email,
-                });
-            }
         }
+    }, [userProfile, userEmail]);
 
+    useEffect(() => {
         // If we have a session ID, fetch the session data to determine user permissions
-        if (sessionId) {
+        if (sessionId && userEmail) {
             const fetchSessionData = async () => {
                 try {
-                    const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}?email=${userData.email}`);
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}`, {
+                        credentials: 'include' // Include HTTP-only cookies
+                    });
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success) {
@@ -87,12 +62,17 @@ export default function SessionManagerTopNavBar() {
 
             fetchSessionData();
         }
-    }, [sessionId, userData.email]);
+    }, [sessionId, userEmail]);
 
-    const handleLogout = () => {
-        logout();
-        toast.success("You have been successfully logged out");
-        navigate("/login");
+    const handleLogout = async () => {
+        try {
+            await logout();
+            toast.success("You have been successfully logged out");
+            navigate("/login");
+        } catch (error) {
+            console.error("Logout error:", error);
+            toast.error("Error logging out");
+        }
     };
 
     // Determine user's role and permissions if in a session

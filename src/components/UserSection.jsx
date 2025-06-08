@@ -6,16 +6,40 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { isAuthenticated, logout } from '@/utils/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from "../common/Constant";
 import axios from "axios";
+import { useAuth } from '@/hooks/useAuth';
+import { useUser } from '@/contexts/UserContext';
 import { 
   getUserRole, 
   canManageParticipants, 
-  getAssignableRoles, 
-  roleToAccess 
+  getAssignableRoles 
 } from '@/utils/permissions';
+
+// Helper function to get display name with intelligent fallback
+const getDisplayName = (participant) => {
+  if (!participant) return 'Unknown User';
+  
+  // Use the enhanced name resolution logic matching backend
+  return participant.name || 
+         participant.displayName || 
+         (participant.given_name && participant.family_name ? 
+           `${participant.given_name} ${participant.family_name}` : 
+           participant.given_name) ||
+         (participant.email || participant.userEmail || '').split('@')[0] ||
+         'Unknown User';
+};
+
+// Helper function to get user initials for avatars
+const getUserInitials = (participant) => {
+  const displayName = getDisplayName(participant);
+  return displayName.split(' ')
+    .map(word => word.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
 
 export function UserSection() {
   const navigate = useNavigate();
@@ -24,20 +48,27 @@ export function UserSection() {
   const sessionId = searchParams.get("session");
   const [sessionData, setSessionData] = useState(null);
   const [participants, setParticipants] = useState([]);
-  const loggedInUser = localStorage.getItem("email");
+  const { logout } = useAuth();
+  const { userEmail } = useUser();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   // Fetch session details and participants
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !userEmail) return;
 
     const fetchSessionData = async () => {
       try {
-        const response = await axios.get(`${API_URL}/sessions/${sessionId}?email=${loggedInUser}`);
+        const response = await axios.get(`${API_URL}/api/sessions/${sessionId}`, {
+          withCredentials: true
+        });
         if (response.data.success) {
           setSessionData(response.data.session);
           setParticipants(response.data.session.participants || []);
@@ -46,8 +77,10 @@ export function UserSection() {
         console.error("Error fetching session data:", error);
         // Fallback to active users endpoint for backward compatibility
         try {
-          const fallbackResponse = await axios.post(`${API_URL}/sessions/active-users`, {
+          const fallbackResponse = await axios.post(`${API_URL}/api/sessions/active-users`, {
             session_id: sessionId
+          }, {
+            withCredentials: true
           });
           const emails = fallbackResponse.data.map(user => user.email);
           setParticipants(emails.map(email => ({
@@ -65,7 +98,7 @@ export function UserSection() {
     fetchSessionData();
     const interval = setInterval(fetchSessionData, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [sessionId, loggedInUser]);
+  }, [sessionId, userEmail]);
 
   const activeParticipants = participants.filter(p => p.status === 'active');
 
@@ -76,14 +109,13 @@ export function UserSection() {
         participants={participants}
         activeParticipants={activeParticipants}
         sessionId={sessionId}
-        loggedInUser={loggedInUser}
       />
       <AuthButton handleLogout={handleLogout} navigate={navigate} />
     </div>
   );
 }
 
-function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId, loggedInUser }) {
+function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId }) {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleRefresh = () => {
@@ -101,11 +133,25 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
             {activeParticipants && activeParticipants.length > 0 ? (
               activeParticipants.slice(0, 3).map((participant, index) => (
                 <div 
-                  key={participant.userEmail || index} 
-                  className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e]"
-                  title={participant.userName || participant.userEmail}
+                  key={participant.email || participant.userEmail || index} 
+                  className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e] overflow-hidden"
+                  title={participant.name || participant.userName || participant.email || participant.userEmail}
                 >
-                  {((participant.userName || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                  {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                    <img 
+                      src={participant.profile.avatar.url} 
+                      alt={participant.name || participant.userName || ""} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                      }}
+                    />
+                  ) : (
+                    <span>
+                      {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                    </span>
+                  )}
                 </div>
               ))
             ) : (
@@ -133,7 +179,6 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
           sessionData={sessionData}
           participants={participants}
           sessionId={sessionId}
-          loggedInUser={loggedInUser}
           onRefresh={handleRefresh}
         />
       </DialogContent>
@@ -141,18 +186,18 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
   );
 }
 
-function CollaborationContent({ sessionData, participants, onRefresh }) {
+function CollaborationContent({ sessionData, participants, sessionId, onRefresh }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('editor');
   const [isInviting, setIsInviting] = useState(false);
-  const loggedInUser = localStorage.getItem("email");
+  const { userEmail } = useUser();
 
   if (!sessionData) {
     return <div className="text-center text-gray-400">Loading session data...</div>;
   }
 
   // Use permission utility functions instead of hardcoded role checks
-  const currentUserRole = getUserRole(sessionData, loggedInUser);
+  const currentUserRole = getUserRole(sessionData, userEmail);
   const canInvite = canManageParticipants(currentUserRole);
   const assignableRoles = getAssignableRoles(currentUserRole);
 
@@ -161,11 +206,12 @@ function CollaborationContent({ sessionData, participants, onRefresh }) {
 
     setIsInviting(true);
     try {
-      const response = await axios.post(`${API_URL}/sessions/${sessionData.sessionId}/invite`, {
+      const response = await axios.post(`${API_URL}/api/sessions/${sessionData.sessionId}/invite`, {
         email: inviteEmail.trim(),
-        access: roleToAccess(inviteRole), // Convert role to legacy access
         role: inviteRole, // Send the actual role
-        inviterEmail: loggedInUser
+        inviterEmail: userEmail
+      }, {
+        withCredentials: true
       });
 
       if (response.data.success) {
@@ -234,7 +280,7 @@ function CollaborationContent({ sessionData, participants, onRefresh }) {
       <div className="space-y-2">
         <h3 className="text-sm font-medium">Session: {sessionData.name}</h3>
         <p className="text-xs text-gray-400">
-          Created by {sessionData.creator === loggedInUser ? 'you' : sessionData.creator}
+          Created by {sessionData.creator === userEmail ? 'you' : sessionData.creator}
         </p>
         <p className="text-xs text-gray-400">
           Your role: {currentUserRole}
@@ -251,19 +297,36 @@ function CollaborationContent({ sessionData, participants, onRefresh }) {
         <div className="space-y-2 max-h-32 overflow-y-auto">
           {activeParticipants.length > 0 ? (
             activeParticipants.map((participant, index) => (
-              <div key={participant.userEmail || `active-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d]">
+              <div key={participant.email || participant.userEmail || `active-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d]">
                 <div className="relative">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
-                    {((participant.userName || participant.userEmail || 'U').charAt(0)).toUpperCase()}
-                  </div>
+                  {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                    <div className="w-8 h-8 rounded-full overflow-hidden">
+                      <img
+                        src={participant.profile.avatar.url}
+                        alt={participant.name || participant.userName || ""}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
+                      {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                    </div>
+                  )}
                   <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
-                    {participant.userName || (participant.userEmail ? participant.userEmail.split('@')[0] : 'Unknown')}
-                    {participant.userEmail === loggedInUser && ' (you)'}
+                    {participant.name || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Unknown')}
+                    {(participant.email || participant.userEmail) === userEmail && ' (you)'}
+                    {participant.profile && participant.profile.bio && (
+                      <span className="block text-xs text-gray-400 truncate">{participant.profile.bio}</span>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-400 truncate">{participant.userEmail || 'No email'}</div>
+                  <div className="text-xs text-gray-400 truncate">{participant.email || participant.userEmail || 'No email'}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
@@ -291,15 +354,32 @@ function CollaborationContent({ sessionData, participants, onRefresh }) {
             </h3>
             <div className="space-y-2 max-h-24 overflow-y-auto">
               {invitedParticipants.map((participant, index) => (
-                <div key={participant.userEmail || `invited-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d] opacity-75">
+                <div key={participant.email || participant.userEmail || `invited-${index}`} className="flex items-center gap-3 p-2 rounded bg-[#2d2d2d] opacity-75">
                   <div className="relative">
-                    <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm">
-                      {(participant.userEmail || 'U').charAt(0).toUpperCase()}
-                    </div>
+                    {participant.profile && participant.profile.avatar && participant.profile.avatar.url ? (
+                      <div className="w-8 h-8 rounded-full overflow-hidden">
+                        <img
+                          src={participant.profile.avatar.url}
+                          alt={participant.name || participant.userName || ""}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `https://www.gravatar.com/avatar/${btoa((participant.email || participant.userEmail || '').toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32)}?d=identicon`;
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm">
+                        {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                      </div>
+                    )}
                     <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{participant.userEmail || 'Pending user'}</div>
+                    <div className="text-sm truncate">
+                      {participant.name || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Pending user')}
+                    </div>
+                    <div className="text-xs text-gray-400">{participant.email || participant.userEmail}</div>
                     <div className="text-xs text-gray-400">Invitation pending</div>
                   </div>
                   <Badge className={`text-xs ${getRoleBadgeColor(participant.role)}`}>
@@ -380,9 +460,9 @@ function CollaborationContent({ sessionData, participants, onRefresh }) {
 }
 
 function AuthButton({ handleLogout, navigate }) {
-  const isLoggedIn = isAuthenticated();
+  const { isAuthenticated } = useAuth();
 
-  return isLoggedIn ? (
+  return isAuthenticated ? (
     <Button 
       onClick={handleLogout}
       variant="outline" 

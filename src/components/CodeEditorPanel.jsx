@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "@monaco-editor/react";
 import { io } from "socket.io-client";
 import * as Y from 'yjs';
 import { MonacoBinding } from 'y-monaco';
 import { SocketIOProvider } from './yjs/SocketIOProvider';
 import { API_URL } from "../common/Constant";
+import { useAuth } from '@/hooks/useAuth';
 import '../styles/yjs-cursors.css';
 
 const socket = io(`${API_URL}`, { transports: ["websocket", "polling"] });
 
 export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, currentFile }) {
-  const email = localStorage.getItem("email") || "Anonymous";
+  const { user } = useAuth();
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const yjsDocRef = useRef(null);
@@ -132,13 +133,14 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
     if (provider.awareness && provider.awareness.setLocalStateField) {
       try {
         // Set user information
+        const userEmail = user?.email || 'anonymous';
         provider.awareness.setLocalStateField('user', {
-          name: email,
-          color: stringToColor(email),
-          colorLight: stringToColor(email) + '33', // Add transparency
+          name: userEmail,
+          color: stringToColor(userEmail),
+          colorLight: stringToColor(userEmail) + '33', // Add transparency
         });
         
-        console.log('✅ Awareness initialized for user:', email);
+        console.log('✅ Awareness initialized for user:', userEmail);
         console.log('📊 Current awareness state:', provider.awareness.getLocalState());
       } catch (error) {
         console.error('Error setting awareness:', error);
@@ -197,7 +199,7 @@ export function CodeEditorPanel({ content, onCodeChange, readOnly, sessionId, cu
       setIsYjsReady(false);
       setHasInitializedContent(false);
     };
-  }, [sessionId, currentFile, email, setupYjsBinding]);
+  }, [sessionId, currentFile, user?.email, setupYjsBinding]);
 
   // Handle content initialization through YJS sync mechanism  
   useEffect(() => {

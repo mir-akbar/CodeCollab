@@ -1,67 +1,103 @@
-const express = require("express");
+/**
+ * Session Routes - Core Session Management
+ * Handles session CRUD operations, participant management, and collaboration features
+ */
+
+const express = require('express');
 const router = express.Router();
-const SessionController = require("../controllers/sessionController");
-const { requireAuth, validateSessionAccess } = require("../middleware/auth");
-const { validateSessionCreation, validateSessionInvitation } = require("../middleware/validation");
+const { requireAuth } = require('../middleware/cognitoAuth');
+const SessionController = require('../controllers/sessionController');
+const SessionParticipantController = require('../controllers/sessionParticipantController');
+const { asyncHandler } = require('../middleware/errorHandler');
 
-// Initialize controller
+// Initialize controllers
 const sessionController = new SessionController();
+const participantController = new SessionParticipantController();
 
-// =============================================================================
-// NEW SESSION MANAGEMENT ROUTES (Using Controller Pattern)
-// =============================================================================
+// ===== SESSION ROUTES =====
 
-// GET ALL SESSIONS FOR USER (main endpoint)
-router.get("/", requireAuth, sessionController.getUserSessions);
+/**
+ * GET /api/sessions
+ * Get all sessions for the authenticated user
+ */
+router.get('/', requireAuth, sessionController.getUserSessions);
 
-// GET SPECIFIC SESSION BY ID
-router.get("/:sessionId", validateSessionAccess, sessionController.getSessionById);
+/**
+ * GET /api/sessions/:sessionId
+ * Get specific session by ID
+ */
+router.get('/:sessionId', requireAuth, sessionController.getSessionById);
 
-// GET USER SESSIONS (combines created and shared sessions)
-router.get("/user-sessions", requireAuth, sessionController.getUserSessions);
+/**
+ * POST /api/sessions
+ * Create a new session
+ */
+router.post('/', requireAuth, sessionController.createSession);
 
-// GET MY SESSIONS (created by user)
-router.get("/get-my-sessions", requireAuth, (req, res, next) => {
-  // Add filter for created sessions only
-  req.filterCreatedOnly = true;
-  sessionController.getUserSessions(req, res, next);
-});
+/**
+ * PATCH /api/sessions/:sessionId
+ * Update session details (name, description, settings)
+ */
+router.patch('/:sessionId', requireAuth, sessionController.updateSession);
 
-// GET SHARED SESSIONS (invited to by others)
-router.get("/get-shared-sessions", requireAuth, (req, res, next) => {
-  // Add filter for shared sessions only
-  req.filterSharedOnly = true;
-  sessionController.getUserSessions(req, res, next);
-});
+/**
+ * DELETE /api/sessions/:sessionId
+ * Delete a session (owner only)
+ */
+router.delete('/:sessionId', requireAuth, sessionController.deleteSession);
 
-// CREATE SESSION
-router.post("/", requireAuth, validateSessionCreation, sessionController.createSession);
+// ===== PARTICIPANT MANAGEMENT ROUTES =====
 
-// INVITE USER TO SESSION
-router.post("/:sessionId/invite", validateSessionAccess, validateSessionInvitation, sessionController.inviteToSession);
+/**
+ * GET /api/sessions/:sessionId/participants
+ * Get all participants for a session
+ */
+router.get('/:sessionId/participants', requireAuth, participantController.getParticipants);
 
-// REMOVE PARTICIPANT FROM SESSION
-router.post("/:sessionId/remove-participant", validateSessionAccess, sessionController.removeParticipant);
+/**
+ * POST /api/sessions/:sessionId/invite
+ * Invite a user to join a session
+ */
+router.post('/:sessionId/invite', requireAuth, participantController.inviteToSession);
 
-// TRANSFER OWNERSHIP
-router.post("/:sessionId/transfer-ownership", validateSessionAccess, sessionController.transferOwnership);
+/**
+ * POST /api/sessions/:sessionId/join
+ * Join a session (accept invitation)
+ */
+router.post('/:sessionId/join', requireAuth, participantController.joinSession);
 
-// UPDATE PARTICIPANT ROLE
-router.post("/:sessionId/update-role", validateSessionAccess, sessionController.updateParticipantRole);
+/**
+ * POST /api/sessions/:sessionId/leave
+ * Leave a session
+ */
+router.post('/:sessionId/leave', requireAuth, participantController.leaveSession);
 
-// LEAVE SESSION
-router.post("/:sessionId/leave", validateSessionAccess, sessionController.leaveSession);
+/**
+ * PATCH /api/sessions/:sessionId/participants/:participantId/role
+ * Update participant role
+ */
+router.patch('/:sessionId/participants/:participantId/role', requireAuth, participantController.updateParticipantRole);
 
-// DELETE SESSION
-router.delete("/:sessionId", validateSessionAccess, sessionController.deleteSession);
+/**
+ * DELETE /api/sessions/:sessionId/participants/:participantId
+ * Remove participant from session
+ */
+router.delete('/:sessionId/participants/:participantId', requireAuth, participantController.removeParticipant);
 
-// CHECK SESSION ACCESS
-router.get("/check-access", sessionController.checkAccess);
+// ===== SESSION ACTIVITY ROUTES =====
 
-// GET ACTIVE USERS IN SESSION
-router.post("/active-users", sessionController.getActiveUsers);
-
-// UPDATE LAST ACTIVE (for user activity tracking)
-router.post("/update-activity", sessionController.updateActivity);
+/**
+ * POST /api/sessions/:sessionId/activity
+ * Update last activity timestamp for user in session
+ */
+router.post('/:sessionId/activity', requireAuth, asyncHandler(async (req, res) => {
+  // This would typically be handled by middleware for active sessions
+  // For now, just acknowledge the activity update
+  res.json({
+    success: true,
+    message: 'Activity updated',
+    timestamp: new Date().toISOString()
+  });
+}));
 
 module.exports = router;

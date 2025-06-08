@@ -1,5 +1,5 @@
 
-import SessionManager from "@/components/sessions/SessionManager";
+import { SessionManager } from "@/components/sessions/SessionManager";
 import SessionManagerTopNavBar from "@/components/sessions/SessionManagerTopNavBar";
 import { useEffect, useState } from "react";
 import { CognitoUserPool } from "amazon-cognito-identity-js";
@@ -7,11 +7,11 @@ import { cognitoConfig } from "@/config/cognito";
 
 export default function SessionsPage() {
   const [userEmail, setUserEmail] = useState("");
-  
+
   useEffect(() => {
     const userPool = new CognitoUserPool(cognitoConfig);
     const cognitoUser = userPool.getCurrentUser();
-    
+
     if (cognitoUser) {
       cognitoUser.getSession((err) => {
         if (!err) {

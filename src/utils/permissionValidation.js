@@ -3,7 +3,12 @@
  * Client-side validation for actions before making API calls
  */
 
-import { hasPermission, canAssignRole, getUserRole } from './permissions';
+import { 
+  hasPermission, 
+  canAssignRole, 
+  getUserRole,
+  checkPermissionWithSettings 
+} from './permissions';
 
 /**
  * Validate if a user can perform an action on a session
@@ -18,11 +23,13 @@ export const validateAction = (session, userEmail, action) => {
   }
 
   const role = getUserRole(session, userEmail);
-  const valid = hasPermission(role, action);
+  
+  // Use enhanced permission check that considers both role and session settings
+  const { allowed, reason } = checkPermissionWithSettings(role, action, session.settings, userEmail);
   
   return {
-    valid,
-    message: valid ? 'Action permitted' : `You don't have permission to ${action} in this session`
+    valid: allowed,
+    message: allowed ? 'Action permitted' : reason || `You don't have permission to ${action} in this session`
   };
 };
 
@@ -79,10 +86,26 @@ export const validateInvite = (session, inviterEmail, inviteeEmail, role) => {
     return { valid: false, message: 'User is already a participant in this session' };
   }
   
-  // Check permission to invite
-  const inviteCheck = validateAction(session, inviterEmail, 'invite');
-  if (!inviteCheck.valid) {
-    return inviteCheck;
+  // Check permission to invite with session settings
+  const inviterRole = getUserRole(session, inviterEmail);
+  const inviteCheck = checkPermissionWithSettings(inviterRole, 'invite', session.settings, inviterEmail);
+  
+  if (!inviteCheck.allowed) {
+    return { 
+      valid: false, 
+      message: inviteCheck.reason || 'You do not have permission to invite users'
+    };
+  }
+  
+  // Check domain restrictions for invitee
+  if (session.settings?.allowedDomains?.length > 0) {
+    const inviteeDomain = inviteeEmail.split('@')[1];
+    if (!session.settings.allowedDomains.includes(inviteeDomain)) {
+      return {
+        valid: false,
+        message: `Users from domain ${inviteeDomain} are not allowed in this session`
+      };
+    }
   }
   
   // Check permission to assign role
@@ -108,7 +131,7 @@ export const validateRemoveParticipant = (session, removerEmail, targetEmail) =>
   
   // Check if target is in session
   const targetParticipant = session.participants?.find(
-    p => (p.email === targetEmail || p.userEmail === targetEmail) && p.status === 'active'
+    p => p.email === targetEmail && p.status === 'active'
   );
   
   if (!targetParticipant) {
@@ -134,6 +157,78 @@ export const validateRemoveParticipant = (session, removerEmail, targetEmail) =>
  * @param {Error|string} error - Error object or message
  * @returns {string} - Formatted error message
  */
+/**
+ * Validate if a user can modify session settings
+ * @param {Object} session - Session object
+ * @param {string} userEmail - Email of user attempting to modify settings
+ * @param {Object} newSettings - New settings object with changes
+ * @returns {Object} - { valid: boolean, message: string, allowedSettings?: string[] }
+ */
+export const validateSettingsUpdate = (session, userEmail, newSettings) => {
+  if (!session || !userEmail) {
+    return { valid: false, message: 'Missing required information' };
+  }
+  
+  // First check basic permissions to manage session
+  const userRole = getUserRole(session, userEmail);
+  const basicCheck = checkPermissionWithSettings(userRole, 'manageSettings', session.settings, userEmail);
+  
+  if (!basicCheck.allowed) {
+    return {
+      valid: false,
+      message: basicCheck.reason || 'You do not have permission to modify session settings'
+    };
+  }
+  
+  // Define which roles can modify which settings (should match backend)
+  const SETTING_CHANGE_PERMISSIONS = {
+    'invitePolicy': 'owner',
+    'allowRoleRequests': 'owner', 
+    'allowedDomains': 'owner',
+    'maxParticipants': 'owner',
+    'isPrivate': 'owner',
+    'allowGuestAccess': 'owner'
+  };
+  
+  const allowedSettings = [];
+  const forbiddenSettings = [];
+  
+  // Check individual settings permissions
+  if (newSettings) {
+    Object.keys(newSettings).forEach(settingName => {
+      const requiredRole = SETTING_CHANGE_PERMISSIONS[settingName];
+      if (!requiredRole) {
+        // Unknown setting
+        forbiddenSettings.push(settingName);
+      } else if (
+        (userRole === 'owner') || 
+        (userRole === requiredRole) || 
+        (userRole === 'admin' && requiredRole === 'admin')
+      ) {
+        // User has permission for this setting
+        allowedSettings.push(settingName);
+      } else {
+        // User doesn't have permission for this setting
+        forbiddenSettings.push(settingName);
+      }
+    });
+  }
+  
+  if (forbiddenSettings.length > 0) {
+    return {
+      valid: false,
+      message: `You don't have permission to modify these settings: ${forbiddenSettings.join(', ')}`,
+      allowedSettings
+    };
+  }
+  
+  return {
+    valid: true,
+    message: 'Settings update permitted',
+    allowedSettings
+  };
+};
+
 export const formatPermissionError = (error) => {
   if (!error) return 'Unknown error occurred';
   

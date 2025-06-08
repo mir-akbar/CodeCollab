@@ -5,9 +5,33 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
+  { ignores: ['dist', 'node_modules'] },
+  
+  // Configuration for Node.js/API files
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['api/**/*.js', 'api/**/*.test.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.node,
+        ...globals.jest, // For test files
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'script', // CommonJS for Node.js
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-console': 'off', // Allow console in Node.js
+    },
+  },
+  
+  // Configuration for frontend React files
+  {
+    files: ['src/**/*.{js,jsx}', '**/*.{js,jsx}'],
+    ignores: ['api/**/*'], // Exclude API files from React config
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,

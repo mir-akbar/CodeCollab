@@ -1,14 +1,30 @@
+/**
+ * Updated Session Hooks with HTTP-only Cookie Authentication
+ * Modernized implementation using cookies instead of localStorage
+ */
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import apiClient from '../utils/api';
+import axios from 'axios';
+import { API_URL } from '../config/api';
+import { useUser } from '../contexts/UserContext';
+
+// Secure API client with cookie support
+const secureAPIClient = axios.create({
+  baseURL: API_URL,
+  timeout: 10000,
+  withCredentials: true, // Include HTTP-only cookies
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
 
 // Session API functions
 const sessionAPI = {
   // Fetch all sessions for a user
-  getUserSessions: async (userEmail) => {
-    const response = await apiClient.get('/sessions', {
-      params: { email: userEmail }
-    });
+  getUserSessions: async () => {
+    // No need to send email as query param - backend gets it from auth token
+    const response = await secureAPIClient.get('/api/sessions');
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to fetch sessions');
@@ -19,7 +35,7 @@ const sessionAPI = {
 
   // Fetch single session details
   getSessionDetails: async (sessionId) => {
-    const response = await apiClient.get(`/sessions/${sessionId}`);
+    const response = await secureAPIClient.get(`/api/sessions/${sessionId}`);
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to fetch session details');
@@ -30,9 +46,9 @@ const sessionAPI = {
 
   // Create a new session
   createSession: async ({ sessionData, userEmail }) => {
-    const response = await apiClient.post('/sessions', {
+    const response = await secureAPIClient.post('/api/sessions', {
       ...sessionData,
-      creator: userEmail
+      creator: userEmail  // Keep creator for backend compatibility
     });
     
     if (!response.data.success) {
@@ -43,10 +59,8 @@ const sessionAPI = {
   },
 
   // Delete a session
-  deleteSession: async ({ sessionId, userEmail }) => {
-    const response = await apiClient.delete(`/sessions/${sessionId}`, {
-      data: { email: userEmail }
-    });
+  deleteSession: async ({ sessionId }) => {
+    const response = await secureAPIClient.delete(`/api/sessions/${sessionId}`);
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to delete session');
@@ -57,7 +71,7 @@ const sessionAPI = {
 
   // Invite user to session
   inviteUser: async ({ sessionId, inviteeEmail, role, inviterEmail }) => {
-    const response = await apiClient.post(`/sessions/${sessionId}/invite`, {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/invite`, {
       inviteeEmail: inviteeEmail,
       role: role,
       inviterEmail: inviterEmail
@@ -71,10 +85,8 @@ const sessionAPI = {
   },
 
   // Leave a session
-  leaveSession: async ({ sessionId, userEmail }) => {
-    const response = await apiClient.post(`/sessions/${sessionId}/leave`, {
-      email: userEmail
-    });
+  leaveSession: async ({ sessionId }) => {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/leave`);
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to leave session');
@@ -85,7 +97,7 @@ const sessionAPI = {
 
   // Remove participant from session
   removeParticipant: async ({ sessionId, participantEmail, userEmail }) => {
-    const response = await apiClient.post(`/sessions/${sessionId}/remove-participant`, {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/remove-participant`, {
       participantEmail: participantEmail,
       userEmail: userEmail
     });
@@ -99,7 +111,7 @@ const sessionAPI = {
 
   // Promote participant to owner
   promoteToOwner: async ({ sessionId, participantEmail, userEmail }) => {
-    const response = await apiClient.post(`/sessions/${sessionId}/promote-owner`, {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/promote-owner`, {
       participantEmail: participantEmail,
       userEmail: userEmail
     });
@@ -113,7 +125,7 @@ const sessionAPI = {
 
   // Update participant role
   updateRole: async ({ sessionId, participantEmail, newRole, userEmail }) => {
-    const response = await apiClient.post(`/sessions/${sessionId}/update-role`, {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/update-role`, {
       participantEmail: participantEmail,
       newRole: newRole,
       updaterEmail: userEmail
@@ -138,10 +150,12 @@ export const sessionKeys = {
 /**
  * Hook to fetch all sessions for a user with intelligent caching
  */
-export const useSessions = (userEmail) => {
+export const useSessions = () => {
+  const { userEmail } = useUser();
+  
   return useQuery({
     queryKey: sessionKeys.user(userEmail),
-    queryFn: () => sessionAPI.getUserSessions(userEmail),
+    queryFn: () => sessionAPI.getUserSessions(), // No need to pass userEmail
     enabled: !!userEmail, // Only run if userEmail exists
     staleTime: 3 * 60 * 1000, // 3 minutes - sessions change frequently in collaboration
     gcTime: 10 * 60 * 1000, // 10 minutes cache time
@@ -360,9 +374,10 @@ export const useUpdateRole = () => {
 };
 
 /**
- * Utility hook for session-related actions
+ * Utility hook for session-related actions with UserContext integration
  */
-export const useSessionActions = (userEmail) => {
+export const useSessionActions = () => {
+  const { userEmail } = useUser();
   const createSession = useCreateSession();
   const deleteSession = useDeleteSession();
   const inviteUser = useInviteUser();

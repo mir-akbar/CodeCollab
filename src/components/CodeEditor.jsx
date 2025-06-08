@@ -58,8 +58,10 @@ export default function CodeEditor() {
 
     const fetchUsers = async () => {
       try {
-        const response = await axios.post(`${API_URL}/sessions/active-users`, {
+        const response = await axios.post(`${API_URL}/api/sessions/active-users`, {
           session_id: sessionID
+        }, {
+          withCredentials: true
         });
         console.log(response);
         setIsEditable(access === "edit");
@@ -129,9 +131,11 @@ export default function CodeEditor() {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/execute/run`, {
+      const response = await axios.post(`${API_URL}/api/execute/run`, {
         language,
         code,
+      }, {
+        withCredentials: true
       });
       setOutput(response.data.output);
     } catch (error) {

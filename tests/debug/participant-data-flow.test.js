@@ -137,7 +137,7 @@ describe('Participant Data Flow Debug', () => {
       },
       {
         $lookup: {
-          from: 'sessionparticipants',
+          from: 'session_participants',
           localField: 'sessionId',
           foreignField: 'sessionId',
           as: 'allParticipants',
@@ -370,7 +370,7 @@ describe('Participant Data Flow Debug', () => {
       },
       {
         $lookup: {
-          from: 'sessionparticipants',
+          from: 'session_participants',
           localField: 'sessionId',
           foreignField: 'sessionId',
           as: 'allParticipants',
@@ -413,7 +413,7 @@ describe('Participant Data Flow Debug', () => {
       },
       {
         $lookup: {
-          from: 'sessionparticipants',
+          from: 'session_participants',
           localField: 'sessionId',
           foreignField: 'sessionId',
           as: 'allParticipants',

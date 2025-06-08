@@ -1,6 +1,19 @@
 /**
- * Validation Middleware
- * Handles input validation for API endpoints
+ * @fileoverview Session Validation Middleware - Clean Implementation
+ * 
+ * Provides input validation for session-related API endpoints in the new
+ * modular architecture. All legacy patterns and unused validators have been removed.
+ * 
+ * Features:
+ * - Session creation validation
+ * - Session invitation validation (clean API pattern)
+ * - Session update validation
+ * - Participant role validation
+ * - Consistent field naming and error handling
+ * 
+ * @version 2.0.0
+ * @author CodeLab Development Team
+ * @since 2025-06-04
  */
 
 /**
@@ -48,35 +61,7 @@ const validateSessionCreation = (req, res, next) => {
  */
 const validateSessionInvitation = (req, res, next) => {
   const { sessionId } = req.params;
-  
-  // Determine invitee email with clear priority
-  let inviteeEmail;
-  if (req.body.inviteeEmail) {
-    // New API pattern: explicit inviteeEmail field
-    inviteeEmail = req.body.inviteeEmail;
-  } else if (req.body.email && !req.body.inviterEmail) {
-    // Legacy API pattern: email field is invitee when no explicit inviterEmail
-    inviteeEmail = req.body.email;
-  } else {
-    inviteeEmail = null;
-  }
-  
-  // Determine inviter email with clear priority  
-  let inviterEmail;
-  if (req.body.inviterEmail) {
-    // Explicit inviter email provided
-    inviterEmail = req.body.inviterEmail;
-  } else if (req.body.email && req.body.inviteeEmail) {
-    // When both exist, email field is the inviter for auth
-    inviterEmail = req.body.email;
-  } else {
-    // Fall back to header
-    inviterEmail = req.headers['x-user-email'];
-  }
-  
-  // Support both 'role' and 'access' fields for backward compatibility
-  const { role, access } = req.body;
-  
+  const { inviteeEmail, inviterEmail, role } = req.body;
   const errors = [];
 
   if (!sessionId || typeof sessionId !== 'string') {
@@ -91,10 +76,8 @@ const validateSessionInvitation = (req, res, next) => {
     errors.push('Inviter email is required and must be valid');
   }
 
-  const userRole = role || access || 'editor';
-  
-  if (!['owner', 'admin', 'editor', 'viewer', 'edit', 'view'].includes(userRole)) {
-    errors.push('Role must be owner, admin, editor, viewer, edit, or view');
+  if (!role || !['owner', 'admin', 'editor', 'viewer'].includes(role)) {
+    errors.push('Role must be owner, admin, editor, or viewer');
   }
 
   if (errors.length > 0) {
@@ -104,17 +87,43 @@ const validateSessionInvitation = (req, res, next) => {
     });
   }
 
-  // Sanitize and normalize inputs - standardize field names
+  // Sanitize inputs
   req.body.inviteeEmail = inviteeEmail.trim().toLowerCase();
   req.body.inviterEmail = inviterEmail.trim().toLowerCase();
-  
-  // Normalize role field (convert legacy access values)
-  if (userRole === 'edit') {
-    req.body.role = 'editor';
-  } else if (userRole === 'view') {
-    req.body.role = 'viewer'; 
-  } else {
-    req.body.role = userRole;
+  req.body.role = role;
+
+  next();
+};
+
+/**
+ * Validate session update data
+ */
+const validateSessionUpdate = (req, res, next) => {
+  const { name, description, settings } = req.body;
+  const errors = [];
+
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      errors.push('Session name must be a non-empty string');
+    }
+    if (name.trim().length > 100) {
+      errors.push('Session name must be less than 100 characters');
+    }
+  }
+
+  if (description !== undefined && description.length > 500) {
+    errors.push('Description must be less than 500 characters');
+  }
+
+  if (settings !== undefined && typeof settings !== 'object') {
+    errors.push('Settings must be an object');
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: errors
+    });
   }
 
   next();
@@ -124,18 +133,18 @@ const validateSessionInvitation = (req, res, next) => {
  * Validate file upload data
  */
 const validateFileUpload = (req, res, next) => {
-  const { sessionID, email } = req.body;
+  const { sessionId, userEmail } = req.body;
   const errors = [];
 
   if (!req.file) {
     errors.push('File is required');
   }
 
-  if (!sessionID || typeof sessionID !== 'string') {
+  if (!sessionId || typeof sessionId !== 'string') {
     errors.push('Session ID is required');
   }
 
-  if (!email || !isValidEmail(email)) {
+  if (!userEmail || !isValidEmail(userEmail)) {
     errors.push('User email is required and must be valid');
   }
 
@@ -154,27 +163,28 @@ const validateFileUpload = (req, res, next) => {
 };
 
 /**
- * Validate query parameters
+ * Validate participant role data
  */
-const validateQueryParams = (requiredParams) => {
-  return (req, res, next) => {
-    const errors = [];
+const validateParticipantRole = (req, res, next) => {
+  const { role } = req.body;
+  const errors = [];
 
-    requiredParams.forEach(param => {
-      if (!req.query[param]) {
-        errors.push(`Query parameter '${param}' is required`);
-      }
+  if (!role) {
+    errors.push('Role is required');
+  }
+
+  if (!['owner', 'admin', 'editor', 'viewer'].includes(role)) {
+    errors.push('Role must be owner, admin, editor, or viewer');
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: errors
     });
+  }
 
-    if (errors.length > 0) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: errors
-      });
-    }
-
-    next();
-  };
+  next();
 };
 
 /**
@@ -188,6 +198,6 @@ function isValidEmail(email) {
 module.exports = {
   validateSessionCreation,
   validateSessionInvitation,
-  validateFileUpload,
-  validateQueryParams
+  validateSessionUpdate,
+  validateParticipantRole
 };

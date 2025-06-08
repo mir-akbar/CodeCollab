@@ -23,5 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 
-# variables
+# Environment variables
 .env
+.env.local
+.env.*.local
+api/.env
+api/.env.local
+api/.env.*.local
+
+# Secret files
+*.secret
+*.key
+*.pem

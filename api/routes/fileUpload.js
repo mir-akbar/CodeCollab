@@ -6,12 +6,9 @@ const cors = require("cors");
 const { Readable } = require("stream");
 const { Buffer } = require("buffer");
 const fileStorageService = require("../services/fileStorageService");
+const accessService = require("../services/accessService");
 
 const router = express.Router();
-const SessionService = require("../services/sessionService");
-
-// Initialize session service
-const sessionService = new SessionService();
 
 router.use(cors({
   origin: "*",
@@ -47,24 +44,14 @@ module.exports = (io) => {
     }
 
     try {
-      const accessInfo = await sessionService.checkSessionAccess(sessionID, email);
-      if (!accessInfo.hasAccess) {
+      const hasAccess = await accessService.checkSessionAccess(sessionID, email);
+      if (!hasAccess) {
         return res.status(403).json({ 
           error: "Access denied: User does not have access to this session" 
         });
       }
 
-      // Check if user has upload permissions (edit access)
-      if (accessInfo.access !== 'edit') {
-        return res.status(403).json({ 
-          error: "Access denied: User does not have upload permissions for this session" 
-        });
-      }
-
       console.log(`✅ Session access validated for user ${email} in session ${sessionID}`);
-      
-      // Update user activity
-      sessionService.updateLastActive(sessionID, email);
 
     } catch (error) {
       console.error("Session validation error:", error);

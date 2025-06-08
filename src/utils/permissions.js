@@ -3,6 +3,14 @@
  * Client-side permission utilities that mirror the backend permission system
  */
 
+// Invite policy constants - must match backend constants
+const INVITE_POLICIES = {
+  CLOSED: 'closed',
+  APPROVAL_REQUIRED: 'approval-required',
+  SELF_INVITE: 'self-invite',
+  OPEN: 'open'
+};
+
 // Permission matrix - mirrors backend permissions.js
 const ROLE_PERMISSIONS = {
   owner: [
@@ -90,6 +98,21 @@ export const canTransferOwnership = (role) => {
 };
 
 /**
+ * Convert role to legacy access level for backward compatibility
+ * @param {string} role - User's role
+ * @returns {string} - Legacy access level ('edit' or 'view')
+ */
+export const roleToAccess = (role) => {
+  const roleMap = {
+    'owner': 'edit',
+    'admin': 'edit', 
+    'editor': 'edit',
+    'viewer': 'view'
+  };
+  return roleMap[role] || 'view';
+};
+
+/**
  * Check if user can manage session settings
  * @param {string} role - User's role
  * @returns {boolean} - Whether user can manage settings
@@ -123,7 +146,7 @@ export const getUserRole = (session, userEmail) => {
   
   // Find user in participants list
   const participant = session.participants?.find(p => 
-    p.email === userEmail || p.userEmail === userEmail
+    p.email === userEmail
   );
   
   if (participant) {
@@ -132,42 +155,6 @@ export const getUserRole = (session, userEmail) => {
   
   // Default to viewer if not found
   return 'viewer';
-};
-
-/**
- * Convert legacy access values to new role system for backward compatibility
- * @param {string} access - Legacy access value ('edit', 'view')
- * @param {boolean} isCreator - Whether user is the session creator
- * @returns {string} - Corresponding role
- */
-export const accessToRole = (access, isCreator = false) => {
-  if (isCreator) return 'owner';
-  
-  switch (access) {
-    case 'edit':
-      return 'editor';
-    case 'view':
-      return 'viewer';
-    default:
-      return 'viewer';
-  }
-};
-
-/**
- * Convert role to legacy access for backward compatibility
- * @param {string} role - Role value
- * @returns {string} - Legacy access value
- */
-export const roleToAccess = (role) => {
-  switch (role) {
-    case 'owner':
-    case 'admin':
-    case 'editor':
-      return 'edit';
-    case 'viewer':
-    default:
-      return 'view';
-  }
 };
 
 /**
@@ -229,6 +216,66 @@ export const validateAction = (userRole, action, targetRole = null) => {
   return result;
 };
 
+/**
+ * Check if a user can perform an action based on both role and session settings
+ * @param {string} userRole - User's role in the session  
+ * @param {string} action - Action being attempted
+ * @param {Object} sessionSettings - Session settings object
+ * @param {string} userEmail - User email (for domain checks)
+ * @returns {Object} - { allowed: boolean, reason?: string }
+ */
+export const checkPermissionWithSettings = (userRole, action, sessionSettings = {}, userEmail = null) => {
+  // First check the basic role permission
+  if (!hasPermission(userRole, action)) {
+    return { 
+      allowed: false, 
+      reason: `Your role '${userRole}' doesn't have permission to ${action}` 
+    };
+  }
+
+  // Special case for invite action based on invite policy
+  if (action === 'invite') {
+    const invitePolicy = sessionSettings.invitePolicy || INVITE_POLICIES.APPROVAL_REQUIRED;
+    
+    switch (invitePolicy) {
+      case INVITE_POLICIES.CLOSED:
+        // Only owners and admins can invite in closed sessions
+        if (userRole !== 'owner' && userRole !== 'admin') {
+          return { 
+            allowed: false, 
+            reason: 'This session is closed to new invitations' 
+          };
+        }
+        break;
+        
+      // Other cases follow role-based permissions
+      default:
+        break;
+    }
+    
+    // Domain restrictions
+    if (userEmail && sessionSettings.allowedDomains?.length > 0) {
+      const userDomain = userEmail.split('@')[1];
+      if (!sessionSettings.allowedDomains.includes(userDomain)) {
+        return { 
+          allowed: false, 
+          reason: 'Your email domain is not allowed to invite users' 
+        };
+      }
+    }
+  }
+  
+  // Role requests check
+  if (action === 'requestRole' && !sessionSettings.allowRoleRequests) {
+    return { 
+      allowed: false, 
+      reason: 'Role requests are not enabled for this session' 
+    };
+  }
+  
+  return { allowed: true };
+};
+
 export default {
   hasPermission,
   canAssignRole,
@@ -239,9 +286,9 @@ export default {
   canManageSettings,
   canEdit,
   getUserRole,
-  accessToRole,
-  roleToAccess,
   getRoleDisplayName,
   getPermissionSummary,
-  validateAction
+  validateAction,
+  INVITE_POLICIES,
+  checkPermissionWithSettings
 };

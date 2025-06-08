@@ -47,6 +47,12 @@ export function TopNavBar({ toggleSidebar, open, currentPath, onRunCode }) {
         >
           Sessions
         </Button>
+        <Button
+          onClick={() => navigate("/user-profile-test")}
+          className="bg-purple-600 hover:bg-purple-700 text-white"
+        >
+          User Profile
+        </Button>
         <UserSection />
       </div>
     </div>

@@ -1,23 +1,49 @@
 /**
- * Session Controller
- * Handles session-related HTTP requests and responses
+ * @fileoverview Session Controller - Core CRUD Operations
+ * 
+ * Handles basic session operations:
+ * - Session creation and retrieval
+ * - Access control validation
+ * - Core session management
+ * 
+ * @version 2.0.0
+ * @author CodeLab Development Team
+ * @since 2025-06-04
  */
 
-const SessionService = require("../services/sessionService");
+const sessionService = require("../services/sessionService");
+const accessService = require("../services/accessService");
 const { asyncHandler } = require("../middleware/errorHandler");
+const SessionValidationUtils = require("../utils/sessionValidation");
 
 class SessionController {
-  constructor() {
-    this.sessionService = new SessionService();
-  }
 
   /**
    * Get all sessions for a user
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
    */
   getUserSessions = asyncHandler(async (req, res) => {
     const { userEmail } = req;
     
-    const sessions = await this.sessionService.getUserSessions(userEmail);
+    console.log('SessionController.getUserSessions called with userEmail:', userEmail);
+    
+    // Validate user email
+    if (!SessionValidationUtils.isValidEmail(userEmail)) {
+      console.log('Email validation failed for:', userEmail);
+      return res.status(400).json({
+        success: false,
+        error: "Invalid user email format"
+      });
+    }
+    
+    console.log('Email validation passed, fetching sessions for:', userEmail);
+    
+    // Get user sessions using simplified service
+    const sessions = await sessionService.getUserSessions(userEmail);
+    
+    console.log('Sessions retrieved:', sessions.length);
     
     res.json({
       success: true,
@@ -29,16 +55,27 @@ class SessionController {
 
   /**
    * Get a specific session by ID
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
    */
   getSessionById = asyncHandler(async (req, res) => {
-    const { sessionId, userEmail } = req;
+    const { sessionId } = req;
 
-    const session = await this.sessionService.getSessionDetails(sessionId);
+    // Validate session ID
+    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid session ID format. Session ID must contain only letters, numbers, hyphens, and underscores."
+      });
+    }
+
+    const session = await sessionService.getSessionById(sessionId);
     
     if (!session) {
       return res.status(404).json({ 
         success: false,
-        error: "Session not found" 
+        error: "Session not found or you don't have access to it" 
       });
     }
 
@@ -50,362 +87,149 @@ class SessionController {
 
   /**
    * Create a new session
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
    */
   createSession = asyncHandler(async (req, res) => {
     const { name, description, creator, sessionId } = req.body;
     
-    const result = await this.sessionService.createSession({
-      name: name.trim(),
-      description: description?.trim() || '',
-      creator: creator,
-      sessionId: sessionId // Pass through if provided
+    // Enhanced validation
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: "Session name is required and must be a valid string"
+      });
+    }
+
+    if (!SessionValidationUtils.isValidEmail(creator)) {
+      return res.status(400).json({
+        success: false,
+        error: "Creator email is required and must be a valid email address"
+      });
+    }
+
+    // Sanitize inputs
+    const sanitizedName = SessionValidationUtils.sanitizeInput(name);
+    const sanitizedDescription = description ? SessionValidationUtils.sanitizeInput(description) : '';
+
+    if (sanitizedName.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Session name cannot be empty after sanitization"
+      });
+    }
+
+    if (sanitizedName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: "Session name must be 100 characters or less"
+      });
+    }
+    
+    const session = await sessionService.createSession({
+      name: sanitizedName,
+      description: sanitizedDescription,
+      creator: creator.trim().toLowerCase(),
+      sessionId: sessionId
     });
 
-    if (result.success) {
-      res.status(201).json({ 
-        success: true,
-        message: "Session created successfully",
-        session: result.session,
-        sessionId: result.session.sessionId
-      });
-    } else {
-      res.status(400).json({ 
-        success: false,
-        error: "Failed to create session",
-        details: result.error 
-      });
-    }
-  });
-
-  /**
-   * Invite user to session
-   */
-  inviteToSession = asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    const { inviteeEmail, role, inviterEmail } = req.body; // Validation middleware normalizes these fields
-
-    if (!inviteeEmail) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invitee email is required" 
-      });
-    }
-
-    if (!inviterEmail) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Inviter email is required" 
-      });
-    }
-
-    try {
-      const result = await this.sessionService.inviteUserToSession(
-        sessionId, 
-        inviterEmail, 
-        inviteeEmail, 
-        role
-      );
-
-      if (result.success) {
-        res.status(200).json({ 
-          success: true,
-          message: "Invitation sent successfully",
-          action: result.action 
-        });
-      } else {
-        res.status(400).json({ 
-          success: false,
-          error: "Failed to send invitation",
-          details: result.error 
-        });
-      }
-    } catch (error) {
-      console.error("Error inviting user:", error);
-      
-      // Handle specific error types with appropriate status codes
-      if (error.message.includes('Permission denied') || 
-          error.message.includes('already invited') ||
-          error.message.includes('already a participant')) {
-        res.status(403).json({ 
-          success: false,
-          error: error.message 
-        });
-      } else {
-        res.status(500).json({ 
-          success: false,
-          error: "Internal server error",
-          details: error.message
-        });
-      }
-    }
-  });
-
-  /**
-   * Leave a session
-   */
-  leaveSession = asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    const { userEmail } = req;
-
-    const result = await this.sessionService.leaveSession(sessionId, userEmail);
-
-    if (result.success) {
-      res.status(200).json({ 
-        success: true,
-        message: "Left session successfully" 
-      });
-    } else {
-      res.status(400).json({ 
-        success: false,
-        error: "Failed to leave session",
-        details: result.error 
-      });
-    }
+    res.status(201).json({ 
+      success: true,
+      message: "Session created successfully",
+      session: session,
+      sessionId: session.sessionId
+    });
   });
 
   /**
    * Delete a session
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
    */
   deleteSession = asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
-    const { userEmail } = req;
 
-    const result = await this.sessionService.deleteSession(sessionId, userEmail);
+    await sessionService.archiveSession(sessionId);
 
-    if (result.success) {
-      res.status(200).json({ 
-        success: true,
-        message: "Session deleted successfully" 
-      });
-    } else {
-      res.status(400).json({ 
+    res.status(200).json({ 
+      success: true,
+      message: "Session archived successfully" 
+    });
+  });
+
+  /**
+   * Update session details (name, description, settings)
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
+   */
+  updateSession = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { name, description } = req.body;
+
+    // Validate session ID
+    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
+      return res.status(400).json({
         success: false,
-        error: "Failed to delete session",
-        details: result.error 
+        error: "Valid session ID is required"
       });
     }
+
+    // Prepare update data
+    const updateData = {};
+    if (name !== undefined) {
+      const sanitizedName = name.trim();
+      if (sanitizedName.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Session name cannot be empty"
+        });
+      }
+      updateData.name = sanitizedName;
+    }
+
+    if (description !== undefined) {
+      updateData.description = description.trim();
+    }
+
+    const session = await sessionService.updateSession(sessionId, updateData);
+
+    res.status(200).json({
+      success: true,
+      message: "Session updated successfully",
+      session: session
+    });
   });
 
   /**
    * Check session access
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} - Promise resolving to void
    */
   checkAccess = asyncHandler(async (req, res) => {
     const { sessionId, email } = req.query;
 
-    if (!sessionId || !email) {
-      return res.status(400).json({ 
-        error: "Session ID and email are required" 
-      });
-    }
-
-    const accessInfo = await this.sessionService.checkSessionAccess(sessionId, email);
-    res.json(accessInfo);
-  });
-
-  /**
-   * Get active users in session
-   */
-  getActiveUsers = asyncHandler(async (req, res) => {
-    const { session_id } = req.body;
-    
-    if (!session_id) {
-      return res.status(400).json({ error: "session_id is required" });
-    }
-
-    const activeUsers = await this.sessionService.getActiveUsers(session_id);
-    res.json(activeUsers);
-  });
-
-  /**
-   * Update user activity in session
-   */
-  updateActivity = asyncHandler(async (req, res) => {
-    const { sessionId, email } = req.body;
-
-    if (!sessionId || !email) {
-      return res.status(400).json({ 
-        error: "Session ID and email are required" 
-      });
-    }
-
-    await this.sessionService.updateLastActive(sessionId, email);
-    res.status(200).json({ message: "Activity updated" });
-  });
-
-
-
-  /**
-   * Remove participant from session
-   */
-  removeParticipant = asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    const { participantEmail, removerEmail } = req.body;
-    const userEmail = removerEmail || req.userEmail;
-
-    if (!participantEmail) {
+    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
       return res.status(400).json({ 
         success: false,
-        error: "Participant email is required" 
+        error: "Valid session ID is required" 
       });
     }
 
-    try {
-      const result = await this.sessionService.removeParticipant(sessionId, userEmail, participantEmail);
-
-      if (result.success) {
-        res.status(200).json({ 
-          success: true,
-          message: "Participant removed successfully" 
-        });
-      } else {
-        res.status(400).json({ 
-          success: false,
-          error: result.error || "Failed to remove participant"
-        });
-      }
-    } catch (error) {
-      console.error("Error removing participant:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: error.message
-      });
-    }
-  });
-
-  /**
-   * Transfer ownership of session
-   */
-  transferOwnership = asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    const { newOwnerEmail, currentOwnerEmail } = req.body;
-    const userEmail = currentOwnerEmail || req.userEmail;
-
-    if (!newOwnerEmail) {
+    if (!SessionValidationUtils.isValidEmail(email)) {
       return res.status(400).json({ 
         success: false,
-        error: "New owner email is required" 
+        error: "Valid email is required" 
       });
     }
 
-    try {
-      const result = await this.sessionService.transferOwnership(sessionId, userEmail, newOwnerEmail);
-
-      if (result.success) {
-        res.status(200).json({ 
-          success: true,
-          message: "Ownership transferred successfully" 
-        });
-      } else {
-        res.status(400).json({ 
-          success: false,
-          error: result.error || "Failed to transfer ownership"
-        });
-      }
-    } catch (error) {
-      console.error("Error transferring ownership:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: error.message
-      });
-    }
-  });
-
-  /**
-   * Update participant role
-   */
-  updateParticipantRole = asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    const { participantEmail, newRole, updaterEmail } = req.body;
-    const userEmail = updaterEmail || req.userEmail;
-
-    if (!participantEmail || !newRole) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Participant email and new role are required" 
-      });
-    }
-
-    try {
-      const result = await this.sessionService.updateParticipantRole(sessionId, userEmail, participantEmail, newRole);
-
-      if (result.success) {
-        res.status(200).json({ 
-          success: true,
-          message: "Participant role updated successfully" 
-        });
-      } else {
-        res.status(400).json({ 
-          success: false,
-          error: result.error || "Failed to update participant role"
-        });
-      }
-    } catch (error) {
-      console.error("Error updating participant role:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: error.message
-      });
-    }
-  });
-
-  /**
-   * Health check endpoint for session system
-   */
-  healthCheck = asyncHandler(async (req, res) => {
-    try {
-      // If we have a healthCheck method on the service, use it
-      if (typeof this.sessionService.healthCheck === 'function') {
-        const healthStatus = await this.sessionService.healthCheck();
-        res.json({
-          success: true,
-          system: 'new',
-          ...healthStatus
-        });
-      } else {
-        // Simple health check
-        res.json({
-          success: true,
-          system: 'new',
-          status: 'healthy',
-          timestamp: new Date()
-        });
-      }
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        system: 'new',
-        status: 'unhealthy',
-        error: error.message,
-        timestamp: new Date()
-      });
-    }
-  });
-
-  /**
-   * DEBUG: Check for duplicate participant records
-   */
-  checkParticipantRecords = asyncHandler(async (req, res) => {
-    const { sessionId, userEmail: targetEmail } = req.params;
-    const SessionParticipant = require("../models/SessionParticipant");
-    
-    const participants = await SessionParticipant.find({
-      sessionId,
-      userEmail: targetEmail
-    }).sort({ createdAt: 1 });
-    
+    const hasAccess = await accessService.checkSessionAccess(sessionId, email.trim().toLowerCase());
     res.json({
       success: true,
-      count: participants.length,
-      participants: participants.map(p => ({
-        _id: p._id,
-        status: p.status,
-        role: p.role,
-        createdAt: p.createdAt,
-        leftAt: p.leftAt
-      }))
+      hasAccess: hasAccess
     });
   });
 }

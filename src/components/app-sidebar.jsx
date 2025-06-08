@@ -18,8 +18,10 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { API_URL } from "../common/Constant";
+import { useUser } from "@/contexts/UserContext";
 
 export function AppSidebar({ onFileSelect }) {
+  const { userEmail } = useUser();
   const [files, setFiles] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastClickedFile, setLastClickedFile] = useState(null);
@@ -59,13 +61,11 @@ export function AppSidebar({ onFileSelect }) {
                   newFiles.push(newFile);
                 }
               });
-              localStorage.setItem("uploadedFiles", JSON.stringify(newFiles));
               return newFiles;
             });
           } else {
             // For single file uploads, replace the entire array
             setFiles(updatedFiles.files || []);
-            localStorage.setItem("uploadedFiles", JSON.stringify(updatedFiles.files || []));
           }
           
           setIsRefreshing(false); // Stop loading state
@@ -128,7 +128,6 @@ export function AppSidebar({ onFileSelect }) {
         if (data.sessionID === session) {
           console.log(`🔄 Session files updated: ${data.files.length} total files`);
           setFiles(data.files);
-          localStorage.setItem("uploadedFiles", JSON.stringify(data.files));
           setIsRefreshing(false);
         }
       });
@@ -228,12 +227,11 @@ export function AppSidebar({ onFileSelect }) {
 
     const searchParams = new URLSearchParams(location.search);
     const session = searchParams.get("session");
-    const email = localStorage.getItem("email");
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("sessionID", session);
-    formData.append("email", email);
+    formData.append("email", userEmail);
 
     try {
       console.log(`📤 Starting upload of ${file.name}...`);

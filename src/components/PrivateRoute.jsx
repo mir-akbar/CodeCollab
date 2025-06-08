@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react';
-import { isAuthenticated } from '@/utils/auth';
+import { useAuth } from '../hooks/useAuth';
 import { Navigate } from 'react-router-dom';
+import PropTypes from 'prop-types';
 
 export default function PrivateRoute({ children }) {
-    const [authStatus, setAuthStatus] = useState(null);
-  
-    useEffect(() => {
-      isAuthenticated().then(setAuthStatus);
-    }, []);
-  
-    if (authStatus === null) {
-      return <div>Loading...</div>;
-    }
-  
-    return authStatus ? children : <Navigate to="/login" replace />;
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  console.log('PrivateRoute check:', { isAuthenticated, isLoading, hasUser: !!user });
+
+  if (isLoading) {
+    console.log('PrivateRoute: Loading...');
+    return <div>Loading...</div>;
   }
+
+  if (!isAuthenticated) {
+    console.log('PrivateRoute: Not authenticated, redirecting to login');
+    return <Navigate to="/login" replace />;
+  }
+
+  console.log('PrivateRoute: Authenticated, rendering children');
+  return children;
+}
+
+PrivateRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};

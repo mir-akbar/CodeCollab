@@ -1,6 +1,7 @@
 import { useSessionActions } from '../../hooks/useSessions';
 import { useRealTimeSession } from '../../hooks/useRealTimeSession';
 import { useSessionFiles, useFileManager } from '../../hooks/useSessionFiles';
+import { useUser } from '../../contexts/UserContext';
 import PropTypes from 'prop-types';
 
 /**
@@ -8,7 +9,7 @@ import PropTypes from 'prop-types';
  * This component provides a comprehensive testing interface for the capstone project
  */
 export const TanStackDebugComponent = ({ sessionId }) => {
-  const userEmail = localStorage.getItem('email') || 'test@example.com';
+  const { userEmail } = useUser();
   
   // Test session management hooks
   const sessionActions = useSessionActions(userEmail);

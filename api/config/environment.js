@@ -35,9 +35,24 @@ const config = {
   
   // Security Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'development-secret-change-in-production',
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'development-refresh-secret-change-in-production',
+  JWT_ACCESS_TOKEN_EXPIRY: process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m',
+  JWT_REFRESH_TOKEN_EXPIRY: process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d',
+  
+  // Session Configuration
+  SESSION_SECRET: process.env.SESSION_SECRET || 'development-session-secret-change-in-production',
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'localhost',
+  COOKIE_SECURE: process.env.NODE_ENV === 'production',
+  COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE || 'lax',
   
   // CORS Configuration
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  
+  // AWS Cognito Configuration (CodeCollab-enhanced)
+  COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID,
+  COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
+  COGNITO_REGION: process.env.COGNITO_REGION || 'ap-south-1',
   
   // Development flags
   IS_DEVELOPMENT: process.env.NODE_ENV === 'development',

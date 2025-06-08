@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import PropTypes from 'prop-types';
+import { AuthProvider } from '../contexts/AuthContext';
+import { UserProvider } from '../contexts/UserContext';
 
 // Create a client with optimized settings for CodeLab
 // Following TanStack Query v5 best practices
@@ -74,11 +76,37 @@ queryClient.setMutationDefaults(['inviteUser'], {
   },
 });
 
+// Enhanced authentication mutation defaults
+queryClient.setMutationDefaults(['enhancedAuth', 'register'], {
+  onError: (error) => {
+    console.error('Enhanced registration failed:', error);
+  },
+});
+
+queryClient.setMutationDefaults(['enhancedAuth', 'login'], {
+  onError: (error) => {
+    console.error('Enhanced login failed:', error);
+  },
+});
+
+queryClient.setMutationDefaults(['enhancedAuth', 'updateProfile'], {
+  onError: (error) => {
+    console.error('Profile update failed:', error);
+  },
+});
+
 // Global error boundary for queries
 queryClient.setQueryDefaults(['sessions'], {
   onError: (error) => {
     console.error('Session fetch failed:', error);
     // Could integrate with global error handling here
+  },
+});
+
+// Enhanced auth query defaults
+queryClient.setQueryDefaults(['enhancedAuth'], {
+  onError: (error) => {
+    console.error('Enhanced auth operation failed:', error);
   },
 });
 
@@ -107,7 +135,11 @@ queryClient.setQueryDefaults(['files'], {
 const QueryProvider = ({ children }) => {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AuthProvider>
+        <UserProvider>
+          {children}
+        </UserProvider>
+      </AuthProvider>
       {/* Show devtools only in development */}
       {import.meta.env.DEV && (
         <ReactQueryDevtools 

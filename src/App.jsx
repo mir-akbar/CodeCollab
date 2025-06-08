@@ -5,10 +5,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router'
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
 import VerificationPage from './pages/VerificationPage'
-import CodeCollabWelcome from './components/CodeCollabWelcome'
-// import SessionManager from './components/sessions/SessionManager'
 import SessionsPage from './pages/SessionsPage'
 import DebugPage from './pages/DebugPage'
+// import UserProfileTestPage from './pages/UserProfileTestPage'
 import PrivateRoute from './components/PrivateRoute';
 import QueryProvider from './providers/QueryProvider';
 import { Toaster } from './components/ui/sonner';
@@ -34,7 +33,6 @@ function App() {
           path="/sessions"
           element={
             <PrivateRoute>
-              {/* <SessionManager /> */}
               <SessionsPage />
             </PrivateRoute>
           }
@@ -51,7 +49,16 @@ function App() {
         />
         
         <Route path="/verify" element={<VerificationPage />} />
-        <Route path="/welcome" element={<CodeCollabWelcome />} />
+        
+        {/* User Profile Test Route */}
+        {/* <Route
+          path="/user-profile-test"
+          element={
+            <PrivateRoute>
+              <UserProfileTestPage />
+            </PrivateRoute>
+          }
+        /> */}
       </Routes>
       <Toaster />
     </Router>
