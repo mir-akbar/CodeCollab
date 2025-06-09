@@ -60,7 +60,7 @@ class SessionController {
    * @returns {Promise<void>} - Promise resolving to void
    */
   getSessionById = asyncHandler(async (req, res) => {
-    const { sessionId } = req;
+    const { sessionId } = req.params;
 
     // Validate session ID
     if (!SessionValidationUtils.isValidSessionId(sessionId)) {
@@ -70,7 +70,7 @@ class SessionController {
       });
     }
 
-    const session = await sessionService.getSessionById(sessionId);
+    const session = await sessionService.getSession(sessionId);
     
     if (!session) {
       return res.status(404).json({ 

@@ -59,7 +59,7 @@ const sessionAPI = {
   },
 
   // Delete a session
-  deleteSession: async ({ sessionId }) => {
+  deleteSession: async ({ sessionId, userEmail }) => {
     const response = await secureAPIClient.delete(`/api/sessions/${sessionId}`);
     
     if (!response.data.success) {
@@ -85,7 +85,7 @@ const sessionAPI = {
   },
 
   // Leave a session
-  leaveSession: async ({ sessionId }) => {
+  leaveSession: async ({ sessionId, userEmail }) => {
     const response = await secureAPIClient.post(`/api/sessions/${sessionId}/leave`);
     
     if (!response.data.success) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import SessionManager from '@/components/sessions/SessionManager'
+import { SessionManager } from '@/components/sessions'
 
 // Mock the hooks and dependencies
 vi.mock('@/hooks/useSessions', () => ({

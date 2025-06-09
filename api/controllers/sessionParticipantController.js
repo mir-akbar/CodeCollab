@@ -63,25 +63,110 @@ class SessionParticipantController {
         success: false,
         error: "Cannot invite yourself to a session" 
       });
-    }    try {
-      await participantService.addParticipant(
-        sessionId, 
-        inviteeEmail.trim().toLowerCase(), 
-        role || 'editor',
-        inviterEmail.trim().toLowerCase()
-      );
+    }
 
-      res.status(200).json({ 
-        success: true,
-        message: "User added to session successfully"
+    try {
+      // Step 1: Resolve inviter email to cognitoId
+      const User = require('../models/User');
+      let inviterUser = await User.findByEmail(inviterEmail.trim().toLowerCase());
+      if (!inviterUser) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Inviter user not found. Please ensure you are logged in." 
+        });
+      }
+
+      // Step 1.5: Check if inviter has permission to invite users
+      const SessionParticipant = require('../models/SessionParticipant');
+      const inviterParticipant = await SessionParticipant.findOne({ 
+        sessionId, 
+        cognitoId: inviterUser.cognitoId,
+        status: { $in: ['active', 'invited'] }
       });
+
+      if (!inviterParticipant) {
+        return res.status(403).json({ 
+          success: false,
+          error: "You are not a participant in this session" 
+        });
+      }
+
+      if (!inviterParticipant.hasPermission('invite')) {
+        return res.status(403).json({ 
+          success: false,
+          error: "You don't have permission to invite users to this session. Only admins and owners can invite users." 
+        });
+      }
+
+      // Check if inviter can assign the requested role
+      if (!inviterParticipant.canAssignRole(role || 'editor')) {
+        return res.status(403).json({ 
+          success: false,
+          error: `You don't have permission to assign the ${role || 'editor'} role. You can only assign roles equal to or lower than your own.` 
+        });
+      }
+
+      // Step 2: Find or create invitee user
+      let inviteeUser = await User.findByEmail(inviteeEmail.trim().toLowerCase());
+      const userExistedBefore = !!inviteeUser;
+      
+      if (!inviteeUser) {
+        // Create placeholder user for non-existent account
+        console.log(`Creating placeholder user for invited email: ${inviteeEmail}`);
+        inviteeUser = await User.createFromCognito({
+          email: inviteeEmail.trim().toLowerCase(),
+          name: inviteeEmail.split('@')[0],
+          cognitoId: `temp_invite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        });
+      }
+
+      // Step 3: Add participant using cognitoIds
+      try {
+        await participantService.addParticipant({
+          sessionId, 
+          cognitoId: inviteeUser.cognitoId,
+          role: role || 'editor',
+          invitedBy: inviterUser.cognitoId
+        });
+
+        res.status(200).json({ 
+          success: true,
+          message: userExistedBefore 
+            ? "User invited to session successfully"
+            : "Invitation sent to new user - they can join when they create an account",
+          userExistedBefore,
+          inviteeEmail: inviteeUser.email
+        });
+
+      } catch (participantError) {
+        // Handle case where user is already a participant
+        if (participantError.message.includes('already a participant')) {
+          // Check current participant status and role
+          const existingParticipant = await participantService.getParticipant(sessionId, inviteeUser.cognitoId);
+          
+          if (existingParticipant) {
+            // User is already in the session, provide informative response
+            res.status(200).json({
+              success: true,
+              message: `${inviteeEmail} is already a ${existingParticipant.role} in this session`,
+              userExistedBefore,
+              inviteeEmail: inviteeUser.email,
+              currentRole: existingParticipant.role,
+              alreadyParticipant: true
+            });
+            return;
+          }
+        }
+        
+        // Re-throw for other participant-related errors
+        throw participantError;
+      }
+      
     } catch (error) {
       console.error("Error inviting user:", error);
       
       // Handle specific error types with appropriate status codes
-      if (error.message.includes('Permission denied') || 
-          error.message.includes('already invited') ||
-          error.message.includes('already a participant')) {
+      if (error.message.includes('Permission denied')) {
         res.status(403).json({ 
           success: false,
           error: error.message 
@@ -106,7 +191,17 @@ class SessionParticipantController {
     const { sessionId } = req.params;
     const { userEmail } = req;
 
-    await participantService.removeParticipant(sessionId, userEmail);
+    // Resolve user email to cognitoId
+    const User = require('../models/User');
+    const user = await User.findByEmail(userEmail);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found" 
+      });
+    }
+
+    await participantService.removeParticipant(sessionId, user.cognitoId);
 
     res.status(200).json({ 
       success: true,
@@ -156,9 +251,19 @@ class SessionParticipantController {
     }
 
     try {
+      // Resolve participant email to cognitoId
+      const User = require('../models/User');
+      const participantUser = await User.findByEmail(participantEmail.trim().toLowerCase());
+      if (!participantUser) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Participant not found" 
+        });
+      }
+
       await participantService.removeParticipant(
         sessionId, 
-        participantEmail.trim().toLowerCase()
+        participantUser.cognitoId
       );
 
       res.status(200).json({ 
@@ -217,10 +322,28 @@ class SessionParticipantController {
     }
 
     try {
+      // Resolve emails to cognitoIds
+      const User = require('../models/User');
+      const currentOwnerUser = await User.findByEmail(userEmail.trim().toLowerCase());
+      if (!currentOwnerUser) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Current owner not found" 
+        });
+      }
+
+      const newOwnerUser = await User.findByEmail(newOwnerEmail.trim().toLowerCase());
+      if (!newOwnerUser) {
+        return res.status(404).json({ 
+          success: false,
+          error: "New owner not found" 
+        });
+      }
+
       await participantService.transferOwnership(
         sessionId, 
-        userEmail.trim().toLowerCase(), 
-        newOwnerEmail.trim().toLowerCase()
+        currentOwnerUser.cognitoId, 
+        newOwnerUser.cognitoId
       );
 
       res.status(200).json({ 
@@ -278,9 +401,19 @@ class SessionParticipantController {
     }
 
     try {
+      // Resolve participant email to cognitoId
+      const User = require('../models/User');
+      const participantUser = await User.findByEmail(participantEmail.trim().toLowerCase());
+      if (!participantUser) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Participant not found" 
+        });
+      }
+
       await participantService.updateParticipantRole(
         sessionId, 
-        participantEmail.trim().toLowerCase(), 
+        participantUser.cognitoId, 
         newRole
       );
 
@@ -325,12 +458,24 @@ class SessionParticipantController {
     }
 
     try {
-      const participant = await participantService.addParticipant(
+      // Resolve user email to cognitoId
+      const User = require('../models/User');
+      let user = await User.findByEmail(email.trim().toLowerCase());
+      if (!user) {
+        // Create user if they don't exist (for self-joining open sessions)
+        user = await User.createFromCognito({
+          email: email.trim().toLowerCase(),
+          name: email.split('@')[0],
+          cognitoId: `temp_join_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        });
+      }
+
+      const participant = await participantService.addParticipant({
         sessionId, 
-        email.trim().toLowerCase(),
-        'editor', // Default role for joining
-        null // No inviter for direct joins
-      );
+        cognitoId: user.cognitoId,
+        role: 'editor', // Default role for joining
+        invitedBy: null // No inviter for direct joins
+      });
 
       res.status(200).json({ 
         success: true,

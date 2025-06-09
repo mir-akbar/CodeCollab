@@ -38,8 +38,8 @@ describe('Session API Endpoints - Migration Validation', () => {
     const response = await request(app)
       .post(`/api/sessions/${sessionId}/invite`)
       .send({
-        email: 'invited@example.com',
-        access: 'edit',
+        inviteeEmail: 'invited@example.com',
+        role: 'editor',
         inviterEmail: 'test@example.com',
       })
       .expect(200)

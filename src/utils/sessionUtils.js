@@ -23,3 +23,70 @@ export const navigateToSession = (session) => {
     window.location.href = sessionUrl;
     toast.success("Joining session...");
 };
+
+/**
+ * Filter sessions based on active tab and filters
+ * @param {Array} sessions - Array of session objects
+ * @param {string} activeTab - Active tab ('all', 'created', 'invited', 'favorites')
+ * @param {Object} filters - Filter object with search and sort
+ * @param {string} userEmail - Current user's email
+ * @returns {Array} - Filtered and sorted sessions
+ */
+export const getFilteredSessions = (sessions, activeTab, filters, userEmail) => {
+    if (!sessions || !Array.isArray(sessions)) {
+        return [];
+    }
+
+    let filtered = [...sessions];
+
+    // Filter by tab
+    switch (activeTab) {
+        case 'created':
+            filtered = filtered.filter(session => 
+                session.isCreator || session.creator === userEmail
+            );
+            break;
+        case 'invited':
+            filtered = filtered.filter(session => 
+                !(session.isCreator || session.creator === userEmail)
+            );
+            break;
+        case 'favorites':
+            filtered = filtered.filter(session => session.isFavorite);
+            break;
+        case 'all':
+        default:
+            // No additional filtering for 'all'
+            break;
+    }
+
+    // Filter by search term
+    if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        filtered = filtered.filter(session =>
+            session.name?.toLowerCase().includes(searchLower) ||
+            session.description?.toLowerCase().includes(searchLower) ||
+            session.creator?.toLowerCase().includes(searchLower)
+        );
+    }
+
+    // Sort sessions
+    switch (filters.sort) {
+        case 'name':
+            filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            break;
+        case 'favorites':
+            filtered.sort((a, b) => {
+                if (a.isFavorite && !b.isFavorite) return -1;
+                if (!a.isFavorite && b.isFavorite) return 1;
+                return new Date(b.createdAt) - new Date(a.createdAt);
+            });
+            break;
+        case 'recent':
+        default:
+            filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            break;
+    }
+
+    return filtered;
+};

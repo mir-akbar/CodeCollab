@@ -207,7 +207,7 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
     setIsInviting(true);
     try {
       const response = await axios.post(`${API_URL}/api/sessions/${sessionData.sessionId}/invite`, {
-        email: inviteEmail.trim(),
+        inviteeEmail: inviteEmail.trim(),
         role: inviteRole, // Send the actual role
         inviterEmail: userEmail
       }, {
@@ -216,13 +216,33 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
 
       if (response.data.success) {
         setInviteEmail('');
+        
+        // Show appropriate success message based on response
+        if (response.data.alreadyParticipant) {
+          alert(`ℹ️ ${inviteEmail} is already a ${response.data.currentRole} in this session.`);
+        } else if (response.data.userExistedBefore === false) {
+          alert(`✅ Invitation sent to ${inviteEmail}!\n\nNote: This user doesn't have an account yet. They'll be able to join when they sign up.`);
+        } else {
+          alert(`✅ Invitation sent to ${inviteEmail} successfully!`);
+        }
+        
         onRefresh();
       } else {
         alert(response.data.error || 'Failed to send invitation');
       }
     } catch (error) {
       console.error("Error inviting user:", error);
-      alert('Failed to send invitation. Please try again.');
+      
+      // Extract proper error message from axios response or fallback
+      let errorMessage = 'Failed to send invitation. Please try again.';
+      
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsInviting(false);
     }
