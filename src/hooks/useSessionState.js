@@ -11,10 +11,9 @@ import { useState, useCallback } from 'react';
 
 /**
  * Hook for managing session dialog states
- * @param {string} initialDialog - Initial dialog to open
  * @returns {object} Dialog state and handlers
  */
-export const useSessionDialogs = (initialDialog = null) => {
+export const useSessionDialogs = () => {
   const [dialogs, setDialogs] = useState({
     create: false,
     invite: false,
@@ -124,41 +123,6 @@ export const useSessionLoading = () => {
 };
 
 /**
- * Hook for managing session debug state (development only)
- * @returns {object} Debug state management
- */
-export const useSessionDebug = () => {
-  const [debugState, setDebugState] = useState({
-    isVisible: false,
-    activeTab: 'overview',
-    isCollapsed: false
-  });
-
-  const isDevelopment = import.meta.env.DEV;
-
-  const toggleDebug = useCallback(() => {
-    if (!isDevelopment) return;
-    setDebugState(prev => ({ ...prev, isVisible: !prev.isVisible }));
-  }, [isDevelopment]);
-
-  const setDebugTab = useCallback((tab) => {
-    setDebugState(prev => ({ ...prev, activeTab: tab }));
-  }, []);
-
-  const toggleCollapse = useCallback(() => {
-    setDebugState(prev => ({ ...prev, isCollapsed: !prev.isCollapsed }));
-  }, []);
-
-  return {
-    debugState,
-    toggleDebug,
-    setDebugTab,
-    toggleCollapse,
-    isDevelopment
-  };
-};
-
-/**
  * Composite hook that combines common session state patterns
  * @param {object} options - Configuration options
  * @returns {object} Combined state and handlers
@@ -166,19 +130,16 @@ export const useSessionDebug = () => {
 export const useSessionManagerState = (options = {}) => {
   const {
     initialFilters = { search: "", sort: "recent" },
-    initialTab = "all",
-    enableDebug = true
+    initialTab = "all"
   } = options;
 
   const dialogState = useSessionDialogs();
   const filterState = useSessionFilters(initialFilters, initialTab);
   const loadingState = useSessionLoading();
-  const debugState = enableDebug ? useSessionDebug() : null;
 
   return {
     ...dialogState,
     ...filterState,
-    ...loadingState,
-    ...(debugState && { debug: debugState })
+    ...loadingState
   };
 };

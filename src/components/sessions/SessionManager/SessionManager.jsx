@@ -22,7 +22,6 @@
  * ```
  */
 
-import { lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { SessionTabs, SessionFilters } from '../SessionNavigation';
 import { SessionList, SessionCardSkeleton } from '../SessionDisplay';
@@ -39,9 +38,6 @@ import {
 import { useSessionManagerState } from '@/hooks/useSessionState';
 import { getFilteredSessions } from '@/utils/sessionUtils';
 import PropTypes from 'prop-types';
-
-// Lazy load debug components for better performance
-const SessionDebugPanelLazy = lazy(() => import('../debug/SessionDebugPanelLazy'));
 
 /**
  * SessionManager Component
@@ -67,13 +63,10 @@ export function SessionManager({ userEmail }) {
     setFilters,
     // Loading state
     loadingStates,
-    setLoading,
-    // Debug state
-    debug
+    setLoading
   } = useSessionManagerState({
     initialFilters: { search: "", sort: "recent" },
-    initialTab: "all",
-    enableDebug: true
+    initialTab: "all"
   });
 
   // Hooks
@@ -269,17 +262,6 @@ export function SessionManager({ userEmail }) {
         session={dialogs.activeData}
         userEmail={userEmail}
       />
-
-      {/* Debug Panel - Development Only with Lazy Loading */}
-      {debug?.isDevelopment && (
-        <Suspense fallback={<div className="text-sm text-gray-500 p-2">Loading debug panel...</div>}>
-          <SessionDebugPanelLazy 
-            userEmail={userEmail}
-            isVisible={debug.debugState.isVisible} 
-            onToggle={debug.toggleDebug}
-          />
-        </Suspense>
-      )}
     </div>
   );
 }

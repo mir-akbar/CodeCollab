@@ -6,3 +6,4 @@
 
 export { AccessLevelBadge } from './AccessLevelBadge';
 export { SessionFooter } from './SessionFooter';
+export { default as SessionManagerTopNavBar } from './SessionManagerTopNavBar';

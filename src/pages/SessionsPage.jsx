@@ -1,6 +1,5 @@
 
-import { SessionManager, SessionCardSkeleton } from "@/components/sessions";
-import SessionManagerTopNavBar from "@/components/sessions/SessionManagerTopNavBar";
+import { SessionManager, SessionCardSkeleton, SessionManagerTopNavBar } from "@/components/sessions/";
 import { useEffect, useState } from "react";
 import { CognitoUserPool } from "amazon-cognito-identity-js";
 import { cognitoConfig } from "@/config/cognito";

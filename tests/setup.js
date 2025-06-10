@@ -1,37 +1,39 @@
-// Setup file for API tests
-const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+/**
+ * Modern Testing Setup for CodeLab
+ * Supports both frontend and backend testing with current architecture
+ * 
+ * @version 1.0.0 - Fresh start after system reorganization
+ */
 
-// MongoDB Memory Server instance
-let mongoServer;
+import { beforeEach, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 
-// Before all tests connect to a new in-memory database
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const mongoUri = mongoServer.getUri();
+// Frontend test setup
+beforeEach(() => {
+  // Setup for each test
+});
+
+afterEach(() => {
+  // Cleanup React components after each test
+  cleanup();
+});
+
+// Global test utilities
+export const testUtils = {
+  // Add test utilities as needed for the current system
+  mockUser: (overrides = {}) => ({
+    cognitoId: 'test-cognito-id',
+    email: 'test@example.com',
+    displayName: 'Test User',
+    ...overrides
+  }),
   
-  await mongoose.connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-  
-  console.log('Connected to in-memory MongoDB');
-});
-
-// Clear collections between tests
-beforeEach(async () => {
-  const collections = Object.keys(mongoose.connection.collections);
-  for (const collectionName of collections) {
-    const collection = mongoose.connection.collections[collectionName];
-    await collection.deleteMany({});
-  }
-});
-
-// Close connection after tests
-afterAll(async () => {
-  await mongoose.connection.close();
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
-  console.log('Closed connection to in-memory MongoDB');
-});
+  mockSession: (overrides = {}) => ({
+    sessionId: 'test-session-id',
+    name: 'Test Session',
+    description: 'Test Description',
+    creator: 'test@example.com',
+    createdAt: new Date(),
+    ...overrides
+  })
+};

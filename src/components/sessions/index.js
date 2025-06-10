@@ -4,11 +4,11 @@
  * Provides barrel exports for all session-related components.
  * Organized by functionality for better code organization and maintainability.
  * 
- * @version 4.0.0 - Modular restructuring
+ * @version 4.1.0 - Updated to use enhanced SessionManager
  */
 
-// Main Manager
-export { SessionManager } from './SessionManager';
+// Main Manager (Enhanced version from SessionManager directory)
+export { SessionManager } from './SessionManager/SessionManager';
 
 // Display Components
 export { 
@@ -32,11 +32,6 @@ export {
 // UI Components
 export { 
   AccessLevelBadge, 
-  SessionFooter 
+  SessionFooter,
+  SessionManagerTopNavBar 
 } from './SessionUI';
-
-// Debug Components (development only)
-export { 
-  SessionDebugPanel, 
-  SessionStateViewer 
-} from './debug';

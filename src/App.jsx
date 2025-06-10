@@ -7,7 +7,6 @@ import SignUpPage from './pages/SignUpPage'
 import VerificationPage from './pages/VerificationPage'
 import SessionsPage from './pages/SessionsPage'
 import DebugPage from './pages/DebugPage'
-// import UserProfileTestPage from './pages/UserProfileTestPage'
 import PrivateRoute from './components/PrivateRoute';
 import QueryProvider from './providers/QueryProvider';
 import { Toaster } from './components/ui/sonner';
@@ -49,16 +48,6 @@ function App() {
         />
         
         <Route path="/verify" element={<VerificationPage />} />
-        
-        {/* User Profile Test Route */}
-        {/* <Route
-          path="/user-profile-test"
-          element={
-            <PrivateRoute>
-              <UserProfileTestPage />
-            </PrivateRoute>
-          }
-        /> */}
       </Routes>
       <Toaster />
     </Router>
