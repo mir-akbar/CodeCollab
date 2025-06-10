@@ -199,5 +199,6 @@ module.exports = {
   validateSessionCreation,
   validateSessionInvitation,
   validateSessionUpdate,
+  validateFileUpload,
   validateParticipantRole
 };

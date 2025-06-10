@@ -9,7 +9,7 @@ const express = require("express");
 const fileStorageService = require("../services/fileStorageService");
 const { asyncHandler } = require("../middleware/errorHandler");
 
-module.exports = function (io) {
+module.exports = function () {
   const router = express.Router();
 
   // Get basic file information (no versioning)

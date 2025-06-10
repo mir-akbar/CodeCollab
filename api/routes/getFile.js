@@ -1,7 +1,7 @@
 const express = require("express");
 const fileStorageService = require("../services/fileStorageService");
 
-module.exports = function (io) {
+module.exports = function () {
   const router = express.Router();
 
   // Get file content from MongoDB
@@ -94,8 +94,7 @@ module.exports = function (io) {
 
       res.json({ message: "File deleted successfully", deletedPath: filePath });
 
-      // Emit file deletion event
-      io.emit("fileDeleted", { deletedFile: filePath, sessionId });
+      // Note: Real-time notifications handled by Y-WebSocket server
 
     } catch (error) {
       console.error('Error deleting file:', error);

@@ -1,0 +1,174 @@
+/**
+ * Enhanced File Upload Routes with Y-WebSocket Integration
+ * Combines MongoDB persistence with real-time Y-WebSocket updates
+ */
+
+const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const cors = require("cors");
+const { asyncHandler } = require("../middleware/errorHandler");
+const accessService = require("../services/accessService");
+const FileUploadYjsService = require("../services/fileStorageService");
+
+const router = express.Router();
+
+// CORS configuration
+router.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+}));
+
+// Multer configuration
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+});
+
+module.exports = (io, yjsServer) => {
+  // Initialize file upload service with YJS integration
+  const fileUploadService = FileUploadYjsService;
+  fileUploadService.setYjsServer(yjsServer);
+
+  router.post("/file-upload", upload.single("file"), asyncHandler(async (req, res) => {
+    // Input validation
+    if (!req.file) {
+      return res.status(400).json({ 
+        error: "No file uploaded",
+        hint: "Please select a file to upload"
+      });
+    }
+
+    const { sessionID, email } = req.body;
+    
+    if (!sessionID || !email) {
+      return res.status(400).json({ 
+        error: "Session ID and email are required"
+      });
+    }
+
+    // File validation
+    const fileExt = path.extname(req.file.originalname).toLowerCase();
+    const allowedExtensions = [".js", ".java", ".py", ".zip"];
+    
+    if (!allowedExtensions.includes(fileExt)) {
+      return res.status(400).json({ 
+        error: `Unsupported file type: ${fileExt}`,
+        supportedTypes: allowedExtensions,
+        fileName: req.file.originalname
+      });
+    }
+
+    // Check file size
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    if (req.file.size > maxFileSize) {
+      return res.status(400).json({
+        error: `File too large: ${(req.file.size / (1024 * 1024)).toFixed(2)}MB`,
+        hint: `Maximum file size is ${maxFileSize / (1024 * 1024)}MB`,
+        fileName: req.file.originalname
+      });
+    }
+
+    // Validate session access (editor permission required)
+    const hasAccess = await accessService.checkSessionAccess(sessionID, email, 'editor');
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        error: "Access denied: Editor permission required to upload files",
+        hint: "Contact the session owner to get editor access"
+      });
+    }
+
+    console.log(`📤 Processing upload: ${req.file.originalname} for session ${sessionID}`);
+
+    try {
+      let result;
+
+      if (fileExt === ".zip") {
+        // Handle ZIP file with Y-WebSocket progress tracking
+        result = await fileUploadService.uploadZipFile(
+          sessionID, 
+          req.file, 
+          email
+        );
+
+        // Also emit traditional Socket.IO events for backward compatibility
+        io.emit("zipUploadComplete", {
+          sessionID,
+          files: result.files,
+          totalFiles: result.totalFiles,
+          message: `ZIP upload complete: ${result.totalFiles} files added`
+        });
+
+      } else {
+        // Handle single file with Y-WebSocket coordination
+        result = await fileUploadService.uploadFile(
+          sessionID,
+          {
+            fileName: req.file.originalname,
+            fileType: fileExt,
+            content: req.file.buffer,
+            mimeType: req.file.mimetype || 'text/plain',
+            parentFolder: null,
+            filePath: req.file.originalname
+          },
+          email
+        );
+
+        // Also emit traditional Socket.IO events for backward compatibility
+        io.emit("fileUploaded", {
+          sessionID,
+          files: [result.file],
+          message: "File uploaded successfully"
+        });
+      }
+
+      // Send response
+      res.json({
+        success: true,
+        ...result,
+        message: fileExt === ".zip" 
+          ? `ZIP file uploaded and extracted: ${result.totalFiles || result.files?.length || 0} files`
+          : "File uploaded successfully"
+      });
+
+      console.log(`✅ Upload completed: ${req.file.originalname}`);
+
+    } catch (error) {
+      console.error("File upload error:", error);
+      
+      res.status(500).json({ 
+        error: "File upload failed", 
+        details: error.message,
+        fileName: req.file.originalname,
+        hint: "Please try again or contact support if the issue persists"
+      });
+    }
+  }));
+
+  // Get session files (enhanced with real-time data)
+  router.get("/session-files/:sessionId", asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { email } = req.query;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    // Check session access
+    const hasAccess = await accessService.checkSessionAccess(sessionId, email, 'viewer');
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Access denied to session" });
+    }
+
+    // Get files from MongoDB
+    const files = await fileUploadService.getSessionFiles(sessionId);
+    
+    res.json({
+      sessionId,
+      files,
+      totalFiles: files.length
+    });
+  }));
+
+  return router;
+};

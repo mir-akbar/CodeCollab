@@ -5,7 +5,6 @@
  */
 
 const SessionParticipant = require('../models/SessionParticipant');
-const Session = require('../models/Session');
 
 class AccessService {
   /**
@@ -86,6 +85,34 @@ class AccessService {
   canAssignRole(assignerRole, targetRole) {
     const assignableRoles = this.getAssignableRoles(assignerRole);
     return assignableRoles.includes(targetRole);
+  }
+
+  /**
+   * Check session access by email (converts email to cognitoId)
+   * Used by file upload and other email-based endpoints
+   */
+  async checkSessionAccess(sessionId, userEmail, requiredRole = 'viewer') {
+    try {
+      if (!sessionId || !userEmail) {
+        console.error('Missing sessionId or userEmail');
+        return false;
+      }
+
+      // Find user by email to get cognitoId
+      const User = require('../models/User');
+      const user = await User.findByEmail(userEmail.trim().toLowerCase());
+      
+      if (!user) {
+        console.error(`User not found for email: ${userEmail}`);
+        return false;
+      }
+
+      // Check session access using cognitoId
+      return await this.hasSessionAccess(sessionId, user.cognitoId, requiredRole);
+    } catch (error) {
+      console.error('Error in checkSessionAccess:', error);
+      return false;
+    }
   }
 
   // ===== PRIVATE HELPER METHODS =====

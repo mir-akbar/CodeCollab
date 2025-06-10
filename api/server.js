@@ -23,11 +23,13 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const http = require('http');
-const { Server } = require('socket.io');
 
 // Import configuration and database
 const { config } = require('./config/environment');
 const { connectDB } = require('./config/database');
+
+// Import Y-WebSocket server
+const YjsWebSocketServer = require('./services/yjsWebSocketServer');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -36,6 +38,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 const sessionRoutes = require('./routes/sessions');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
+const fileUploadRoutes = require('./routes/fileUpload');
+const getFileRoutes = require('./routes/getFile');
+const fileVersionRoutes = require('./routes/fileVersions');
 
 /**
  * CodeLab API Server Class
@@ -45,19 +50,10 @@ class CodeLabServer {
   constructor() {
     this.app = express();
     this.server = http.createServer(this.app);
-    this.io = new Server(this.server, {
-      cors: {
-        origin: [
-          config.FRONTEND_URL || "http://localhost:5173",
-          "http://localhost:5173",
-          "http://localhost:3000",
-          "http://127.0.0.1:5173",
-          "http://127.0.0.1:3000"
-        ],
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        credentials: true
-      }
-    });
+    
+    // Initialize Y-WebSocket server
+    this.yjsServer = new YjsWebSocketServer(this.server);
+    
     this.port = config.PORT || 5000;
   }
 
@@ -125,6 +121,9 @@ class CodeLabServer {
           auth: '/api/auth',
           user: '/api/user',
           sessions: '/api/sessions',
+          'file-upload': '/api/file-upload',
+          'file-operations': '/api/get-file',
+          'file-versions': '/api/file-versions',
           docs: '/api/docs'
         }
       });
@@ -138,6 +137,11 @@ class CodeLabServer {
 
     // Mount session routes
     this.app.use('/api/sessions', sessionRoutes);
+
+    // Mount file management routes
+    this.app.use('/api/file-upload', fileUploadRoutes(this.yjsServer));
+    this.app.use('/api', getFileRoutes());
+    this.app.use('/api/file-versions', fileVersionRoutes());
 
     // API documentation endpoint
     this.app.get('/api/docs', (req, res) => {
@@ -155,6 +159,31 @@ class CodeLabServer {
               'Real-time collaboration',
               'Activity monitoring'
             ]
+          },            files: {
+              base: '/api/file-upload',
+              methods: ['POST'],
+              features: [
+                'Y-WebSocket file uploads',
+                'ZIP file extraction',
+                'Real-time collaboration events'
+              ]
+            },            'files-yjs': {
+              base: '/api/file-upload-yjs',
+              methods: ['POST', 'GET'],
+              features: [
+                'Hybrid MongoDB + Y-WebSocket uploads',
+                'Real-time collaboration progress',
+                'Enhanced error handling'
+              ]
+            },
+          'file-operations': {
+            base: '/api',
+            endpoints: ['/get-file', '/by-session', '/hierarchy', '/delete-file'],
+            features: [
+              'File content retrieval',
+              'Session file listing',
+              'File hierarchy management'
+            ]
           }
         }
       });
@@ -165,74 +194,11 @@ class CodeLabServer {
       res.status(404).json({
         error: 'Route not found',
         message: `The requested endpoint ${req.method} ${req.originalUrl} does not exist`,
-        availableEndpoints: ['/health', '/api', '/api/sessions', '/api/docs']
+        availableEndpoints: ['/health', '/api', '/api/sessions', '/api/file-upload', '/api/file-upload-yjs', '/api/docs']
       });
     });
 
     console.log('✅ Routes setup complete');
-  }
-
-  /**
-   * Setup Socket.IO for real-time collaboration
-   */
-  setupSocketIO() {
-    console.log('🔌 Setting up Socket.IO...');
-
-    // Connection handling
-    this.io.on('connection', (socket) => {
-      console.log(`👤 User connected: ${socket.id}`);
-
-      // Join session room
-      socket.on('join-session', (sessionId) => {
-        socket.join(`session-${sessionId}`);
-        console.log(`🏠 User ${socket.id} joined session ${sessionId}`);
-        
-        // Notify other participants
-        socket.to(`session-${sessionId}`).emit('user-joined', {
-          userId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      // Leave session room
-      socket.on('leave-session', (sessionId) => {
-        socket.leave(`session-${sessionId}`);
-        console.log(`🚪 User ${socket.id} left session ${sessionId}`);
-        
-        // Notify other participants
-        socket.to(`session-${sessionId}`).emit('user-left', {
-          userId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      // Handle real-time code changes
-      socket.on('code-change', (data) => {
-        const { sessionId, changes } = data;
-        socket.to(`session-${sessionId}`).emit('code-update', {
-          changes,
-          userId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      // Handle cursor position updates
-      socket.on('cursor-move', (data) => {
-        const { sessionId, position } = data;
-        socket.to(`session-${sessionId}`).emit('cursor-update', {
-          position,
-          userId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      // Handle disconnection
-      socket.on('disconnect', () => {
-        console.log(`👋 User disconnected: ${socket.id}`);
-      });
-    });
-
-    console.log('✅ Socket.IO setup complete');
   }
 
   /**
@@ -269,12 +235,10 @@ class CodeLabServer {
       // Connect to database
       console.log('📊 Connecting to database...');
       await connectDB();
-      console.log('✅ Database connection established');
-
-      // Setup server components
+      console.log('✅ Database connection established');      // Setup server components
       this.setupMiddleware();
       this.setupRoutes();
-      this.setupSocketIO();
+      this.yjsServer.initialize(); // Initialize Y-WebSocket server
       this.setupErrorHandling();
 
       // Start listening
@@ -307,8 +271,8 @@ class CodeLabServer {
   async shutdown() {
     console.log('🛑 Shutting down server...');
     
-    // Close Socket.IO
-    this.io.close();
+    // Close Y-WebSocket server
+    this.yjsServer.shutdown();
     
     // Close HTTP server
     this.server.close(() => {

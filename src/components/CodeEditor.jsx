@@ -9,7 +9,6 @@ import { TopNavBar } from "./TopNavBar";
 import { CodeEditorPanel } from "./CodeEditorPanel";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { OutputPanel } from "./OutputPanel";
-import { AppSidebar } from "./app-sidebar";
 import axios from "axios";
 import { API_URL } from "../common/Constant";
 
@@ -213,46 +212,43 @@ export default function CodeEditor() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <AppSidebar onFileSelect={handleFileSelect} />
-      <div className="flex flex-col flex-1">
-        <TopNavBar 
-          toggleSidebar={toggleSidebar} 
-          open={open} 
-          currentPath={currentPath.length > 0 ? currentPath : ["No file selected"]} 
-          onRunCode={handleRunCode} 
-        />
+    <div className="flex flex-col h-full">
+      <TopNavBar 
+        toggleSidebar={toggleSidebar} 
+        open={open} 
+        currentPath={currentPath.length > 0 ? currentPath : ["No file selected"]} 
+        onRunCode={handleRunCode} 
+      />
 
-        <ResizablePanelGroup direction="vertical" className="flex-1">
-          <ResizablePanel id="editor-section" order={1} minSize={30}>
-            <div className="h-full pt-2">
-              <ResizablePanelGroup direction="horizontal" className="h-full">
-                <ResizablePanel id="code-editor" order={1} defaultSize={65} minSize={30}>
-                <CodeEditorPanel 
-                  onCodeChange={isEditable ? handleCodeChange : null}
-                  content={selectedFileContent} 
-                  readOnly={!isEditable}
-                  sessionId={sessionId}
-                  currentFile={currentFile}
-                />
-                </ResizablePanel>
-                <ResizableHandle />
-                <ResizablePanel id="collab-panel" order={2} defaultSize={35} minSize={20}>
-                  <CollaborationPanel activeTab={activeTab} setActiveTab={setActiveTab} />
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            </div>
-          </ResizablePanel>
-          {isOutputVisible && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel id="output-panel" order={2} defaultSize={30} minSize={20}>
-                <OutputPanel output={output} onClose={() => setIsOutputVisible(false)} />
+      <ResizablePanelGroup direction="vertical" className="flex-1">
+        <ResizablePanel id="editor-section" order={1} minSize={30}>
+          <div className="h-full pt-2">
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              <ResizablePanel id="code-editor" order={1} defaultSize={65} minSize={30}>
+              <CodeEditorPanel 
+                onCodeChange={isEditable ? handleCodeChange : null}
+                content={selectedFileContent} 
+                readOnly={!isEditable}
+                sessionId={sessionId}
+                currentFile={currentFile}
+              />
               </ResizablePanel>
-            </>
-          )}
-        </ResizablePanelGroup>
-      </div>
+              <ResizableHandle />
+              <ResizablePanel id="collab-panel" order={2} defaultSize={35} minSize={20}>
+                <CollaborationPanel activeTab={activeTab} setActiveTab={setActiveTab} />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        </ResizablePanel>
+        {isOutputVisible && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel id="output-panel" order={2} defaultSize={30} minSize={20}>
+              <OutputPanel output={output} onClose={() => setIsOutputVisible(false)} />
+            </ResizablePanel>
+          </>
+        )}
+      </ResizablePanelGroup>
     </div>
   );
 }

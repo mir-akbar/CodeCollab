@@ -1,329 +1,266 @@
+/**
+ * Pure Y-WebSocket File Upload Routes
+ * Handles all file uploads through Y-WebSocket for real-time collaboration
+ * No traditional fallback - requires Y-WebSocket server for operation
+ */
+
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
-const unzipper = require("unzipper");
 const cors = require("cors");
-const { Readable } = require("stream");
-const { Buffer } = require("buffer");
-const fileStorageService = require("../services/fileStorageService");
+const { asyncHandler } = require("../middleware/errorHandler");
 const accessService = require("../services/accessService");
+const fileStorageService = require("../services/fileStorageService");
 
 const router = express.Router();
 
+// CORS configuration
 router.use(cors({
   origin: "*",
   methods: ["GET", "POST"],
 }));
 
-// Use memory storage for processing
+// Multer configuration for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
 });
 
-// Helper: Get file/folder hierarchy (updated for MongoDB)
-const getFileHierarchy = async (sessionId) => {
-  return await fileStorageService.getFileHierarchy(sessionId);
-};
+module.exports = (yjsServer) => {
+  // Set Y-WebSocket server for real-time collaboration
+  if (yjsServer) {
+    fileStorageService.setYjsServer(yjsServer);
+  }
 
-module.exports = (io) => {
-  router.post("/file-upload", upload.single("file"), async (req, res) => {
+  /**
+   * Pure Y-WebSocket File Upload Endpoint
+   * Requires Y-WebSocket server for real-time collaboration features
+   */
+  router.post("/file-upload", upload.single("file"), asyncHandler(async (req, res) => {
+    // Comprehensive input validation
     if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
+      return res.status(400).json({ 
+        error: "No file uploaded",
+        hint: "Please select a file to upload"
+      });
     }
 
     const { sessionID, email } = req.body;
-    const fileExt = path.extname(req.file.originalname).toLowerCase();
-    const allowedExtensions = [".js", ".java", ".py"];
-
-    console.log("sessionID ===", sessionID);
-
-    // Validate session access
+    const mode = 'hybrid'; // Pure Y-WebSocket mode only
+    
+    // Validate required fields
+    if (!sessionID) {
+      return res.status(400).json({ 
+        error: "Session ID is required",
+        hint: "Please provide a valid session ID"
+      });
+    }
+    
     if (!email) {
-      return res.status(400).json({ error: "User email is required" });
+      return res.status(400).json({ 
+        error: "User email is required",
+        hint: "Please provide a valid email address"
+      });
     }
 
+    // File validation
+    const fileExt = path.extname(req.file.originalname).toLowerCase();
+    const allowedExtensions = [".js", ".java", ".py", ".zip"];
+    
+    if (!allowedExtensions.includes(fileExt)) {
+      return res.status(400).json({ 
+        error: `Unsupported file type: ${fileExt}`,
+        supportedTypes: allowedExtensions,
+        fileName: req.file.originalname
+      });
+    }
+
+    // Check file size
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    if (req.file.size > maxFileSize) {
+      return res.status(400).json({
+        error: `File too large: ${(req.file.size / (1024 * 1024)).toFixed(2)}MB`,
+        hint: `Maximum file size is ${maxFileSize / (1024 * 1024)}MB`,
+        fileName: req.file.originalname
+      });
+    }
+
+    console.log(`📤 Processing Y-WebSocket upload: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)}KB) for session ${sessionID}`);
+
+    // Validate session access (editor permission required)
     try {
-      const hasAccess = await accessService.checkSessionAccess(sessionID, email);
+      const hasAccess = await accessService.checkSessionAccess(sessionID, email, 'editor');
       if (!hasAccess) {
         return res.status(403).json({ 
-          error: "Access denied: User does not have access to this session" 
+          error: "Access denied: User needs editor permission to upload files to this session",
+          hint: "Contact the session owner to get editor access"
         });
       }
 
       console.log(`✅ Session access validated for user ${email} in session ${sessionID}`);
-
     } catch (error) {
       console.error("Session validation error:", error);
       return res.status(500).json({ 
         error: "Failed to validate session access", 
-        details: error.message 
+        details: error.message,
+        hint: "Please try again or contact support if the issue persists"
       });
     }
 
     try {
-      let fileResponse;
+      let result;
 
       if (fileExt === ".zip") {
-        // Handle ZIP file extraction with progressive updates
-        console.log(`📦 Starting ZIP extraction for ${req.file.originalname}...`);
+        // Handle ZIP file with Y-WebSocket processing
+        console.log(`📦 Starting Y-WebSocket ZIP upload for ${req.file.originalname}...`);
         
-        // Emit initial upload event
-        io.emit("zipUploadStarted", { 
-          sessionID, 
-          fileName: req.file.originalname,
-          message: "ZIP file processing started..." 
-        });
+        if (!yjsServer) {
+          return res.status(503).json({
+            error: "Y-WebSocket server unavailable",
+            hint: "Real-time collaboration service is not available",
+            fileName: req.file.originalname
+          });
+        }
         
-        const extractedFiles = await handleZipFile(req.file, sessionID, io);
+        // Notify Y-WebSocket clients about upload start
+        if (yjsServer) {
+          yjsServer.broadcastToSession(sessionID, {
+            type: 'zipUploadStarted',
+            sessionID, 
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            message: "ZIP file processing started..." 
+          });
+        }
 
-        console.log(`✅ ZIP file extraction completed: ${extractedFiles.length} files processed`);
+        // Use Y-WebSocket enhanced ZIP processing
+        result = await fileStorageService.uploadZipFile(sessionID, req.file, email);
+        
+        // Notify Y-WebSocket rooms about new files
+        if (result.files) {
+          result.files.forEach(file => {
+            const roomName = `${sessionID}-${file.name}`;
+            yjsServer.broadcastToRoom(roomName, {
+              type: 'file-uploaded',
+              sessionID,
+              file,
+              message: `New file available for collaboration: ${file.name}`
+            });
+          });
+        }
 
-        fileResponse = {
-          message: "ZIP file uploaded and extracted successfully",
-          files: extractedFiles,
+        // Notify Y-WebSocket clients about upload completion
+        if (yjsServer) {
+          yjsServer.broadcastToSession(sessionID, {
+            type: 'zipUploadComplete',
+            sessionID,
+            files: result.files || result,
+            totalFiles: result.totalFiles || result.length,
+            message: `ZIP upload complete: ${result.totalFiles || result.length} files added`
+          });
+        }
+
+      } else {
+        // Handle single file with Y-WebSocket processing
+        if (!yjsServer) {
+          return res.status(503).json({
+            error: "Y-WebSocket server unavailable",
+            hint: "Real-time collaboration service is not available",
+            fileName: req.file.originalname
+          });
+        }
+
+        // Use Y-WebSocket enhanced single file upload
+        result = await fileStorageService.uploadFile(
           sessionID,
-          totalFiles: extractedFiles.length
+          {
+            fileName: req.file.originalname,
+            fileType: fileExt,
+            content: req.file.buffer,
+            mimeType: req.file.mimetype || 'text/plain',
+            parentFolder: null,
+            filePath: req.file.originalname
+          },
+          email
+        );
+        
+        // Format response for consistency
+        result = {
+          success: true,
+          files: [result.file],
+          message: "File uploaded and ready for collaboration",
+          mode: 'hybrid'
         };
 
-      } else if (allowedExtensions.includes(fileExt)) {
-        // Handle individual file
-        const savedFile = await fileStorageService.storeFile({
-          sessionId: sessionID,
-          fileName: req.file.originalname,
-          fileType: fileExt,
-          content: req.file.buffer,
-          mimeType: req.file.mimetype,
-          parentFolder: null,
-          filePath: req.file.originalname
+        // Notify Y-WebSocket room about new file
+        const roomName = `${sessionID}-${req.file.originalname}`;
+        yjsServer.broadcastToRoom(roomName, {
+          type: 'file-uploaded',
+          sessionID,
+          file: result.files[0],
+          message: `File ready for collaborative editing: ${req.file.originalname}`
         });
 
-        console.log("✅ Single file updated in MongoDB.");
-
-        fileResponse = {
-          message: "File uploaded successfully",
-          files: [
-            {
-              name: savedFile.fileName,
-              type: savedFile.fileType.replace('.', ''),
-              path: savedFile.filePath,
-              size: savedFile.fileSize
-            }
-          ],
-          sessionID
-        };
-
-      } else {
-        return res.status(400).json({ error: "Unsupported file type" });
+        // Notify Y-WebSocket clients about single file upload
+        if (yjsServer) {
+          yjsServer.broadcastToSession(sessionID, {
+            type: 'fileUploaded',
+            sessionId: sessionID,
+            files: result.files,
+            action: "single_upload"
+          });
+        }
       }
 
-      res.json(fileResponse);
-      
-      // Emit socket events for real-time updates
-      console.log(`📡 Emitting final socket events for session ${sessionID}`);
-      
-      if (fileExt === ".zip") {
-        // For ZIP files, the comprehensive events are already emitted in handleZipFile
-        // Just emit a final confirmation
-        io.emit("zipUploadComplete", {
-          ...fileResponse,
-          message: `ZIP upload complete: ${fileResponse.files.length} files added`
-        });
-        
-      } else {
-        // For single files, emit standard events
-        io.emit("fileUploaded", fileResponse);
-        
-        // Also emit to session-specific room for any listeners
-        io.to(sessionID).emit("filesChanged", { 
-          sessionId: sessionID, 
-          files: fileResponse.files,
-          action: "single_upload"
-        });
-      }
-      
-      console.log(`✅ Socket events emitted successfully for session ${sessionID}`);
+      console.log(`✅ Upload completed: ${req.file.originalname} (Y-WebSocket mode)`);
+
+      // Send unified response
+      res.json({
+        success: true,
+        ...result,
+        uploadMode: mode,
+        originalFileName: req.file.originalname
+      });
 
     } catch (error) {
-      console.error("Error processing file:", error);
+      console.error("File upload error:", error);
+      
       res.status(500).json({ 
-        error: "File processing failed", 
-        details: error.message 
+        error: "File upload failed", 
+        details: error.message,
+        fileName: req.file.originalname,
+        mode,
+        hint: "Please try again or contact support if the issue persists"
       });
     }
-  });
+  }));
 
-  // Helper function to check if file should be ignored
-  function shouldIgnoreFile(filePath) {
-    const fileName = path.basename(filePath);
-    const dirName = path.dirname(filePath);
-    
-    // Ignore macOS system files
-    if (fileName.startsWith('._') || fileName === '.DS_Store') {
-      return true;
-    }
-    
-    // Ignore __MACOSX directory and its contents
-    if (dirName.includes('__MACOSX') || filePath.includes('__MACOSX/')) {
-      return true;
-    }
-    
-    // Ignore other common system/hidden files
-    const ignoredPatterns = [
-      '.git/', 'node_modules/', '.vscode/', '.idea/',
-      'Thumbs.db', 'desktop.ini', '.env', '.env.local'
-    ];
-    
-    return ignoredPatterns.some(pattern => 
-      filePath.includes(pattern) || fileName === pattern.replace('/', '')
-    );
-  }
+  /**
+   * Get session files with optional real-time data
+   */
+  router.get("/session-files/:sessionId", asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { email } = req.query;
 
-  async function handleZipFile(zipFile, sessionID, io) {
-    const extractedFiles = [];
-    const filePromises = [];
-    let totalFiles = 0;
-    let processedFiles = 0;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    // Check session access
+    const hasAccess = await accessService.checkSessionAccess(sessionId, email, 'viewer');
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Access denied to session" });
+    }
+
+    // Get files from MongoDB
+    const files = await fileStorageService.getSessionFiles(sessionId);
     
-    console.log(`📦 Starting ZIP extraction for session ${sessionID}`);
-    
-    return new Promise((resolve, reject) => {
-      const readable = Readable.from(zipFile.buffer);
-      
-      readable
-        .pipe(unzipper.Parse())
-        .on('entry', (entry) => {
-          const fileName = entry.path;
-          const fileExtension = path.extname(fileName).toLowerCase();
-          
-          // Skip unwanted system files
-          if (shouldIgnoreFile(fileName)) {
-            console.log(`🚫 Skipping system file: ${fileName}`);
-            entry.autodrain();
-            return;
-          }
-          
-          if (['.js', '.java', '.py'].includes(fileExtension)) {
-            totalFiles++;
-            console.log(`📄 Found valid file ${totalFiles}: ${fileName}`);
-            
-            // Create a promise for each file processing
-            const filePromise = new Promise((resolveFile, rejectFile) => {
-              const chunks = [];
-              
-              entry.on('data', (chunk) => chunks.push(chunk));
-              entry.on('end', async () => {
-                try {
-                  const content = Buffer.concat(chunks);
-                  const parentFolder = path.dirname(fileName) !== '.' ? path.dirname(fileName) : null;
-                  const baseFileName = path.basename(fileName);
-                  const normalizedFilePath = fileName.replace(/\\/g, '/');
-                  
-                  console.log(`💾 Storing file: ${baseFileName} (${content.length} bytes)`);
-                  
-                  const savedFile = await fileStorageService.storeFile({
-                    sessionId: sessionID,
-                    fileName: baseFileName,
-                    fileType: fileExtension,
-                    content,
-                    mimeType: 'text/plain',
-                    parentFolder,
-                    filePath: normalizedFilePath
-                  });
-                  
-                  const fileInfo = {
-                    name: savedFile.fileName,
-                    type: savedFile.fileType.replace('.', ''),
-                    path: savedFile.filePath,
-                    size: savedFile.fileSize
-                  };
-                  
-                  extractedFiles.push(fileInfo);
-                  processedFiles++;
-                  
-                  console.log(`✅ File stored successfully: ${baseFileName} (${processedFiles}/${totalFiles})`);
-                  
-                  // Emit progress update for each file processed
-                  io.emit("zipFileProcessed", { 
-                    sessionID, 
-                    file: fileInfo,
-                    processedFiles, 
-                    totalFiles,
-                    message: `Processed ${processedFiles}/${totalFiles} files` 
-                  });
-                  
-                  resolveFile(fileInfo);
-                  
-                } catch (error) {
-                  const baseFileName = path.basename(fileName);
-                  console.error(`❌ Error storing extracted file ${baseFileName}:`, error);
-                  rejectFile(error);
-                }
-              });
-              
-              entry.on('error', (error) => {
-                console.error(`❌ Error reading file ${fileName}:`, error);
-                rejectFile(error);
-              });
-            });
-            
-            filePromises.push(filePromise);
-          } else {
-            entry.autodrain();
-          }
-        })
-        .on('close', async () => {
-          try {
-            console.log(`📥 ZIP parsing complete. Processing ${filePromises.length} files...`);
-            
-            // Emit initial progress update with total files found
-            io.emit("zipProgress", { 
-              sessionID, 
-              totalFiles: filePromises.length,
-              message: `ZIP parsing complete. Processing ${filePromises.length} files...` 
-            });
-            
-            // Wait for all files to be processed
-            await Promise.all(filePromises);
-            
-            console.log(`🎉 All ${extractedFiles.length} files processed successfully!`);
-            
-            // Get the complete updated file list for the session
-            const allSessionFiles = await fileStorageService.getSessionFiles(sessionID);
-            const transformedFiles = allSessionFiles.map(file => ({
-              name: file.fileName,
-              type: file.fileType.replace('.', ''),
-              path: file.filePath,
-              size: file.fileSize
-            }));
-            
-            // Emit completion event with comprehensive file list
-            io.emit("zipExtractionComplete", { 
-              sessionID, 
-              totalFiles: extractedFiles.length,
-              files: extractedFiles,
-              message: `ZIP extraction complete! ${extractedFiles.length} files added.` 
-            });
-            
-            // Emit session update with all files (most important for sidebar)
-            io.emit("sessionFilesUpdated", { 
-              sessionID, 
-              files: transformedFiles,
-              message: `Session updated: ${transformedFiles.length} total files`
-            });
-            
-            resolve(extractedFiles);
-          } catch (error) {
-            console.error('❌ Error processing ZIP files:', error);
-            reject(error);
-          }
-        })
-        .on('error', (error) => {
-          console.error('❌ ZIP parsing error:', error);
-          reject(error);
-        });
+    res.json({
+      sessionId,
+      files,
+      totalFiles: files.length
     });
-  }
+  }));
 
   return router;
 };
