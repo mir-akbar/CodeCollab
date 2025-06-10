@@ -122,17 +122,7 @@ class SessionService {
     }
   }
 
-  /**
-   * Get all active sessions
-   */
-  async getActiveSessions() {
-    try {
-      return await Session.find({ status: 'active' }).sort({ createdAt: -1 });
-    } catch (error) {
-      console.error('Error getting active sessions:', error);
-      throw error;
-    }
-  }
+
 
   /**
    * Get sessions for a specific user by email
