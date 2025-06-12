@@ -95,9 +95,17 @@ export function useCodeCollaboration(sessionId, filePath) {
         setIsLoading(false);
       };
 
+      // Listen for awareness changes to update user count in real-time
+      const handleAwarenessChange = () => {
+        const currentUsers = codeCollaborationService.getOnlineUsers(sessionId, filePath);
+        console.log('👥 Awareness changed for', filePath, '- Users online:', currentUsers.length);
+        setOnlineUsers([...currentUsers]);
+      };
+
       // Subscribe to events
       codeCollaborationService.on(connectionKey, 'connection-status', handleConnectionStatus);
       codeCollaborationService.on(connectionKey, 'synced', handleSynced);
+      codeCollaborationService.on(connectionKey, 'awareness-changed', handleAwarenessChange);
 
       // Check if already connected
       if (codeCollaborationService.isConnected(sessionId, filePath)) {
@@ -109,6 +117,7 @@ export function useCodeCollaboration(sessionId, filePath) {
         try {
           codeCollaborationService.off(connectionKey, 'connection-status', handleConnectionStatus);
           codeCollaborationService.off(connectionKey, 'synced', handleSynced);
+          codeCollaborationService.off(connectionKey, 'awareness-changed', handleAwarenessChange);
           codeCollaborationService.disconnect(sessionId, filePath);
         } catch (error) {
           console.warn('Error during collaboration cleanup:', error);

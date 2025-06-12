@@ -359,6 +359,14 @@ class CodeCollaborationService {
       requestAnimationFrame(() => {
         this.updateAllCursorElements(userStates);
       });
+
+      // Emit awareness-changed event for UI updates (user count, etc.)
+      this.emit(connectionKey, 'awareness-changed', {
+        added: Array.from(changes.added),
+        updated: Array.from(changes.updated),
+        removed: Array.from(changes.removed),
+        totalUsers: userStates.size
+      });
     });
 
     console.log('✅ Monaco binding created for:', filePath);
