@@ -42,13 +42,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import PropTypes from "prop-types";
 import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 import { navigateToSession } from '@/utils/sessionUtils';
-import { useDeleteSession, useLeaveSession } from '@/hooks/useSessions';
+import { useDeleteSession, useLeaveSession, useSessionParticipants } from '@/hooks/useSessions';
 import { useFavorites } from '@/hooks/useFavorites';
 import { 
   formatSessionDate,
   getParticipantCount,
-  isUserCreator,
-  logDebugInfo
+  isUserCreator
 } from '../utils/sessionComponentUtils';
 import { toast } from 'sonner';
 
@@ -65,28 +64,25 @@ export const SessionCard = ({
   // Use normalized session data passed as props
   const activeSession = session;
   
+  // Fetch participants data lazily using TanStack Query
+  const { data: fetchedParticipants = [], isLoading: participantsLoading } = useSessionParticipants(
+    activeSession?.sessionId || activeSession?.id,
+    { enabled: activeSession?.participantCount > 0 } // Only fetch if there are participants
+  );
+  
   if (!activeSession) {
     return null;
   }
 
   // Enhanced data processing with utilities
-  const participants = activeSession.participants || [];
+  // Use fetched participants if available, otherwise fall back to session.participants
+  const participants = fetchedParticipants.length > 0 ? fetchedParticipants : (activeSession.participants || []);
   const userRole = getUserRole(activeSession, userEmail);
   const isCreator = isUserCreator(activeSession, userEmail);
   const userAccess = activeSession.access;
   const sessionIsFavorite = isFavorite(activeSession.id || activeSession.sessionId);
-  const participantCount = getParticipantCount(participants);
+  const participantCount = getParticipantCount(activeSession); // Pass session object for optimized count
   const formattedDate = formatSessionDate(activeSession.createdAt);
-
-  // Debug logging in development
-  if (import.meta.env.DEV) {
-    logDebugInfo('SessionCard rendering for session:', {
-      sessionId: activeSession.id,
-      userRole,
-      isCreator,
-      participantCount
-    });
-  }
 
   // Permission checks using enhanced system
   const permissions = {
@@ -100,7 +96,13 @@ export const SessionCard = ({
    * @function
    */
   const handleJoin = () => {
-    navigateToSession(activeSession);
+    // Add user email to session object for proper access determination
+    const sessionWithUser = {
+      ...activeSession,
+      userEmail: userEmail
+    };
+    
+    navigateToSession(sessionWithUser);
   };
 
   /**
@@ -119,8 +121,7 @@ export const SessionCard = ({
     // Otherwise, perform direct deletion
     try {
       await deleteSessionMutation.mutateAsync({
-        sessionId: activeSession.sessionId || activeSession.id,
-        userEmail
+        sessionId: activeSession.sessionId || activeSession.id
       });
       toast.success("Session deleted successfully");
     } catch (error) {
@@ -136,8 +137,7 @@ export const SessionCard = ({
   const handleLeave = async () => {
     try {
       await leaveSessionMutation.mutateAsync({
-        sessionId: activeSession.sessionId || activeSession.id,
-        userEmail
+        sessionId: activeSession.sessionId || activeSession.id
       });
       toast.success("Left session successfully");
     } catch (error) {
@@ -201,23 +201,31 @@ export const SessionCard = ({
       {/* Participants Preview */}
       <div className="flex items-center justify-between mt-2">
         <div className="flex -space-x-2">
-          {participants.slice(0, 5).map((p, index) => (
-            <Tooltip key={p.email || `participant-${index}`}>
-              <TooltipTrigger>
-                <Avatar className="h-8 w-8 border-2 border-background">
-                  <AvatarFallback className="bg-accent text-accent-foreground">
-                    {p.name?.[0]?.toUpperCase() || p.email?.[0]?.toUpperCase() || "?"}
-                  </AvatarFallback>
-                </Avatar>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{p.name || p.email || "Unknown User"}</p>
-                <p className="text-muted-foreground text-xs">
-                  {getRoleDisplayName(p.role || (p.access === "edit" ? "editor" : "viewer"))}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
+          {participantsLoading && participantCount > 0 ? (
+            // Loading state - show skeleton avatars
+            [...Array(Math.min(participantCount, 5))].map((_, index) => (
+              <div key={`skeleton-${index}`} className="h-8 w-8 rounded-full bg-accent animate-pulse border-2 border-background" />
+            ))
+          ) : (
+            // Show actual participant avatars
+            participants.slice(0, 5).map((p, index) => (
+              <Tooltip key={p.email || `participant-${index}`}>
+                <TooltipTrigger>
+                  <Avatar className="h-8 w-8 border-2 border-background">
+                    <AvatarFallback className="bg-accent text-accent-foreground">
+                      {p.name?.[0]?.toUpperCase() || p.email?.[0]?.toUpperCase() || "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{p.name || p.email || "Unknown User"}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {getRoleDisplayName(p.role || (p.access === "edit" ? "editor" : "viewer"))}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            ))
+          )}
           {participants.length > 5 && (
             <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs">
               +{participants.length - 5}
@@ -228,15 +236,7 @@ export const SessionCard = ({
           <Button 
             variant="secondary" 
             size="sm"
-            onClick={() => {
-              console.log("SessionCard Invite button clicked:", {
-                activeSession,
-                permissions,
-                userRole,
-                userEmail
-              });
-              onInvite(activeSession);
-            }}
+            onClick={() => onInvite(activeSession)}
             className="gap-1"
           >
             <UserPlus className="h-4 w-4" />

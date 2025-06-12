@@ -15,15 +15,22 @@ export class YjsWebSocketProvider {
     this.connecting = false;
     this.listeners = new Map(); // Simple event system
     this.destroyed = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 1000;
     
     // Get WebSocket URL from environment or default to localhost
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:5000/yjs-websocket';
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/yjs-websocket';
     
-    // Create y-websocket provider
+    // Create y-websocket provider with better error handling
     this.provider = new WebsocketProvider(wsUrl, roomName, doc, {
       awareness: awareness,
       maxBackoffTime: 5000,
-      connectTimeout: 30000
+      connectTimeout: 30000,
+      params: {
+        room: roomName,
+        timestamp: Date.now()
+      }
     });
     
     // Set up awareness event listeners for cursor styling
@@ -84,37 +91,92 @@ export class YjsWebSocketProvider {
   setupProviderListeners() {
     // Handle connection status
     this.provider.on('status', ({ status }) => {
-      console.log(`🔌 WebSocket status: ${status}`);
+      console.log(`🔌 WebSocket status: ${status} for room: ${this.room}`);
       
       if (status === 'connected') {
         this.connecting = false;
+        this.reconnectAttempts = 0; // Reset on successful connection
         this.emit('status', { status: 'connected' });
       } else if (status === 'connecting') {
         this.connecting = true;
         this.emit('status', { status: 'connecting' });
       } else if (status === 'disconnected') {
         this.connecting = false;
+        this.handleDisconnection();
         this.emit('status', { status: 'disconnected' });
       }
     });
 
     // Handle sync status
     this.provider.on('synced', () => {
-      console.log('✅ Document synced');
+      console.log('✅ Document synced for room:', this.room);
       this.synced = true;
       this.emit('synced');
     });
 
     // Handle connection events
-    this.provider.on('connection-close', () => {
-      console.log('🔌 WebSocket connection closed');
+    this.provider.on('connection-close', (event) => {
+      console.log('🔌 WebSocket connection closed for room:', this.room, event);
+      this.handleConnectionClose(event);
       this.emit('connection-close');
     });
 
     this.provider.on('connection-error', (error) => {
-      console.error('❌ WebSocket connection error:', error);
+      console.error('❌ WebSocket connection error for room:', this.room, error);
+      this.handleConnectionError(error);
       this.emit('connection-error', error);
     });
+  }
+
+  handleDisconnection() {
+    if (this.destroyed) return;
+    
+    this.reconnectAttempts++;
+    console.log(`🔄 Handling disconnection (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) for room:`, this.room);
+    
+    if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
+      console.log(`⏰ Scheduling reconnection in ${delay}ms for room:`, this.room);
+      
+      setTimeout(() => {
+        if (!this.destroyed && this.provider) {
+          try {
+            this.provider.connect();
+          } catch (error) {
+            console.error('❌ Error during reconnection attempt:', error);
+          }
+        }
+      }, delay);
+    } else {
+      console.error('❌ Max reconnection attempts reached for room:', this.room);
+      this.emit('max-reconnect-attempts');
+    }
+  }
+
+  handleConnectionClose(event) {
+    if (this.destroyed) return;
+    
+    // Only attempt reconnection for abnormal closures
+    if (event && event.code !== 1000) { // 1000 = normal closure
+      console.log('🔄 Abnormal connection close, attempting reconnection for room:', this.room);
+      this.handleDisconnection();
+    }
+  }
+
+  handleConnectionError(error) {
+    if (this.destroyed) return;
+    
+    console.error('💥 Connection error for room:', this.room, error);
+    
+    // Emit error but don't auto-reconnect for certain errors
+    const isRetryableError = !error.message?.includes('401') && !error.message?.includes('403');
+    
+    if (isRetryableError) {
+      this.handleDisconnection();
+    } else {
+      console.error('❌ Non-retryable error, not attempting reconnection:', error.message);
+      this.emit('fatal-error', error);
+    }
   }
 
   // Compatibility methods

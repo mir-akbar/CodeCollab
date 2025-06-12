@@ -24,8 +24,8 @@ class FileStorageCore {
       const fileExtension = path.extname(fileData.fileName).toLowerCase().slice(1);
       const fileType = this._getFileType(fileExtension);
 
-      // Create file document
-      const file = new FileStorage({
+      // Prepare file data
+      const fileDocument = {
         sessionId: fileData.sessionId,
         fileName: fileData.fileName,
         filePath: filePath,
@@ -33,11 +33,22 @@ class FileStorageCore {
         content: Buffer.isBuffer(fileData.content) ? fileData.content : Buffer.from(fileData.content, 'utf8'),
         fileSize: Buffer.byteLength(fileData.content),
         mimeType: fileData.mimeType || this._getMimeType(fileExtension),
-        uploadedBy: fileData.uploadedBy || fileData.cognitoId
-      });
+        uploadedBy: fileData.uploadedBy || fileData.cognitoId,
+        updatedAt: new Date()
+      };
 
-      await file.save();
-      return file;
+      // Use upsert to handle both new files and updates
+      const result = await FileStorage.findOneAndUpdate(
+        { sessionId: fileData.sessionId, filePath: filePath },
+        fileDocument,
+        { 
+          upsert: true, 
+          new: true,
+          setDefaultsOnInsert: true
+        }
+      );
+
+      return result;
     } catch (error) {
       console.error('Error storing file:', error);
       throw error;

@@ -23,30 +23,6 @@ export const isValidSession = (session) => {
 };
 
 /**
- * Normalizes session object to ensure consistent structure
- * @param {object} session - Raw session object
- * @returns {object} - Normalized session object
- */
-export const normalizeSession = (session) => {
-  if (!session) return null;
-
-  return {
-    id: session.id || session.sessionId,
-    sessionId: session.sessionId || session.id,
-    name: session.name || 'Untitled Session',
-    description: session.description || '',
-    creator: session.creator || 'Unknown',
-    isCreator: session.isCreator || false,
-    status: session.status || 'active',
-    createdAt: session.createdAt || new Date().toISOString(),
-    updatedAt: session.updatedAt || session.createdAt || new Date().toISOString(),
-    participants: Array.isArray(session.participants) ? session.participants : [],
-    isFavorite: session.isFavorite || false,
-    role: session.role || 'viewer'
-  };
-};
-
-/**
  * Formats session creation date for display
  * @param {string} dateString - ISO date string
  * @returns {string} - Formatted date
@@ -87,10 +63,29 @@ export const formatParticipantCount = (count) => {
 
 /**
  * Gets participant count from session data
- * @param {Array} participants - Array of participants
+ * Optimized to use direct count from database when available
+ * @param {Array|Object} participantsOrSession - Array of participants OR session object with participantCount
  * @returns {number} - Number of participants
  */
-export const getParticipantCount = (participants) => {
+export const getParticipantCount = (participantsOrSession) => {
+  // If it's a session object with a direct participantCount field, use that (optimized)
+  if (participantsOrSession && typeof participantsOrSession === 'object' && 
+      typeof participantsOrSession.participantCount === 'number') {
+    return participantsOrSession.participantCount;
+  }
+  
+  // Check for participantCount in activity object (database structure)
+  if (participantsOrSession && typeof participantsOrSession === 'object' && 
+      participantsOrSession.activity && 
+      typeof participantsOrSession.activity.participantCount === 'number') {
+    return participantsOrSession.activity.participantCount;
+  }
+  
+  // Fall back to array counting for backward compatibility
+  const participants = Array.isArray(participantsOrSession) 
+    ? participantsOrSession 
+    : participantsOrSession?.participants;
+    
   return Array.isArray(participants) ? participants.length : 0;
 };
 

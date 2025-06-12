@@ -15,13 +15,36 @@ const SessionParticipantSchema = new mongoose.Schema({
   sessionId: {
     type: String,
     required: true,
-    index: true,
     ref: 'Session'
   },
   cognitoId: {
     type: String,
-    required: true,
-    index: true
+    required: true
+  },
+  // User identification fields (for improved UX without constant User lookups)
+  username: {
+    type: String,
+    required: false, // Optional since some users might not have usernames
+    trim: true,
+    lowercase: true
+  },
+  displayName: {
+    type: String,
+    required: false, // Fallback to name or email if not provided
+    trim: true,
+    maxlength: 100
+  },
+  name: {
+    type: String,
+    required: true, // Always required for participant identification
+    trim: true,
+    maxlength: 100
+  },
+  email: {
+    type: String,
+    required: true, // Always required for participant identification
+    lowercase: true,
+    trim: true
   },
   role: {
     type: String,
@@ -45,19 +68,19 @@ const SessionParticipantSchema = new mongoose.Schema({
   },
   lastActive: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   }
 }, {
   timestamps: true,
   collection: 'session_participants'
 });
 
-// Compound indexes for efficient queries
-SessionParticipantSchema.index({ sessionId: 1, cognitoId: 1 }, { unique: true });
-SessionParticipantSchema.index({ cognitoId: 1, status: 1 });
-SessionParticipantSchema.index({ sessionId: 1, status: 1 });
-SessionParticipantSchema.index({ sessionId: 1, role: 1 });
+// ===== ESSENTIAL INDEXES ONLY =====
+
+// Keep only the indexes that are actually used in queries
+SessionParticipantSchema.index({ sessionId: 1, cognitoId: 1 }, { unique: true }); // Primary participant lookup
+SessionParticipantSchema.index({ cognitoId: 1, status: 1 }); // User's active participations  
+SessionParticipantSchema.index({ sessionId: 1, status: 1 }); // Session participant filtering & counting
 
 // ===== CORE STATIC METHODS =====
 
@@ -108,14 +131,37 @@ SessionParticipantSchema.statics.isSessionOwner = function(sessionId, cognitoId)
 /**
  * Create invitation
  */
-SessionParticipantSchema.statics.createInvitation = function({ sessionId, cognitoId, invitedBy, role = 'viewer' }) {
+SessionParticipantSchema.statics.createInvitation = function({ sessionId, cognitoId, invitedBy, role = 'viewer', username, displayName, name, email }) {
   return this.create({
     sessionId,
     cognitoId,
     role,
     status: 'invited',
-    invitedBy
+    invitedBy,
+    username,
+    displayName,
+    name,
+    email
   });
+};
+
+/**
+ * Update user information in participant record
+ */
+SessionParticipantSchema.statics.updateUserInfo = async function(cognitoId, userInfo) {
+  const { username, displayName, name, email } = userInfo;
+  
+  return this.updateMany(
+    { cognitoId },
+    {
+      $set: {
+        username,
+        displayName,
+        name,
+        email
+      }
+    }
+  );
 };
 
 // ===== CORE INSTANCE METHODS =====
@@ -154,7 +200,7 @@ SessionParticipantSchema.methods.canAssignRole = function(targetRole) {
 /**
  * Accept invitation
  */
-SessionParticipantSchema.methods.acceptInvitation = function() {
+SessionParticipantSchema.methods.acceptInvitation = async function() {
   if (this.status !== 'invited') {
     throw new Error('Can only accept invitations with invited status');
   }
@@ -162,7 +208,16 @@ SessionParticipantSchema.methods.acceptInvitation = function() {
   this.status = 'active';
   this.joinedAt = new Date();
   
-  return this.save();
+  const result = await this.save();
+
+  // Update session participant count
+  const Session = require('./Session');
+  const session = await Session.findOne({ sessionId: this.sessionId });
+  if (session) {
+    await session.updateActivity();
+  }
+
+  return result;
 };
 
 /**

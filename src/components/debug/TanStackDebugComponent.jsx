@@ -1,6 +1,6 @@
 import { useSessionActions } from '../../hooks/useSessions';
 import { useRealTimeSession } from '../../hooks/useRealTimeSession';
-import { useSessionFiles, useFileManager } from '../../hooks/useSessionFiles';
+import { useFileManager } from '../../hooks/file-manager/useFileQueries';
 import { useUser } from '../../contexts/UserContext';
 import PropTypes from 'prop-types';
 

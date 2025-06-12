@@ -17,13 +17,15 @@ class FileWebSocketService {
   /**
    * Connect to Y-WebSocket server for a session
    */
-  connect(sessionId, wsUrl = 'ws://localhost:3001') {
+  connect(sessionId, wsUrl) {
     if (this.providers.has(sessionId)) {
       return this.providers.get(sessionId);
     }
 
     const doc = new Doc();
-    const provider = new WebsocketProvider(wsUrl, sessionId, doc);
+    // Use session-specific URL if not provided
+    const finalWsUrl = wsUrl || `ws://localhost:3001/yjs-websocket/${sessionId}`;
+    const provider = new WebsocketProvider(finalWsUrl, sessionId, doc);
 
     this.docs.set(sessionId, doc);
     this.providers.set(sessionId, provider);
@@ -76,6 +78,18 @@ class FileWebSocketService {
                 sessionId: data.sessionId,
                 files: data.files,
                 action: data.action
+              }
+            });
+            break;
+
+          case 'file-deleted':
+            callback({
+              type: 'file-deleted',
+              data: {
+                sessionId: data.sessionId,
+                file: data.file,
+                deletedBy: data.deletedBy,
+                message: data.message
               }
             });
             break;

@@ -151,12 +151,23 @@ class YjsDocumentSync {
     }
 
     const roomId = `${sessionId}-${filePath}`;
+    console.log(`📢 [YJS SYNC] Broadcasting to collaboration room:`, {
+      roomId,
+      eventType: eventData.type,
+      sessionId,
+      filePath,
+      hasFile: !!eventData.file,
+      timestamp: new Date().toISOString()
+    });
+
     this.yjsServer.broadcastToRoom(roomId, {
       ...eventData,
       sessionId,
       filePath,
       timestamp: new Date().toISOString()
     });
+
+    console.log(`✅ [YJS SYNC] Event broadcasted to room: ${roomId}`);
   }
 }
 

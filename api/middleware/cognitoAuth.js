@@ -67,7 +67,7 @@ const requireAuth = async (req, res, next) => {
     const decoded = await verifyCognitoToken(token);
 
     // Debug: Log the decoded token to see what attributes we're getting
-    console.log('Decoded Cognito token:', JSON.stringify(decoded, null, 2));
+    // console.log('Decoded Cognito token:', JSON.stringify(decoded, null, 2));
 
     // Ensure token is an access token (not ID token)
     if (decoded.token_use !== 'access') {

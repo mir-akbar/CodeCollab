@@ -112,27 +112,81 @@ export default function SessionManagerTopNavBar() {
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="gap-2 p-1 px-2">
-                            <Avatar className="h-8 w-8">
-                                <AvatarFallback>{userData.name?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
+                        <Button variant="outline" className="gap-2 p-2 px-3 h-auto bg-card hover:bg-muted border-border hover:border-primary/30 transition-colors">
+                            <Avatar className="h-8 w-8 ring-1 ring-border">
+                                <AvatarFallback className="text-sm font-medium bg-muted text-foreground">
+                                    {userData.name?.charAt(0)?.toUpperCase() || "U"}
+                                </AvatarFallback>
                             </Avatar>
-                            <div className="flex flex-col items-start text-sm md:block">
-                                <span className="text-xs text-muted-foreground">{userData.email}</span>
+                            <div className="flex flex-col items-start text-left min-w-0 max-w-[200px]">
+                                <div className="text-sm font-medium truncate text-foreground">
+                                    {userData.name || "User"}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                    {userData.email}
+                                </div>
                             </div>
-                            <ChevronDown size={16} className="text-muted-foreground hidden md:block" />
+                            <ChevronDown size={16} className="text-muted-foreground ml-1 flex-shrink-0" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                        {userRole && (
-                            <>
-                                <DropdownMenuLabel>Role: {userRole}</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                            </>
-                        )}
-                        <DropdownMenuItem className="text-red-500" onClick={handleLogout}>
-                            <LogOut className="mr-2 h-4 w-4" />
-                            <span>Log out</span>
-                        </DropdownMenuItem>
+                    <DropdownMenuContent align="end" className="w-64 bg-card border-2 border-border shadow-lg">
+                        {/* User Profile Section */}
+                        <div className="px-3 py-4 bg-muted/30 rounded-t-md">
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10 ring-2 ring-primary/20">
+                                    <AvatarFallback className="text-lg font-medium bg-primary/10 text-primary">
+                                        {userData.name?.charAt(0)?.toUpperCase() || "U"}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                    <div className="font-medium text-sm truncate text-foreground">
+                                        {userData.name || "User"}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                        {userData.email}
+                                    </div>
+                                    {userRole && (
+                                        <Badge variant="secondary" className="mt-1 w-fit text-xs bg-primary/10 text-primary border-primary/20">
+                                            {userRole}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <DropdownMenuSeparator className="bg-border" />
+                        
+                        {/* Profile Information */}
+                        <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/20">
+                            Account Information
+                        </DropdownMenuLabel>
+                        
+                        <div className="px-3 py-2 space-y-2 bg-card">
+                            <div className="text-xs p-2 rounded bg-muted/30">
+                                <span className="text-muted-foreground">Display Name: </span>
+                                <span className="font-medium text-foreground">{userData.name || "Not set"}</span>
+                            </div>
+                            <div className="text-xs p-2 rounded bg-muted/30">
+                                <span className="text-muted-foreground">Email: </span>
+                                <span className="font-medium text-foreground">{userData.email}</span>
+                            </div>
+                            {userRole && (
+                                <div className="text-xs p-2 rounded bg-muted/30">
+                                    <span className="text-muted-foreground">Session Role: </span>
+                                    <span className="font-medium capitalize text-foreground">{userRole}</span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <DropdownMenuSeparator className="bg-border" />
+                        
+                        {/* Actions */}
+                        <div className="p-1">
+                            <DropdownMenuItem className="text-red-500 focus:text-red-500 focus:bg-red-50 dark:focus:bg-red-950/50 rounded m-1" onClick={handleLogout}>
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Log out</span>
+                            </DropdownMenuItem>
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

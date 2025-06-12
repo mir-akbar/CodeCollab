@@ -1,145 +1,48 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send } from "lucide-react";
+import { Send, Users } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
-import { io } from "socket.io-client";
-import * as Y from 'yjs';
-import { SocketIOProvider } from './yjs/SocketIOProvider';
-import { API_URL } from "../common/Constant";
-
-const socket = io(`${API_URL}`, { transports: ["websocket", "polling"] });
+import { useChat } from "@/hooks/chat/useChat";
+import { useLocation } from "react-router-dom";
 
 function ChatPanel() {
-  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef(null);
-  const yjsDocRef = useRef(null);
-  const providerRef = useRef(null);
-  const messagesArrayRef = useRef(null);
   const { userEmail } = useUser();
+  const location = useLocation();
+  
+  // Get session ID from URL
   const searchParams = new URLSearchParams(location.search);
-  const session = searchParams.get("session");
+  const sessionId = searchParams.get("session");
 
-  // Initialize YJS for chat
-  useEffect(() => {
-    if (!session || !userEmail) return;
-    
-    console.log("🔗 Initializing YJS chat for session:", session);
-    
-    // Create YJS document for chat
-    const doc = new Y.Doc();
-    yjsDocRef.current = doc;
-    
-    // Create provider for chat
-    const roomName = `chat-${session}`;
-    const provider = new SocketIOProvider(roomName, socket, doc);
-    providerRef.current = provider;
-    
-    // Get shared messages array
-    const messagesArray = doc.getArray('messages');
-    messagesArrayRef.current = messagesArray;
-    
-    // Set up user awareness for chat
-    if (provider.awareness && provider.awareness.setLocalStateField) {
-      try {
-        provider.awareness.setLocalStateField('user', {
-          name: userEmail.split('@')[0],
-          email: userEmail,
-          color: stringToColor(userEmail),
-          isInChat: true,
-        });
-      } catch (error) {
-        console.error('Error setting chat awareness:', error);
-      }
-    }
-    
-    // Listen for provider sync
-    const handleSynced = () => {
-      console.log('💬 Chat synchronized');
-      setIsConnected(true);
-      
-      // Load existing messages
-      const existingMessages = messagesArray.toArray();
-      setMessages(existingMessages);
-    };
-    
-    // Listen for message changes
-    const handleMessagesChange = () => {
-      const allMessages = messagesArray.toArray();
-      setMessages([...allMessages]);
-    };
-    
-    if (provider.synced) {
-      handleSynced();
-    } else {
-      provider.on('synced', handleSynced);
-    }
-    
-    messagesArray.observe(handleMessagesChange);
-    
-    return () => {
-      console.log('🧹 Cleaning up chat YJS resources');
-      if (messagesArray) {
-        messagesArray.unobserve(handleMessagesChange);
-      }
-      if (providerRef.current) {
-        try {
-          providerRef.current.destroy();
-        } catch (error) {
-          console.warn('Error destroying chat provider:', error);
-        }
-      }
-      if (yjsDocRef.current) {
-        try {
-          yjsDocRef.current.destroy();
-        } catch (error) {
-          console.warn('Error destroying chat document:', error);
-        }
-      }
-      setIsConnected(false);
-    };
-  }, [session, userEmail]);
-
+  // Use chat hook
+  const {
+    messages,
+    onlineUsers,
+    isConnected,
+    isLoading,
+    error,
+    sendMessage,
+    getUserColor,
+    userCount
+  } = useChat(sessionId);
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !messagesArrayRef.current || !isConnected) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
 
-    const message = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      sender: userEmail.split('@')[0],
-      senderEmail: userEmail,
-      content: newMessage.trim(),
-      timestamp: new Date().toISOString(),
-    };
-    
     try {
-      // Add message to YJS array
-      messagesArrayRef.current.push([message]);
+      await sendMessage(newMessage);
       setNewMessage("");
-      console.log('💬 Message sent via YJS:', message.content);
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
-  // Helper function to generate color from string
-  const stringToColor = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    let color = "#";
-    for (let i = 0; i < 3; i++) {
-      const value = (hash >> (i * 8)) & 0xff;
-      color += ("00" + value.toString(16)).slice(-2);
-    }
-    return color;
-  };
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -147,25 +50,54 @@ function ChatPanel() {
     }
   };
 
-  if (!session) {
+  if (!sessionId) {
     return (
       <div className="flex flex-col h-full items-center justify-center text-gray-400">
         <p>No session selected</p>
       </div>
     );
   }
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center text-gray-400">
+        <p>Loading chat...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center text-gray-400">
+        <p>Error loading chat: {error.message}</p>
+        <Button onClick={() => window.location.reload()} className="mt-2">
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Connection Status */}
       <div className="p-2 bg-gray-800 text-xs">
-        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
-        {isConnected ? '🔗 Chat connected' : '⏳ Connecting to chat...'}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+            {isConnected ? '🔗 Chat connected' : '⏳ Connecting to chat...'}
+          </div>
+          {userCount > 0 && (
+            <div className="flex items-center text-gray-400">
+              <Users className="h-3 w-3 mr-1" />
+              {userCount}
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => {
           const isOwnMessage = message.senderEmail === userEmail;
-          const isSystemMessage = message.sender === "System";
+          const isSystemMessage = message.sender === "System" || message.type === "system";
 
           return (
             <div
@@ -184,7 +116,7 @@ function ChatPanel() {
                 }`}
               >
                 {!isOwnMessage && !isSystemMessage && (
-                  <div className="text-xs font-medium mb-1" style={{ color: stringToColor(message.senderEmail || message.sender) }}>
+                  <div className="text-xs font-medium mb-1" style={{ color: getUserColor(message.senderEmail || message.sender) }}>
                     {message.sender}
                   </div>
                 )}

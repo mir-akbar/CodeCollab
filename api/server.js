@@ -38,9 +38,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 const sessionRoutes = require('./routes/sessions');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
-const fileUploadRoutes = require('./routes/fileUpload');
-const getFileRoutes = require('./routes/getFile');
+const fileRoutes = require('./routes/files'); // Unified file management
 const fileVersionRoutes = require('./routes/fileVersions');
+const executeRoutes = require('./routes/execute');
 
 /**
  * CodeLab API Server Class
@@ -121,9 +121,9 @@ class CodeLabServer {
           auth: '/api/auth',
           user: '/api/user',
           sessions: '/api/sessions',
-          'file-upload': '/api/file-upload',
-          'file-operations': '/api/get-file',
+          files: '/api/files',
           'file-versions': '/api/file-versions',
+          'code-execution': '/api/execute',
           docs: '/api/docs'
         }
       });
@@ -138,10 +138,12 @@ class CodeLabServer {
     // Mount session routes
     this.app.use('/api/sessions', sessionRoutes);
 
-    // Mount file management routes
-    this.app.use('/api/file-upload', fileUploadRoutes(this.yjsServer));
-    this.app.use('/api', getFileRoutes());
+    // Mount file management routes (unified)
+    this.app.use('/api/files', fileRoutes(this.yjsServer));
     this.app.use('/api/file-versions', fileVersionRoutes());
+
+    // Mount code execution routes
+    this.app.use('/api/execute', executeRoutes);
 
     // API documentation endpoint
     this.app.get('/api/docs', (req, res) => {

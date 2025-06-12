@@ -22,7 +22,14 @@ class FileUploadHandler {
     }
     
     try {
-      console.log(`📤 Starting Y-WebSocket file upload: ${fileData.fileName} for session ${sessionId}`);
+      console.log(`📤 [FILE UPLOAD] Starting single file upload: ${fileData.fileName} for session ${sessionId}`);
+      console.log(`📤 [FILE UPLOAD] File data:`, {
+        fileName: fileData.fileName,
+        fileType: fileData.fileType,
+        size: fileData.content?.length || 0,
+        parentFolder: fileData.parentFolder,
+        filePath: fileData.filePath
+      });
       
       // Store file in MongoDB
       const savedFile = await this.fileStorageCore.storeFile({
@@ -48,14 +55,21 @@ class FileUploadHandler {
       };
       
       // Create collaboration room and notify about new file
-      const roomId = this.yjsDocumentSync.createCollaborationRoom(sessionId, fileData.fileName);
-      this.yjsDocumentSync.notifyCollaborationRoom(sessionId, fileData.fileName, {
+      console.log(`🔗 [FILE UPLOAD] Creating collaboration room for file: ${fileInfo.path}`);
+      const roomId = this.yjsDocumentSync.createCollaborationRoom(sessionId, fileInfo.path);
+      
+      console.log(`📢 [FILE UPLOAD] Notifying collaboration room about file ready: ${fileInfo.path}`);
+      this.yjsDocumentSync.notifyCollaborationRoom(sessionId, fileInfo.path, {
         type: 'file-ready-for-collaboration',
         file: fileInfo,
         message: `File uploaded and ready for real-time editing: ${fileData.fileName}`
       });
       
-      console.log(`✅ File stored and Y-WebSocket room notified: ${fileData.fileName}`);
+      console.log(`✅ [FILE UPLOAD] File upload complete - stored and Y-WebSocket room notified: ${fileData.fileName}`, {
+        fileId: fileInfo.id,
+        roomId,
+        collaborationReady: true
+      });
       
       return {
         success: true,
@@ -66,7 +80,12 @@ class FileUploadHandler {
       };
       
     } catch (error) {
-      console.error(`❌ Y-WebSocket file upload failed: ${fileData.fileName}`, error);
+      console.error(`❌ [FILE UPLOAD] Single file upload failed: ${fileData.fileName}`, {
+        error: error.message,
+        stack: error.stack,
+        sessionId,
+        fileName: fileData.fileName
+      });
       throw error;
     }
   }
@@ -94,10 +113,10 @@ class FileUploadHandler {
       // Create collaboration rooms and notify about all new files
       const roomIds = [];
       extractedFiles.forEach(file => {
-        const roomId = this.yjsDocumentSync.createCollaborationRoom(sessionId, file.name);
+        const roomId = this.yjsDocumentSync.createCollaborationRoom(sessionId, file.path);
         roomIds.push(roomId);
         
-        this.yjsDocumentSync.notifyCollaborationRoom(sessionId, file.name, {
+        this.yjsDocumentSync.notifyCollaborationRoom(sessionId, file.path, {
           type: 'file-ready-for-collaboration',
           file,
           message: `ZIP file extracted: ${file.name} ready for collaboration`

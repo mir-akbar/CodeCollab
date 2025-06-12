@@ -12,14 +12,27 @@ class AccessService {
    */
   async hasSessionAccess(sessionId, cognitoId, requiredRole = 'viewer') {
     try {
+      console.log(`🔐 hasSessionAccess: Checking access for cognitoId ${cognitoId} in session ${sessionId} with required role: ${requiredRole}`);
+      
       const participant = await SessionParticipant.findOne({ sessionId, cognitoId });
-      if (!participant || participant.status !== 'active') {
+      
+      if (!participant) {
+        console.error(`🔐 hasSessionAccess: No participant record found for cognitoId ${cognitoId} in session ${sessionId}`);
+        return false;
+      }
+      
+      // Allow both 'active' and 'invited' participants to access the session
+      if (participant.status !== 'active' && participant.status !== 'invited') {
+        console.error(`🔐 hasSessionAccess: Participant status is '${participant.status}', not 'active' or 'invited' for cognitoId ${cognitoId} in session ${sessionId}`);
         return false;
       }
 
-      return this._hasRolePermission(participant.role, requiredRole);
+      const hasPermission = this._hasRolePermission(participant.role, requiredRole);
+      console.log(`🔐 hasSessionAccess: Participant found with role '${participant.role}' and status '${participant.status}', permission check result: ${hasPermission}`);
+
+      return hasPermission;
     } catch (error) {
-      console.error('Error checking session access:', error);
+      console.error('🔐 Error checking session access:', error);
       return false;
     }
   }
@@ -94,23 +107,30 @@ class AccessService {
   async checkSessionAccess(sessionId, userEmail, requiredRole = 'viewer') {
     try {
       if (!sessionId || !userEmail) {
-        console.error('Missing sessionId or userEmail');
+        console.error('checkSessionAccess: Missing sessionId or userEmail:', { sessionId, userEmail });
         return false;
       }
+
+      console.log(`🔐 Checking session access for user ${userEmail} in session ${sessionId} with required role: ${requiredRole}`);
 
       // Find user by email to get cognitoId
       const User = require('../models/User');
       const user = await User.findByEmail(userEmail.trim().toLowerCase());
       
       if (!user) {
-        console.error(`User not found for email: ${userEmail}`);
+        console.error(`🔐 checkSessionAccess: User not found for email: ${userEmail}`);
         return false;
       }
 
+      console.log(`🔐 Found user: ${user.email} with cognitoId: ${user.cognitoId}`);
+
       // Check session access using cognitoId
-      return await this.hasSessionAccess(sessionId, user.cognitoId, requiredRole);
+      const hasAccess = await this.hasSessionAccess(sessionId, user.cognitoId, requiredRole);
+      console.log(`🔐 Session access result: ${hasAccess} for user ${userEmail} in session ${sessionId}`);
+      
+      return hasAccess;
     } catch (error) {
-      console.error('Error in checkSessionAccess:', error);
+      console.error('🔐 Error in checkSessionAccess:', error);
       return false;
     }
   }

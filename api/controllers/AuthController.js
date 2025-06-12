@@ -127,7 +127,7 @@ class AuthController {
       }
 
       // Note: Tokens come directly from Cognito login, so they're trusted
-      console.log('Storing tokens from successful Cognito authentication');
+      // console.log('Storing tokens from successful Cognito authentication');
 
       // Set httpOnly cookies for secure token storage
       const expiresInMs = (expiresIn || 3600) * 1000;
@@ -168,18 +168,18 @@ class AuthController {
       const refreshToken = req.cookies?.refreshToken;
 
       if (!refreshToken) {
-        console.log('No refresh token found in cookies');
+        // console.log('No refresh token found in cookies');
         return res.status(401).json({
           error: 'Refresh token not found'
         });
       }
       
-      console.log('Attempting to refresh token with Cognito');
+      // console.log('Attempting to refresh token with Cognito');
       
       // Use Cognito service to refresh the token
       const newTokens = await cognitoService.refreshAccessToken(refreshToken);
       
-      console.log('Token refresh successful');
+      // console.log('Token refresh successful');
 
       // Store the new tokens in httpOnly cookies
       const cookieOptions = {

@@ -10,15 +10,13 @@ const UserSchema = new mongoose.Schema({
   cognitoId: {
     type: String,
     unique: true,
-    required: true,
-    index: true
+    required: true
   },
   email: {
     type: String,
     unique: true,
     required: true,
     lowercase: true,
-    index: true,
     validate: {
       validator: function(email) {
         // Allow standard email format and cognito.local placeholder emails
@@ -38,8 +36,7 @@ const UserSchema = new mongoose.Schema({
   displayName: {
     type: String,
     trim: true,
-    maxlength: 100,
-    index: true // For searching users in session UI
+    maxlength: 100
   },
   
   // Unique username from Cognito (preferred_username)
@@ -50,7 +47,6 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
     maxlength: 50,
-    index: true,
     validate: {
       validator: function(username) {
         // Allow alphanumeric, underscore, hyphen, and dot
@@ -63,26 +59,21 @@ const UserSchema = new mongoose.Schema({
   // Minimal activity tracking
   lastActiveAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   },
 
   // Account status
   status: {
     type: String,
     enum: ['active', 'inactive', 'suspended'],
-    default: 'active',
-    index: true
+    default: 'active'
   }
 }, {
   timestamps: true,
   collection: 'users'
 });
 
-// Indexes for performance
-UserSchema.index({ cognitoId: 1, status: 1 });
-UserSchema.index({ email: 1, status: 1 });
-UserSchema.index({ lastActiveAt: -1 });
+// No additional indexes needed - unique constraints on cognitoId, email, and username provide sufficient indexing
 
 // Static method to find user by email
 UserSchema.statics.findByEmail = function(email) {

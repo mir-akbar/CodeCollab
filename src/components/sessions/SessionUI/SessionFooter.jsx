@@ -43,11 +43,11 @@ import { Link } from "react-router-dom";
 import { useMemo } from "react";
 
 // Debug logging utility
-const logDebugInfo = (action, data) => {
-  if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
-    console.log(`[SessionFooter Debug] ${action}:`, data);
-  }
-};
+// const logDebugInfo = (action, data) => {
+//   if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
+//     console.log(`[SessionFooter Debug] ${action}:`, data);
+//   }
+// };
 
 export const SessionFooter = () => {
   /**
@@ -56,7 +56,7 @@ export const SessionFooter = () => {
    */
   const currentYear = useMemo(() => {
     const year = new Date().getFullYear();
-    logDebugInfo('Current year calculated', year);
+    // logDebugInfo('Current year calculated', year);
     return year;
   }, []);
 
@@ -71,7 +71,7 @@ export const SessionFooter = () => {
       { to: "/profile", label: "Profile", description: "Manage your user profile and settings" },
       { to: "/help", label: "Help", description: "Get help and support documentation" }
     ];
-    logDebugInfo('Navigation links configured', links.length);
+    // logDebugInfo('Navigation links configured', links.length);
     return links;
   }, []);
 
@@ -100,7 +100,7 @@ export const SessionFooter = () => {
         ariaLabel: "Connect with us on LinkedIn (opens in new tab)"
       }
     ];
-    logDebugInfo('Social links configured', links.length);
+    // logDebugInfo('Social links configured', links.length);
     return links;
   }, []);
 

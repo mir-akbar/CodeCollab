@@ -14,13 +14,6 @@ const SESSION_STATUS = {
   ARCHIVED: 'archived'
 };
 
-const ROLES = {
-  OWNER: 'owner',
-  ADMIN: 'admin',
-  EDITOR: 'editor',
-  VIEWER: 'viewer'
-};
-
 // ===== SCHEMA DEFINITION =====
 
 const SessionSchema = new mongoose.Schema({
@@ -60,8 +53,7 @@ const SessionSchema = new mongoose.Schema({
    */
   creator: {
     type: String, // cognitoId from AWS Cognito
-    required: true,
-    index: true
+    required: true
   },
 
   /**
@@ -70,8 +62,7 @@ const SessionSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: Object.values(SESSION_STATUS),
-    default: SESSION_STATUS.ACTIVE,
-    index: true
+    default: SESSION_STATUS.ACTIVE
   },
 
   /**
@@ -120,8 +111,7 @@ const SessionSchema = new mongoose.Schema({
   activity: {
     lastActivity: {
       type: Date,
-      default: Date.now,
-      index: true
+      default: Date.now
     },
     
     participantCount: {
@@ -138,19 +128,21 @@ const SessionSchema = new mongoose.Schema({
 
 // ===== INDEXES =====
 
-SessionSchema.index({ creator: 1, status: 1 });
-SessionSchema.index({ status: 1, 'settings.isPrivate': 1, createdAt: -1 });
-SessionSchema.index({ name: 'text', description: 'text' });
+// Only keep essential compound indexes based on actual query patterns
+SessionSchema.index({ creator: 1, status: 1 }); // For getUserSessions query
 
 // ===== METHODS =====
 
 /**
  * Check if user can join session based on simple rules
  */
-SessionSchema.methods.canUserJoin = function(userEmail) {
+SessionSchema.methods.canUserJoin = async function(userEmail) {
   if (this.status !== SESSION_STATUS.ACTIVE) {
     return { allowed: false, reason: 'Session is not active' };
   }
+
+  // Ensure participant count is up to date
+  await this.updateActivity();
 
   if (this.activity.participantCount >= this.settings.maxParticipants) {
     return { allowed: false, reason: 'Session is at maximum capacity' };
@@ -175,7 +167,7 @@ SessionSchema.methods.updateActivity = async function() {
   
   const count = await SessionParticipant.countDocuments({
     sessionId: this.sessionId,
-    status: 'active'
+    status: { $in: ['active', 'invited'] }  // Count both active and invited participants
   });
   
   this.activity.lastActivity = new Date();
@@ -193,10 +185,12 @@ SessionSchema.methods.archive = async function() {
   this.status = SESSION_STATUS.ARCHIVED;
   await this.save();
 
-  await SessionParticipant.updateMany(
-    { sessionId: this.sessionId, status: 'active' },
-    { status: 'left', leftAt: new Date() }
-  );
+  // Remove all participant records when session is archived
+  // Since the session no longer exists for collaboration, 
+  // there's no need to keep participant records
+  await SessionParticipant.deleteMany({
+    sessionId: this.sessionId
+  });
 
   return { success: true };
 };

@@ -4,11 +4,12 @@
  */
 
 import { useState, useRef } from 'react';
+import PropTypes from 'prop-types';
 import { Upload, File, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFileManager } from '@/hooks/file-manager/useFileManager';
+import { useFileManager } from '@/hooks/file-manager/useFileQueries';
 import { useUploadProgress } from '@/hooks/file-manager/useFileEvents';
 import { useUser } from '@/contexts/UserContext';
 import { cn } from '@/lib/utils';
@@ -200,17 +201,6 @@ function UploadProgressItem({ fileName, progress, status, error }) {
     }
   };
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-500';
-      case 'failed':
-        return 'bg-red-500';
-      default:
-        return 'bg-primary';
-    }
-  };
-
   return (
     <div className="p-3 border rounded-lg bg-card">
       <div className="flex items-center space-x-3">
@@ -227,14 +217,28 @@ function UploadProgressItem({ fileName, progress, status, error }) {
       </div>
       
       {status === 'uploading' && (
-        <Progress 
-          value={progress} 
-          className="mt-2 h-2"
-          indicatorClassName={getStatusColor()}
-        />
+        <div className="mt-2">
+          <Progress 
+            value={progress} 
+            className="h-2"
+          />
+        </div>
       )}
     </div>
   );
 }
+
+// PropTypes
+FileUpload.propTypes = {
+  sessionId: PropTypes.string.isRequired,
+  className: PropTypes.string
+};
+
+UploadProgressItem.propTypes = {
+  fileName: PropTypes.string.isRequired,
+  progress: PropTypes.number.isRequired,
+  status: PropTypes.oneOf(['uploading', 'completed', 'failed']).isRequired,
+  error: PropTypes.string
+};
 
 export default FileUpload;

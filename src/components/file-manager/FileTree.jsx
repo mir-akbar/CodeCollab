@@ -3,7 +3,9 @@
  * Displays hierarchical file structure with interactive features
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   ChevronRight, 
   ChevronDown, 
@@ -32,13 +34,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useFileManager } from '@/hooks/file-manager/useFileManager';
+import { useFileManager, fileQueryKeys } from '@/hooks/file-manager/useFileQueries';
+import { apiClient } from '@/services/apiClient';
 import { cn } from '@/lib/utils';
+import { trackFileLoading } from '@/utils/performanceMonitor';
 
-export function FileTree({ sessionId, className }) {
-  const { hierarchy, isLoading, deleteFile, isDeleting } = useFileManager(sessionId);
+export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFilePath, userEmail, className }) {
+  const { hierarchy, isLoading, deleteFile, isDeleting } = useFileManager(sessionId, userEmail);
+  const queryClient = useQueryClient();
   const [expandedFolders, setExpandedFolders] = useState(new Set());
-  const [selectedFile, setSelectedFile] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
 
@@ -52,23 +56,140 @@ export function FileTree({ sessionId, className }) {
     setExpandedFolders(newExpanded);
   };
 
-  const handleFileClick = (file) => {
-    setSelectedFile(file.path);
-    // TODO: Implement file loading and editor integration
-    console.log('File selected:', file);
+  // Prefetch file content on hover for instant loading
+  const handleFileHover = async (file) => {
+    if (file.type !== 'folder' && sessionId) {
+      const queryKey = fileQueryKeys.content(sessionId, file.path);
+      
+      // Check if already cached
+      const cachedData = queryClient.getQueryData(queryKey);
+      if (!cachedData) {
+        // Prefetch content in background
+        queryClient.prefetchQuery({
+          queryKey,
+          queryFn: async () => {
+            const response = await apiClient.get(
+              `/api/files/content?path=${encodeURIComponent(file.path)}&sessionId=${encodeURIComponent(sessionId)}`,
+              { responseType: 'text' }
+            );
+            return response.data;
+          },
+          staleTime: 10 * 60 * 1000,
+        });
+      }
+    }
+  };
+
+  // Prefetch small files immediately when component mounts
+  React.useEffect(() => {
+    if (hierarchy && hierarchy.length > 0 && sessionId) {
+      const prefetchSmallFiles = (items) => {
+        items.forEach((item, index) => {
+          if (item.type === 'file' && item.size && item.size < 100000) { // Files under 100KB (increased from 50KB)
+            const queryKey = fileQueryKeys.content(sessionId, item.path);
+            
+            // Only prefetch if not already cached
+            if (!queryClient.getQueryData(queryKey)) {
+              // Stagger requests to avoid overwhelming server
+              setTimeout(() => {
+                console.log('🚀 Prefetching file for instant loading:', item.path);
+                queryClient.prefetchQuery({
+                  queryKey,
+                  queryFn: async () => {
+                    const response = await apiClient.get(
+                      `/api/files/content?path=${encodeURIComponent(item.path)}&sessionId=${encodeURIComponent(sessionId)}`,
+                      { responseType: 'text' }
+                    );
+                    return response.data;
+                  },
+                  staleTime: 10 * 60 * 1000, // 10 minutes
+                  gcTime: 30 * 60 * 1000, // 30 minutes
+                });
+              }, index * 200); // Stagger with 200ms intervals
+            }
+          } else if (item.children) {
+            prefetchSmallFiles(item.children);
+          }
+        });
+      };
+      
+      // Start prefetching after a short delay to let the UI settle
+      setTimeout(() => {
+        prefetchSmallFiles(hierarchy);
+      }, 500);
+    }
+  }, [hierarchy, sessionId, queryClient]);
+
+  const handleFileClick = async (file) => {
+    if (onFileSelect && file.type !== 'folder') {
+      // Start performance tracking
+      trackFileLoading.start(file.path);
+      
+      const queryKey = fileQueryKeys.content(sessionId, file.path);
+      
+      // Try to get content from cache first for instant loading
+      trackFileLoading.cacheCheck(file.path);
+      const cachedContent = queryClient.getQueryData(queryKey);
+      
+      if (cachedContent !== undefined) {
+        // Use cached content for instant loading
+        console.log('⚡ Instant file loading from cache:', file.path);
+        onFileSelect(file.path, cachedContent);
+        trackFileLoading.end(file.path);
+      } else {
+        // Content not in cache, start loading and pass empty content for now
+        console.log('📡 Loading file content from server:', file.path);
+        trackFileLoading.apiRequest(file.path);
+        onFileSelect(file.path, '');
+        
+        // Trigger content fetch in background
+        queryClient.prefetchQuery({
+          queryKey,
+          queryFn: async () => {
+            const response = await apiClient.get(
+              `/api/files/content?path=${encodeURIComponent(file.path)}&sessionId=${encodeURIComponent(sessionId)}`,
+              { responseType: 'text' }
+            );
+            trackFileLoading.apiResponse(file.path);
+            return response.data;
+          },
+          staleTime: 10 * 60 * 1000,
+        }).then(() => {
+          trackFileLoading.end(file.path);
+        });
+      }
+    }
   };
 
   const handleDeleteClick = (file, e) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent any default behavior
     setFileToDelete(file);
     setDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (fileToDelete) {
-      deleteFile({ filePath: fileToDelete.path });
-      setDeleteDialogOpen(false);
-      setFileToDelete(null);
+  const confirmDelete = async () => {
+    if (fileToDelete && !isDeleting) {
+      const filePathToDelete = fileToDelete.path;
+      
+      try {
+        // First close the dialog and clear state
+        setDeleteDialogOpen(false);
+        setFileToDelete(null);
+        
+        // Then perform the deletion
+        await deleteFile({ filePath: filePathToDelete });
+        
+        // Notify parent component about the deletion after successful deletion
+        if (onFileDeleted) {
+          onFileDeleted(filePathToDelete);
+        }
+      } catch (error) {
+        console.error('Delete operation failed:', error);
+        // Reset state on error
+        setDeleteDialogOpen(false);
+        setFileToDelete(null);
+      }
     }
   };
 
@@ -109,7 +230,7 @@ export function FileTree({ sessionId, className }) {
   const renderTreeNode = (node, level = 0) => {
     const isFolder = node.type === 'folder';
     const isExpanded = expandedFolders.has(node.path);
-    const isSelected = selectedFile === node.path;
+    const isSelected = selectedFilePath === node.path;
 
     return (
       <div key={node.path}>
@@ -121,6 +242,7 @@ export function FileTree({ sessionId, className }) {
           )}
           style={{ paddingLeft: `${level * 16}px` }}
           onClick={() => isFolder ? toggleFolder(node.path) : handleFileClick(node)}
+          onMouseEnter={() => !isFolder ? handleFileHover(node) : null}
         >
           {/* Expand/Collapse Icon */}
           <div className="w-4 h-4 flex items-center justify-center">
@@ -151,18 +273,19 @@ export function FileTree({ sessionId, className }) {
           )}
 
           {/* Actions Menu */}
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
                 onClick={(e) => e.stopPropagation()}
+                aria-label="File actions menu"
               >
                 <MoreHorizontal className="h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" side="bottom">
               {!isFolder && (
                 <DropdownMenuItem onClick={() => handleFileClick(node)}>
                   <Download className="h-4 w-4 mr-2" />
@@ -243,5 +366,14 @@ export function FileTree({ sessionId, className }) {
     </>
   );
 }
+
+FileTree.propTypes = {
+  sessionId: PropTypes.string.isRequired,
+  onFileSelect: PropTypes.func,
+  onFileDeleted: PropTypes.func,
+  selectedFilePath: PropTypes.string,
+  userEmail: PropTypes.string,
+  className: PropTypes.string
+};
 
 export default FileTree;

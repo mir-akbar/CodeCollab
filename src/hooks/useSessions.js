@@ -59,7 +59,7 @@ const sessionAPI = {
   },
 
   // Delete a session
-  deleteSession: async ({ sessionId, userEmail }) => {
+  deleteSession: async ({ sessionId }) => {
     const response = await secureAPIClient.delete(`/api/sessions/${sessionId}`);
     
     if (!response.data.success) {
@@ -85,7 +85,7 @@ const sessionAPI = {
   },
 
   // Leave a session
-  leaveSession: async ({ sessionId, userEmail }) => {
+  leaveSession: async ({ sessionId }) => {
     const response = await secureAPIClient.post(`/api/sessions/${sessionId}/leave`);
     
     if (!response.data.success) {
@@ -137,6 +137,17 @@ const sessionAPI = {
     
     return response.data;
   },
+
+  // Fetch participants for a specific session
+  getSessionParticipants: async (sessionId) => {
+    const response = await secureAPIClient.get(`/api/sessions/${sessionId}/participants`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch session participants');
+    }
+    
+    return response.data.participants || [];
+  },
 };
 
 // Query keys factory for consistent cache management
@@ -176,6 +187,24 @@ export const useSessionDetails = (sessionId) => {
     gcTime: 5 * 60 * 1000, // 5 minutes cache time
     refetchOnWindowFocus: true, // Refetch when user returns to tab
     refetchInterval: 15 * 1000, // Auto-refetch every 15 seconds for real-time updates
+  });
+};
+
+/**
+ * Hook to fetch participants for a specific session
+ * Lazy loading approach - only fetch when component needs participant data
+ */
+export const useSessionParticipants = (sessionId, options = {}) => {
+  const { enabled = true } = options;
+  
+  return useQuery({
+    queryKey: sessionKeys.participants(sessionId),
+    queryFn: () => sessionAPI.getSessionParticipants(sessionId),
+    enabled: !!sessionId && enabled, // Only run if sessionId exists and enabled
+    staleTime: 2 * 60 * 1000, // 2 minutes - participants change less frequently
+    gcTime: 10 * 60 * 1000, // 10 minutes cache time
+    refetchOnWindowFocus: false, // Don't auto-refetch on focus for performance
+    refetchInterval: false, // No auto-refetch - use manual invalidation on mutations
   });
 };
 

@@ -33,17 +33,34 @@ class ParticipantService {
         throw new Error('User is already a participant in this session');
       }
 
-      // Create new participant
+      // Get user information for participant record
+      const user = await User.findOne({ cognitoId });
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Create new participant with user information
       const participant = new SessionParticipant({
         sessionId,
         cognitoId,
         role,
         status: 'invited',
         invitedBy,
+        username: user.username,
+        displayName: user.displayName,
+        name: user.name,
+        email: user.email,
         invitedAt: new Date()
       });
 
       await participant.save();
+
+      // Update session participant count
+      const session = await Session.findOne({ sessionId });
+      if (session) {
+        await session.updateActivity();
+      }
+
       return { success: true, participant };
     } catch (error) {
       console.error('Error adding participant:', error);
@@ -63,6 +80,12 @@ class ParticipantService {
 
       participant.role = newRole;
       await participant.save();
+
+      // Update session participant count (in case role affects active count)
+      const session = await Session.findOne({ sessionId });
+      if (session) {
+        await session.updateActivity();
+      }
       
       return { success: true, participant };
     } catch (error) {
@@ -80,15 +103,19 @@ class ParticipantService {
       if (result.deletedCount === 0) {
         throw new Error('Participant not found');
       }
+
+      // Update session participant count
+      const session = await Session.findOne({ sessionId });
+      if (session) {
+        await session.updateActivity();
+      }
       
       return { success: true };
     } catch (error) {
       console.error('Error removing participant:', error);
       throw error;
     }
-  }
-
-  /**
+  }  /**
    * Transfer ownership to another participant
    */
   async transferOwnership(sessionId, currentOwnerCognitoId, newOwnerCognitoId) {
@@ -121,9 +148,15 @@ class ParticipantService {
 
       // Also update session creator field
       await Session.updateOne(
-        { sessionId }, 
+        { sessionId },
         { creator: newOwnerCognitoId }
       );
+
+      // Update session participant count (roles might affect counting logic)
+      const session = await Session.findOne({ sessionId });
+      if (session) {
+        await session.updateActivity();
+      }
 
       return { success: true };
     } catch (error) {
@@ -149,6 +182,12 @@ class ParticipantService {
       participant.status = 'active';
       participant.joinedAt = new Date();
       await participant.save();
+
+      // Update session participant count
+      const session = await Session.findOne({ sessionId });
+      if (session) {
+        await session.updateActivity();
+      }
 
       return { success: true, participant };
     } catch (error) {

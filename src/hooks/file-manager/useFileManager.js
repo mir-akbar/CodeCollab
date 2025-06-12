@@ -51,7 +51,10 @@ export function useFileContent(sessionId, filePath) {
     queryKey: fileQueryKeys.content(sessionId, filePath),
     queryFn: () => fileApiService.getFileContent(filePath, sessionId),
     enabled: !!(sessionId && filePath),
-    staleTime: 60000, // 1 minute
+    staleTime: 30000, // 30 seconds - reduced from 1 minute for faster updates
+    gcTime: 1000 * 60 * 5, // 5 minutes cache time
+    retry: 2, // Reduced retries for faster failure detection
+    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 5000),
     refetchOnWindowFocus: false,
   });
 }
@@ -101,12 +104,12 @@ export function useFileUpload(sessionId) {
 /**
  * Hook to delete files
  */
-export function useFileDelete(sessionId) {
+export function useFileDelete(sessionId, userEmail = null) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ filePath }) => 
-      fileApiService.deleteFile(filePath, sessionId),
+      fileApiService.deleteFile(filePath, sessionId, userEmail),
     
     onSuccess: (data) => {
       // Invalidate related queries
@@ -153,12 +156,12 @@ export function useRefreshFiles(sessionId) {
 /**
  * Hook that combines multiple file operations for convenience
  */
-export function useFileManager(sessionId) {
+export function useFileManager(sessionId, userEmail = null) {
   const sessionFiles = useSessionFiles(sessionId);
   const fileHierarchy = useFileHierarchy(sessionId);
   const storageStats = useStorageStats(sessionId);
   const uploadFile = useFileUpload(sessionId);
-  const deleteFile = useFileDelete(sessionId);
+  const deleteFile = useFileDelete(sessionId, userEmail);
   const refreshFiles = useRefreshFiles(sessionId);
 
   return {

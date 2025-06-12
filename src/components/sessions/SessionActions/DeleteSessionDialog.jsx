@@ -154,7 +154,7 @@ export function DeleteSessionDialog({
     return null;
   }
 
-  const participantCount = getParticipantCount(session);
+  const participantCount = getParticipantCount(session); // Now uses optimized count from session object
   const formattedDate = formatSessionDate(session.createdAt);
 
   return (

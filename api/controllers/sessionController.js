@@ -27,23 +27,16 @@ class SessionController {
   getUserSessions = asyncHandler(async (req, res) => {
     const { userEmail } = req;
     
-    console.log('SessionController.getUserSessions called with userEmail:', userEmail);
-    
     // Validate user email
     if (!SessionValidationUtils.isValidEmail(userEmail)) {
-      console.log('Email validation failed for:', userEmail);
       return res.status(400).json({
         success: false,
         error: "Invalid user email format"
       });
     }
     
-    console.log('Email validation passed, fetching sessions for:', userEmail);
-    
-    // Get user sessions using simplified service
+    // Get user sessions using the consistency-fixed service
     const sessions = await sessionService.getUserSessions(userEmail);
-    
-    console.log('Sessions retrieved:', sessions.length);
     
     res.json({
       success: true,

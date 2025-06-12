@@ -55,11 +55,11 @@ import PropTypes from "prop-types";
 import { useMemo } from "react";
 
 // Debug logging utility
-const logDebugInfo = (action, data) => {
-  if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
-    console.log(`[AccessLevelBadge Debug] ${action}:`, data);
-  }
-};
+// const logDebugInfo = (action, data) => {
+//   if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
+//     console.log(`[AccessLevelBadge Debug] ${action}:`, data);
+//   }
+// };
 
 /**
  * AccessLevelBadge Component
@@ -86,10 +86,10 @@ export const AccessLevelBadge = ({
    */
   const displayRole = useMemo(() => {
     const result = role || (isCreator ? "owner" : null) || access;
-    logDebugInfo('Role calculation', {
-      input: { access, role, isCreator },
-      output: result
-    });
+    // logDebugInfo('Role calculation', {
+    //   input: { access, role, isCreator },
+    //   output: result
+    // });
     return result;
   }, [access, role, isCreator]);
 
@@ -150,7 +150,7 @@ export const AccessLevelBadge = ({
     };
 
     const config = configs[displayRole] || configs.viewer;
-    logDebugInfo('Badge config selected', { displayRole, config: config.label });
+    // logDebugInfo('Badge config selected', { displayRole, config: config.label });
     return config;
   }, [displayRole]);
 

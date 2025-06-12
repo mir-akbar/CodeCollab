@@ -41,7 +41,7 @@ class SessionService {
 
       await session.save();
       
-      // Add creator as owner participant
+      // Add creator as owner participant with user information
       const SessionParticipant = require('../models/SessionParticipant');
       await SessionParticipant.create({
         sessionId,
@@ -49,8 +49,15 @@ class SessionService {
         role: 'owner',
         status: 'active',
         invitedBy: creatorUser.cognitoId, // Self-created
+        username: creatorUser.username,
+        displayName: creatorUser.displayName,
+        name: creatorUser.name,
+        email: creatorUser.email,
         joinedAt: new Date()
       });
+      
+      // Update session participant count to reflect the new creator
+      await session.updateActivity();
       
       return {
         success: true,
@@ -112,8 +119,8 @@ class SessionService {
         throw new Error('Session not found');
       }
 
-      session.status = 'archived';
-      await session.save();
+      // Use the session's archive method to properly clean up participants
+      await session.archive();
       
       return { success: true, message: 'Session archived successfully' };
     } catch (error) {
@@ -129,16 +136,16 @@ class SessionService {
    */
   async getUserSessions(userEmail) {
     try {
-      console.log('SessionService.getUserSessions called with email:', userEmail);
+      // console.log('SessionService.getUserSessions called with email:', userEmail);
       
       // Find user by email to get their cognitoId
       const user = await User.findOne({ email: userEmail });
       if (!user) {
-        console.log('User not found for email:', userEmail);
+        // console.log('User not found for email:', userEmail);
         return [];
       }
 
-      console.log('Found user:', user.email, 'cognitoId:', user.cognitoId);
+      // console.log('Found user:', user.email, 'cognitoId:', user.cognitoId);
 
       // Find sessions where user is the creator
       const createdSessions = await Session.find({ 
@@ -146,7 +153,7 @@ class SessionService {
         status: 'active' 
       }).sort({ createdAt: -1 });
 
-      console.log('Found', createdSessions.length, 'sessions created by user');
+      // console.log('Found', createdSessions.length, 'sessions created by user');
 
       // Find sessions where user is a participant
       const SessionParticipant = require('../models/SessionParticipant');
@@ -155,7 +162,7 @@ class SessionService {
         status: { $in: ['active', 'invited'] } // Include both active and invited participants
       });
 
-      console.log('Found', participantRecords.length, 'participant records for user');
+      // console.log('Found', participantRecords.length, 'participant records for user');
 
       // Get unique session IDs from participant records (where user didn't create the session)
       const participatedSessionIds = [];
@@ -173,88 +180,66 @@ class SessionService {
         status: 'active'
       }).sort({ createdAt: -1 });
 
-      console.log('Found', participatedSessions.length, 'sessions where user participates');
+      // console.log('Found', participatedSessions.length, 'sessions where user participates');
 
-      // Transform created sessions
+      // CONSISTENCY FIX: Create a standardized session transformation function
+      const transformSessionForResponse = async (session, isUserCreator, userParticipant = null) => {
+        // Use cached participant count from session.activity if available, otherwise count
+        const participantCount = session.activity?.participantCount ?? await SessionParticipant.countDocuments({
+          sessionId: session.sessionId,
+          status: { $in: ['active', 'invited'] }
+        });
+
+        // Get basic participant info for UI (name, email, role only)
+        const basicParticipants = await SessionParticipant.find({
+          sessionId: session.sessionId,
+          status: { $in: ['active', 'invited'] }
+        }).select('email name displayName role status').lean();
+
+        // CONSISTENCY FIX: Always get creator email for consistency
+        let creatorEmail;
+        if (isUserCreator) {
+          creatorEmail = userEmail; // Current user is creator
+        } else {
+          // Look up creator email from User collection
+          const creatorUser = await User.findOne({ cognitoId: session.creator });
+          creatorEmail = creatorUser?.email || session.creator;
+        }
+
+        return {
+          id: session._id,
+          sessionId: session.sessionId,
+          name: session.name,
+          description: session.description,
+          creator: creatorEmail, // CONSISTENCY FIX: Always email format
+          isCreator: isUserCreator, // CONSISTENCY FIX: Properly calculated
+          status: session.status,
+          createdAt: session.createdAt,
+          userRole: isUserCreator ? 'owner' : (userParticipant?.role || 'viewer'),
+          participantCount: participantCount, // Direct field for frontend compatibility
+          activity: session.activity, // Include full activity object
+          participants: basicParticipants // Include basic participant info for avatars
+        };
+      };
+
+      // Transform created sessions with standardized format
       const createdSessionsWithMetadata = await Promise.all(
-        createdSessions.map(async (session) => {
-          // Get all participants for this session (both active and invited)
-          const allParticipants = await SessionParticipant.find({
-            sessionId: session.sessionId,
-            status: { $in: ['active', 'invited'] }
-          });
-
-          // Convert participant cognitoIds to emails
-          const participants = [];
-          for (const p of allParticipants) {
-            const participantUser = await User.findOne({ cognitoId: p.cognitoId });
-            participants.push({
-              email: participantUser?.email || 'unknown',
-              role: p.role,
-              status: p.status
-            });
-          }
-
-          return {
-            id: session._id,
-            sessionId: session.sessionId,
-            name: session.name,
-            description: session.description,
-            creator: userEmail, // Use email for frontend compatibility
-            isCreator: true,
-            status: session.status,
-            createdAt: session.createdAt,
-            userRole: 'owner', // Creator is always owner
-            participants: participants // Show all actual participants
-          };
-        })
+        createdSessions.map(session => transformSessionForResponse(session, true))
       );
 
-      // Transform participated sessions
+      // Transform participated sessions with standardized format
       const participatedSessionsWithMetadata = await Promise.all(
         participatedSessions.map(async (session) => {
           // Get user's role in this session
           const userParticipant = participantRecords.find(p => p.sessionId === session.sessionId);
-          
-          // Get all participants for this session (both active and invited)
-          const allParticipants = await SessionParticipant.find({
-            sessionId: session.sessionId,
-            status: { $in: ['active', 'invited'] } // Include both active and invited participants
-          });
-
-          // Convert participant cognitoIds to emails
-          const participants = [];
-          for (const p of allParticipants) {
-            const participantUser = await User.findOne({ cognitoId: p.cognitoId });
-            participants.push({
-              email: participantUser?.email || 'unknown',
-              role: p.role,
-              status: p.status
-            });
-          }
-
-          // Find session creator
-          const creatorUser = await User.findOne({ cognitoId: session.creator });
-
-          return {
-            id: session._id,
-            sessionId: session.sessionId,
-            name: session.name,
-            description: session.description,
-            creator: creatorUser?.email || session.creator,
-            isCreator: false,
-            status: session.status,
-            createdAt: session.createdAt,
-            userRole: userParticipant?.role || 'viewer',
-            participants: participants
-          };
+          return transformSessionForResponse(session, false, userParticipant);
         })
       );
 
       // Combine both arrays
       const allSessions = [...createdSessionsWithMetadata, ...participatedSessionsWithMetadata];
       
-      console.log('Returning', allSessions.length, 'total sessions (', createdSessionsWithMetadata.length, 'created +', participatedSessionsWithMetadata.length, 'participated)');
+      // console.log('Returning', allSessions.length, 'total sessions (', createdSessionsWithMetadata.length, 'created +', participatedSessionsWithMetadata.length, 'participated)');
       
       return allSessions;
     } catch (error) {

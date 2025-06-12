@@ -4,16 +4,17 @@
  */
 
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import { RefreshCw, Files, Upload as UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileUpload } from './FileUpload';
 import { FileTree } from './FileTree';
-import { useFileManager } from '@/hooks/file-manager/useFileManager';
+import { useFileManager } from '@/hooks/file-manager/useFileQueries';
 import { useFileEvents } from '@/hooks/file-manager/useFileEvents';
 import { cn } from '@/lib/utils';
 
-export function FileManager({ sessionId, className }) {
+export function FileManager({ sessionId, onFileSelect, onFileDeleted, selectedFilePath, userEmail, className }) {
   const { isRefreshing, refreshFiles, error } = useFileManager(sessionId);
   const { isConnected } = useFileEvents(sessionId);
   const [activeTab, setActiveTab] = useState('files');
@@ -61,7 +62,14 @@ export function FileManager({ sessionId, className }) {
           {/* Files Tab */}
           <TabsContent value="files" className="flex-1 overflow-hidden px-4 pb-4 mt-0">
             <div className="h-full overflow-auto pt-4">
-              <FileTree sessionId={sessionId} className="pt-2" />
+              <FileTree 
+                sessionId={sessionId} 
+                className="pt-2"
+                onFileSelect={onFileSelect}
+                onFileDeleted={onFileDeleted}
+                selectedFilePath={selectedFilePath}
+                userEmail={userEmail}
+              />
             </div>
           </TabsContent>
 
@@ -96,5 +104,14 @@ export function FileManager({ sessionId, className }) {
     </div>
   );
 }
+
+FileManager.propTypes = {
+  sessionId: PropTypes.string,
+  onFileSelect: PropTypes.func,
+  onFileDeleted: PropTypes.func,
+  selectedFilePath: PropTypes.string,
+  userEmail: PropTypes.string,
+  className: PropTypes.string
+};
 
 export default FileManager;

@@ -1,5 +1,5 @@
 import './App.css'
-import CodeWorkspace from './pages/CodeWorkspace'
+import CodeWorkspacePage from './pages/CodeWorkspace'
 import LandingPage from './pages/LandingPage'
 import { BrowserRouter as Router, Routes, Route } from 'react-router'
 import LoginPage from './pages/LoginPage'
@@ -23,7 +23,7 @@ function App() {
           path="/workspace"
           element={
             <PrivateRoute>
-              <CodeWorkspace />
+              <CodeWorkspacePage />
             </PrivateRoute>
           }
         />

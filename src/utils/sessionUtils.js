@@ -1,5 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { toast } from 'sonner';
+import { roleToAccess } from './permissions';
 
 const SECRET_KEY = "f9a8b7c6d5e4f3a2b1c0d9e8f7g6h5i4j3k2l1m0n9o8p7q6";
 
@@ -13,13 +14,81 @@ export const encryptData = (text) => {
 };
 
 /**
+ * Decryption function for session access tokens
+ * @param {string} cipherText - Encrypted text to decrypt
+ * @returns {string} - Decrypted text
+ */
+export const decryptSessionAccess = (cipherText) => {
+    try {
+        console.log('Decrypting session access:', { cipherText, type: typeof cipherText, length: cipherText?.length });
+        
+        if (!cipherText) {
+            console.log('No cipher text provided');
+            return "";
+        }
+
+        const decodedCipherText = decodeURIComponent(cipherText);
+        console.log('Decoded cipher text:', { decodedCipherText, length: decodedCipherText.length });
+        
+        const bytes = CryptoJS.AES.decrypt(decodedCipherText, SECRET_KEY);
+        const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+        
+        console.log('Decryption result:', { decryptedText, length: decryptedText.length });
+
+        if (!decryptedText) {
+            console.error("Decryption returned empty string");
+            throw new Error("Decryption returned empty string");
+        }
+
+        return decryptedText;
+    } catch (error) {
+        console.error("Decryption error:", error.message, { cipherText });
+        throw new Error("Invalid access token");
+    }
+};
+
+/**
  * Navigate to session workspace with encrypted access
- * @param {Object} session - Session object with sessionId and access
+ * @param {Object} session - Session object with sessionId and userRole
  */
 export const navigateToSession = (session) => {
     console.log('Navigating to session:', session);
+    
+    const sessionId = session.sessionId || session.id;
+    
+    // Determine access based on user's role in the session
+    let access = 'view'; // Default to view access
+    
+    if (session.userRole) {
+        // Use the roleToAccess utility function for consistency
+        access = roleToAccess(session.userRole);
+    } else if (session.isCreator || session.creator === session.userEmail) {
+        // Fallback: If user is the creator, they should have edit access
+        access = 'edit';
+    }
+    
+    console.log('Session navigation details:', {
+        sessionId,
+        userRole: session.userRole,
+        isCreator: session.isCreator,
+        creator: session.creator,
+        userEmail: session.userEmail,
+        determinedAccess: access
+    });
+    
+    if (!sessionId) {
+        toast.error("Invalid session ID");
+        return;
+    }
+    
     const workspaceUrl = window.location.origin;
-    const sessionUrl = `${workspaceUrl}/workspace?session=${session.sessionId}&access=${encodeURIComponent(encryptData(session.access))}`;
+    const encryptedAccess = encryptData(access);
+    const sessionUrl = `${workspaceUrl}/workspace?session=${sessionId}&access=${encodeURIComponent(encryptedAccess)}`;
+    
+    console.log('Generated session URL:', sessionUrl);
+    console.log('Access value being encrypted:', access);
+    console.log('Encrypted access:', encryptedAccess);
+    
     window.location.href = sessionUrl;
     toast.success("Joining session...");
 };

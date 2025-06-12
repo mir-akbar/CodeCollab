@@ -178,13 +178,13 @@ export function AuthProvider({ children }) {
   };
 
   // Debug auth state changes
-  console.log('AuthContext state:', { 
-    hasUser: !!user, 
-    isAuthenticated: !!user && !error, 
-    isLoading: isCheckingAuth, 
-    error: error?.message,
-    userEmail: user?.email 
-  });
+  // console.log('AuthContext state:', { 
+  //   hasUser: !!user, 
+  //   isAuthenticated: !!user && !error, 
+  //   isLoading: isCheckingAuth, 
+  //   error: error?.message,
+  //   userEmail: user?.email 
+  // });
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

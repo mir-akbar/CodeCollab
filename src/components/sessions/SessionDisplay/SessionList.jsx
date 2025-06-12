@@ -29,7 +29,6 @@
 import { SessionCard } from './SessionCard';
 import { SessionCardSkeleton } from './SessionCardSkeleton';
 import { 
-  normalizeSession,
   generateSessionKey,
   logDebugInfo
 } from '../utils/sessionComponentUtils';
@@ -42,12 +41,13 @@ export const SessionList = ({
   onInvite,
   onDelete
 }) => {
-  // Normalize session data for consistency
-  const normalizedSessions = sessions.map(normalizeSession).filter(Boolean);
+  // Filter out null/undefined sessions (backend now provides consistent data structure)
+  // No need for normalization since backend transformSessionForResponse ensures consistency
+  const validSessions = sessions.filter(Boolean);
 
   // Debug logging in development
   if (import.meta.env.DEV) {
-    logDebugInfo('SessionList rendered with sessions:', normalizedSessions);
+    logDebugInfo('SessionList rendered with sessions:', validSessions);
   }
 
   /**
@@ -68,7 +68,7 @@ export const SessionList = ({
    * Render empty state when no sessions available
    * @returns {JSX.Element} Empty state component
    */
-  if (!normalizedSessions || normalizedSessions.length === 0) {
+  if (!validSessions || validSessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <p className="text-muted-foreground text-lg">No sessions found</p>
@@ -79,7 +79,7 @@ export const SessionList = ({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {normalizedSessions.map((session, index) => {
+      {validSessions.map((session, index) => {
         // Generate unique key using utility function
         const uniqueKey = generateSessionKey(session, index);
         

@@ -5,7 +5,14 @@ import { PathBreadCrumb } from './PathBreadCrumb';
 import { useNavigate } from "react-router-dom";
 import PropTypes from 'prop-types';
 
-export function TopNavBar({ toggleSidebar, open, currentPath, onRunCode }) {
+export function TopNavBar({ 
+  toggleSidebar, 
+  open, 
+  currentPath, 
+  onRunCode, 
+  isExecuting = false,
+  extraActions = null 
+}) {
   const navigate = useNavigate();
   const onShowSessions = () => {
     navigate("/sessions");
@@ -29,13 +36,15 @@ export function TopNavBar({ toggleSidebar, open, currentPath, onRunCode }) {
       </div>
 
       {/* Middle section: Action buttons */}
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
+        {extraActions && extraActions}
         <Button 
           onClick={onRunCode}
-          className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+          disabled={isExecuting}
+          className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center gap-2"
         >
-          <Play size={16} />
-          Run Code
+          <Play size={16} className={isExecuting ? "animate-spin" : ""} />
+          {isExecuting ? "Running..." : "Run Code"}
         </Button>
       </div>
 
@@ -47,12 +56,12 @@ export function TopNavBar({ toggleSidebar, open, currentPath, onRunCode }) {
         >
           Sessions
         </Button>
-        <Button
+        {/* <Button
           onClick={() => navigate("/user-profile-test")}
           className="bg-purple-600 hover:bg-purple-700 text-white"
         >
           User Profile
-        </Button>
+        </Button> */}
         <UserSection />
       </div>
     </div>
@@ -63,5 +72,7 @@ TopNavBar.propTypes = {
   toggleSidebar: PropTypes.func.isRequired,
   open: PropTypes.bool.isRequired,
   currentPath: PropTypes.array.isRequired,
-  onRunCode: PropTypes.func.isRequired
+  onRunCode: PropTypes.func.isRequired,
+  isExecuting: PropTypes.bool,
+  extraActions: PropTypes.node
 };

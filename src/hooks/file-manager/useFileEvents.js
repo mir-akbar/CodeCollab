@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { fileWebSocketService } from '@/services/file-manager/fileWebSocket';
-import { fileQueryKeys } from './useFileManager';
+import { fileQueryKeys } from './useFileQueries';
 import { toast } from 'sonner';
 
 export function useFileEvents(sessionId) {
@@ -21,7 +21,7 @@ export function useFileEvents(sessionId) {
     console.log(`🔌 Connecting to file events for session: ${sessionId}`);
 
     // Connect to Y-WebSocket
-    const provider = fileWebSocketService.connect(sessionId);
+    fileWebSocketService.connect(sessionId);
 
     // Monitor connection status
     const checkConnection = () => {
@@ -52,6 +52,17 @@ export function useFileEvents(sessionId) {
           
           toast.success('File uploaded successfully', {
             description: `${event.data.files?.length || 1} file(s) added`,
+          });
+          break;
+
+        case 'file-deleted':
+          // Invalidate queries to refresh file list after deletion
+          queryClient.invalidateQueries({ queryKey: fileQueryKeys.session(sessionId) });
+          queryClient.invalidateQueries({ queryKey: fileQueryKeys.hierarchy(sessionId) });
+          queryClient.invalidateQueries({ queryKey: fileQueryKeys.stats(sessionId) });
+          
+          toast.info('File deleted', {
+            description: `"${event.data.file?.name || 'Unknown file'}" was deleted by ${event.data.deletedBy || 'another user'}`,
           });
           break;
 
