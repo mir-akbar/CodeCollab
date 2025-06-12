@@ -7,7 +7,7 @@
 ## **Overview**
 CodeLab is a production-ready, web-based collaborative code editor designed for seamless real-time coding experiences. Built with enterprise-grade security and performance optimizations, it enables live code synchronization, syntax highlighting, and integrated communication for distributed development teams.
 
-> **Latest Updates (2024):** 
+> **Latest Updates (2025):** 
 > - 🔒 **Security hardened** - All MongoDB credentials secured with environment variables
 > - 🚀 **YJS content duplication fixed** - Robust multi-user collaborative editing
 > - 📁 **Project reorganized** - Clean, maintainable codebase structure
@@ -25,31 +25,26 @@ CodeLab is a production-ready, web-based collaborative code editor designed for 
 ### **💻 Advanced Code Editor**
 - **Monaco Editor**: VS Code-powered editing experience
 - **Multi-Language Support**: JavaScript, TypeScript, Python, Java, C++, and more
-- **Intelligent IntelliSense**: Auto-completion and error detection
 - **Code Formatting & Linting**: Built-in prettier and ESLint integration
 
 ### **🔐 Enterprise Security**
-- **Environment-Based Configuration**: Zero hardcoded credentials
-- **Secure Database Connections**: Encrypted MongoDB Atlas integration
+- **Role-Based Access Control**: Fine-grained permissions for users and teams
 - **Session Management**: Secure user authentication and authorization
-- **Data Encryption**: End-to-end encrypted file storage
 
 ### **📡 Communication Suite**
 - **Integrated Text Chat**: Context-aware messaging during coding sessions
 - **WebRTC Audio/Video**: Low-latency voice and video calls
-- **Screen Sharing**: Share your editor or entire screen
+
 - **Presence Indicators**: Real-time user activity status
 
 ### **📁 Smart File Management**
 - **Project Workspace**: Hierarchical file and folder organization
-- **Version Control Integration**: Git-like file tracking and history
 - **Auto-Save**: Continuous backup with conflict resolution
-- **Import/Export**: Multiple format support for seamless workflow integration
+- **Import/Export**: Multiple format (.js, .py, .java) support for seamless workflow integration
 
 ### **⚡ Code Execution**
 - **Multi-Runtime Support**: Execute JavaScript, Python, Java in isolated environments
 - **Real-Time Output**: Live console and error feedback
-- **Collaborative Debugging**: Shared breakpoints and variable inspection
 
 ---
 
@@ -65,8 +60,9 @@ CodeLab is a production-ready, web-based collaborative code editor designed for 
 ### **Backend Infrastructure**
 - **Node.js 18+**: High-performance JavaScript runtime
 - **Express.js**: RESTful API framework
-- **Socket.IO**: WebSocket-based real-time engine
+- **y-websocket**: WebSocket server for YJS document synchronization
 - **YJS Backend**: Collaborative document synchronization
+- **JWT Authentication**: Secure stateless user sessions
 - **JWT Authentication**: Secure stateless user sessions
 
 ### **Database & Storage**
