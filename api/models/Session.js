@@ -167,7 +167,7 @@ SessionSchema.methods.updateActivity = async function() {
   
   const count = await SessionParticipant.countDocuments({
     sessionId: this.sessionId,
-    status: { $in: ['active', 'invited'] }  // Count both active and invited participants
+    status: 'active'  // Count only active participants (exclude pending invitations)
   });
   
   this.activity.lastActivity = new Date();

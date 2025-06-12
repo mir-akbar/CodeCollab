@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield } from 'lucide-react';
+import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,9 @@ import { API_URL } from "../common/Constant";
 import axios from "axios";
 import { useAuth } from '@/hooks/useAuth';
 import { useUser } from '@/contexts/UserContext';
+import { useSessionAwareness } from '@/hooks/useSessionAwareness';
+import { useSessionActions } from '@/hooks/useSessions';
+import PropTypes from 'prop-types';
 import { 
   getUserRole, 
   canManageParticipants, 
@@ -50,6 +53,9 @@ export function UserSection() {
   const [participants, setParticipants] = useState([]);
   const { logout } = useAuth();
   const { userEmail } = useUser();
+  
+  // Get real-time awareness data for active users
+  const { onlineUsers, userCount, isOnline } = useSessionAwareness(sessionId);
 
   const handleLogout = async () => {
     try {
@@ -70,6 +76,7 @@ export function UserSection() {
           withCredentials: true
         });
         if (response.data.success) {
+          console.log('📊 Session data fetched:', response.data.session);
           setSessionData(response.data.session);
           setParticipants(response.data.session.participants || []);
         }
@@ -85,7 +92,8 @@ export function UserSection() {
           const emails = fallbackResponse.data.map(user => user.email);
           setParticipants(emails.map(email => ({
             userEmail: email,
-            userName: email.split('@')[0],
+            email: email,
+            name: email.split('@')[0],
             role: 'editor',
             status: 'active'
           })));
@@ -96,11 +104,18 @@ export function UserSection() {
     };
 
     fetchSessionData();
-    const interval = setInterval(fetchSessionData, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchSessionData, 30000); // Refresh every 30 seconds (less frequent since we have real-time awareness)
     return () => clearInterval(interval);
   }, [sessionId, userEmail]);
 
-  const activeParticipants = participants.filter(p => p.status === 'active');
+  // Combine database participants with real-time awareness for active status
+  const getActiveParticipants = () => {
+    return participants.filter(p => 
+      p.status === 'active' || isOnline(p.email)
+    );
+  };
+
+  const activeParticipants = getActiveParticipants();
 
   return (
     <div className="flex items-center gap-4">
@@ -109,13 +124,14 @@ export function UserSection() {
         participants={participants}
         activeParticipants={activeParticipants}
         sessionId={sessionId}
+        onlineUserCount={userCount}
       />
       <AuthButton handleLogout={handleLogout} navigate={navigate} />
     </div>
   );
 }
 
-function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId }) {
+function CollaborationDialog({ sessionData, participants, activeParticipants, sessionId, onlineUserCount }) {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleRefresh = () => {
@@ -155,7 +171,9 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
                 </div>
               ))
             ) : (
-              <div className="text-gray-400 text-sm">No active users</div>
+              <div className="text-gray-400 text-sm">
+                {onlineUserCount > 0 ? `${onlineUserCount} active` : 'No active users'}
+              </div>
             )}
             {activeParticipants && activeParticipants.length > 3 && (
               <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-sm border-2 border-[#1e1e1e]">
@@ -180,20 +198,32 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
           participants={participants}
           sessionId={sessionId}
           onRefresh={handleRefresh}
+          onlineUserCount={onlineUserCount}
         />
       </DialogContent>
     </Dialog>
   );
 }
 
-function CollaborationContent({ sessionData, participants, sessionId, onRefresh }) {
+function CollaborationContent({ sessionData, participants, sessionId, onRefresh, onlineUserCount }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('editor');
   const [isInviting, setIsInviting] = useState(false);
+  const [acceptingInvitation, setAcceptingInvitation] = useState(null);
   const { userEmail } = useUser();
+  const { joinSession } = useSessionActions();
 
   if (!sessionData) {
-    return <div className="text-center text-gray-400">Loading session data...</div>;
+    return (
+      <div className="text-center text-gray-400">
+        <div>Loading session data...</div>
+        {onlineUserCount > 0 && (
+          <div className="text-sm mt-2">
+            {onlineUserCount} user{onlineUserCount !== 1 ? 's' : ''} currently active
+          </div>
+        )}
+      </div>
+    );
   }
 
   // Use permission utility functions instead of hardcoded role checks
@@ -245,6 +275,24 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
       alert(errorMessage);
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleAcceptInvitation = async (participantSessionId) => {
+    setAcceptingInvitation(participantSessionId);
+    try {
+      const result = await joinSession(participantSessionId);
+      if (result.success) {
+        alert('✅ Successfully joined the session!');
+        onRefresh();
+      } else {
+        alert(`❌ Failed to join session: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error accepting invitation:", error);
+      alert('❌ Failed to accept invitation. Please try again.');
+    } finally {
+      setAcceptingInvitation(null);
     }
   };
 
@@ -300,11 +348,16 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
       <div className="space-y-2">
         <h3 className="text-sm font-medium">Session: {sessionData.name}</h3>
         <p className="text-xs text-gray-400">
-          Created by {sessionData.creator === userEmail ? 'you' : sessionData.creator}
+          Created by {sessionData.creatorName || sessionData.creator === userEmail ? 'you' : (sessionData.creator || 'Unknown')}
         </p>
         <p className="text-xs text-gray-400">
           Your role: {currentUserRole}
         </p>
+        {onlineUserCount > 0 && (
+          <p className="text-xs text-green-400">
+            👥 {onlineUserCount} user{onlineUserCount !== 1 ? 's' : ''} currently active
+          </p>
+        )}
       </div>
 
       <Separator className="bg-[#444]" />
@@ -333,14 +386,14 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
                     </div>
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
-                      {((participant.name || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
+                      {((participant.name || participant.displayName || participant.userName || participant.email || participant.userEmail || 'U').charAt(0)).toUpperCase()}
                     </div>
                   )}
                   <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#2d2d2d] ${getStatusColor(participant.status)}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
-                    {participant.name || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Unknown')}
+                    {participant.name || participant.displayName || participant.userName || (participant.email || participant.userEmail ? (participant.email || participant.userEmail).split('@')[0] : 'Unknown')}
                     {(participant.email || participant.userEmail) === userEmail && ' (you)'}
                     {participant.profile && participant.profile.bio && (
                       <span className="block text-xs text-gray-400 truncate">{participant.profile.bio}</span>
@@ -359,7 +412,12 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh 
               </div>
             ))
           ) : (
-            <p className="text-gray-400 text-sm">No active participants</p>
+            <p className="text-gray-400 text-sm">
+              {onlineUserCount > 0 
+                ? `${onlineUserCount} user${onlineUserCount !== 1 ? 's' : ''} online but not in participant list`
+                : 'No active participants'
+              }
+            </p>
           )}
         </div>
       </div>
@@ -501,3 +559,25 @@ function AuthButton({ handleLogout, navigate }) {
     </Button>
   );
 }
+
+// PropTypes
+CollaborationDialog.propTypes = {
+  sessionData: PropTypes.object,
+  participants: PropTypes.array,
+  activeParticipants: PropTypes.array,
+  sessionId: PropTypes.string,
+  onlineUserCount: PropTypes.number
+};
+
+CollaborationContent.propTypes = {
+  sessionData: PropTypes.object,
+  participants: PropTypes.array,
+  sessionId: PropTypes.string,
+  onRefresh: PropTypes.func,
+  onlineUserCount: PropTypes.number
+};
+
+AuthButton.propTypes = {
+  handleLogout: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired
+};

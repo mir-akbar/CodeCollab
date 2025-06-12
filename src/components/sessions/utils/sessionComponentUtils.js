@@ -64,8 +64,9 @@ export const formatParticipantCount = (count) => {
 /**
  * Gets participant count from session data
  * Optimized to use direct count from database when available
+ * NOTE: This count includes only active participants (excludes pending invitations)
  * @param {Array|Object} participantsOrSession - Array of participants OR session object with participantCount
- * @returns {number} - Number of participants
+ * @returns {number} - Number of active participants
  */
 export const getParticipantCount = (participantsOrSession) => {
   // If it's a session object with a direct participantCount field, use that (optimized)
@@ -82,6 +83,31 @@ export const getParticipantCount = (participantsOrSession) => {
   }
   
   // Fall back to array counting for backward compatibility
+  // Filter to only count active participants if participants array includes status
+  const participants = Array.isArray(participantsOrSession) 
+    ? participantsOrSession 
+    : participantsOrSession?.participants;
+    
+  if (Array.isArray(participants)) {
+    // If participants have status field, count only active ones
+    const firstParticipant = participants[0];
+    if (firstParticipant && typeof firstParticipant.status === 'string') {
+      return participants.filter(p => p.status === 'active').length;
+    }
+    // Otherwise return total length (backward compatibility)
+    return participants.length;
+  }
+  
+  return 0;
+};
+
+/**
+ * Gets total participant count including pending invitations
+ * @param {Array|Object} participantsOrSession - Array of participants OR session object
+ * @returns {number} - Number of all participants (active + invited)
+ */
+export const getTotalParticipantCount = (participantsOrSession) => {
+  // Fall back to array counting
   const participants = Array.isArray(participantsOrSession) 
     ? participantsOrSession 
     : participantsOrSession?.participants;

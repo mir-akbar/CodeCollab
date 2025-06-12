@@ -119,7 +119,7 @@ class CodeLabServer {
         endpoints: {
           health: '/health',
           auth: '/api/auth',
-          user: '/api/user',
+          users: '/api/users',
           sessions: '/api/sessions',
           files: '/api/files',
           'file-versions': '/api/file-versions',
@@ -133,7 +133,7 @@ class CodeLabServer {
     this.app.use('/api/auth', authRoutes);
 
     // Mount user profile routes
-    this.app.use('/api/user', userRoutes);
+    this.app.use('/api/users', userRoutes);
 
     // Mount session routes
     this.app.use('/api/sessions', sessionRoutes);

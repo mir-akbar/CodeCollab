@@ -88,6 +88,59 @@ class SessionService {
   }
 
   /**
+   * Get session by ID with participants and creator info
+   */
+  async getSessionWithParticipants(sessionId) {
+    try {
+      const session = await Session.findOne({ sessionId, status: 'active' });
+      if (!session) {
+        throw new Error('Session not found');
+      }
+
+      // Get all participants for this session
+      const SessionParticipant = require('../models/SessionParticipant');
+      const participants = await SessionParticipant.find({ 
+        sessionId,
+        status: { $in: ['active', 'invited'] }
+      }).sort({ role: 1, joinedAt: 1 }); // Sort by role priority, then by join time
+
+      // Get creator information
+      const User = require('../models/User');
+      const creatorUser = await User.findOne({ cognitoId: session.creator });
+      const creatorEmail = creatorUser?.email || session.creator;
+
+      // Transform session for response
+      return {
+        sessionId: session.sessionId,
+        name: session.name,
+        description: session.description,
+        creator: creatorEmail, // Return email instead of cognitoId
+        creatorName: creatorUser?.name || creatorUser?.displayName || creatorEmail.split('@')[0],
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        activity: session.activity,
+        settings: session.settings,
+        participants: participants.map(p => ({
+          cognitoId: p.cognitoId,
+          username: p.username,
+          displayName: p.displayName,
+          name: p.name,
+          email: p.email,
+          role: p.role,
+          status: p.status,
+          joinedAt: p.joinedAt,
+          lastActive: p.lastActive,
+          invitedBy: p.invitedBy
+        }))
+      };
+    } catch (error) {
+      console.error('Error getting session with participants:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update session basic info
    */
   async updateSession(sessionId, updates) {
@@ -159,7 +212,7 @@ class SessionService {
       const SessionParticipant = require('../models/SessionParticipant');
       const participantRecords = await SessionParticipant.find({
         cognitoId: user.cognitoId,
-        status: { $in: ['active', 'invited'] } // Include both active and invited participants
+        status: 'active' // Only include active participants (exclude pending invitations)
       });
 
       // console.log('Found', participantRecords.length, 'participant records for user');
@@ -187,13 +240,13 @@ class SessionService {
         // Use cached participant count from session.activity if available, otherwise count
         const participantCount = session.activity?.participantCount ?? await SessionParticipant.countDocuments({
           sessionId: session.sessionId,
-          status: { $in: ['active', 'invited'] }
+          status: 'active'  // Count only active participants (exclude pending invitations)
         });
 
         // Get basic participant info for UI (name, email, role only)
         const basicParticipants = await SessionParticipant.find({
           sessionId: session.sessionId,
-          status: { $in: ['active', 'invited'] }
+          status: 'active'  // Get only active participants for UI
         }).select('email name displayName role status').lean();
 
         // CONSISTENCY FIX: Always get creator email for consistency

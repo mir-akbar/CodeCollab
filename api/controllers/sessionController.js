@@ -63,7 +63,7 @@ class SessionController {
       });
     }
 
-    const session = await sessionService.getSession(sessionId);
+    const session = await sessionService.getSessionWithParticipants(sessionId);
     
     if (!session) {
       return res.status(404).json({ 

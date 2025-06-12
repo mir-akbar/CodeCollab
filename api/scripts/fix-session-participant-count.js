@@ -97,7 +97,7 @@ async function fixSessionParticipantCount() {
       const updatedSession = await Session.findOne({ sessionId });
       const participantCount = await SessionParticipant.countDocuments({
         sessionId: session.sessionId,
-        status: { $in: ['active', 'invited'] }
+        status: 'active'  // Count only active participants (exclude pending invitations)
       });
       
       console.log('✅ Updated session activity:', {

@@ -1,10 +1,10 @@
 /**
- * Updated Session Hooks with HTTP-only Cookie Authentication
+ * Updated Session Hooks with Cookie Authentication
  * Modernized implementation using cookies instead of localStorage
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config/api';
 import { useUser } from '../contexts/UserContext';
@@ -33,7 +33,7 @@ const sessionAPI = {
     return response.data.sessions || [];
   },
 
-  // Fetch single session details
+  // Get session details by ID
   getSessionDetails: async (sessionId) => {
     const response = await secureAPIClient.get(`/api/sessions/${sessionId}`);
     
@@ -42,6 +42,17 @@ const sessionAPI = {
     }
     
     return response.data.session;
+  },
+
+  // Get user's pending invitations
+  getPendingInvitations: async (userEmail) => {
+    const response = await secureAPIClient.get(`/api/users/${encodeURIComponent(userEmail)}/pending-invitations`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch pending invitations');
+    }
+    
+    return response.data.invitations;
   },
 
   // Create a new session
@@ -90,6 +101,30 @@ const sessionAPI = {
     
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to leave session');
+    }
+    
+    return response.data;
+  },
+
+  // Join a session (accept invitation)
+  joinSession: async ({ sessionId, userEmail }) => {
+    const response = await secureAPIClient.post(`/api/sessions/${sessionId}/join`, {
+      userEmail: userEmail
+    });
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to join session');
+    }
+    
+    return response.data;
+  },
+
+  // Reject/decline a session invitation
+  rejectInvitation: async ({ sessionId, userEmail }) => {
+    const response = await secureAPIClient.delete(`/api/users/${encodeURIComponent(userEmail)}/invitations/${sessionId}`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to reject invitation');
     }
     
     return response.data;
@@ -357,6 +392,57 @@ export const useLeaveSession = () => {
 };
 
 /**
+ * Hook to join a session (accept invitation)
+ */
+export const useJoinSession = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: sessionAPI.joinSession,
+    onSuccess: (data, { sessionId, userEmail }) => {
+      // Invalidate sessions for the user to show updated session list
+      queryClient.invalidateQueries({ queryKey: sessionKeys.user(userEmail) });
+      // Invalidate session details if cached
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      // Invalidate pending invitations
+      queryClient.invalidateQueries({ queryKey: ['pendingInvitations', userEmail] });
+    }
+  });
+};
+
+/**
+ * Hook to get user's pending invitations with synchronized refresh timing
+ */
+export const usePendingInvitations = (userEmail) => {
+  return useQuery({
+    queryKey: ['pendingInvitations', userEmail],
+    queryFn: () => sessionAPI.getPendingInvitations(userEmail),
+    enabled: !!userEmail,
+    staleTime: 3 * 60 * 1000, // 3 minutes - aligned with sessions staleTime
+    refetchInterval: 30 * 1000, // Auto-refetch every 30 seconds - aligned with sessions
+    refetchIntervalInBackground: true, // Continue refetching in background
+    refetchOnWindowFocus: true, // Refetch when user returns to tab (aligned with sessions)
+    // Synchronize refresh timing with sessions by using the same query client cache timing
+    structuralSharing: true, // Enable structural sharing for better performance
+  });
+};
+
+/**
+ * Hook to reject/decline a session invitation
+ */
+export const useRejectInvitation = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: sessionAPI.rejectInvitation,
+    onSuccess: (data, { userEmail }) => {
+      // Invalidate pending invitations to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['pendingInvitations', userEmail] });
+    }
+  });
+};
+
+/**
  * Hook to remove participant from session
  */
 export const useRemoveParticipant = () => {
@@ -403,6 +489,72 @@ export const useUpdateRole = () => {
 };
 
 /**
+ * Coordinated hook that synchronizes sessions and pending invitations
+ * This ensures both queries refresh at the same time to avoid timing discrepancies
+ * Uses a shared interval timer for perfect synchronization
+ */
+export const useSessionsWithInvitations = () => {
+  const { userEmail } = useUser();
+  const queryClient = useQueryClient();
+  
+  // Define shared query options for consistent behavior
+  const sharedQueryOptions = {
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: true,
+    // Disable individual intervals - we'll use a coordinated approach
+    refetchInterval: false,
+  };
+  
+  const sessionsQuery = useQuery({
+    queryKey: sessionKeys.user(userEmail),
+    queryFn: () => sessionAPI.getUserSessions(),
+    enabled: !!userEmail,
+    gcTime: 10 * 60 * 1000,
+    ...sharedQueryOptions,
+  });
+  
+  const invitationsQuery = useQuery({
+    queryKey: ['pendingInvitations', userEmail],
+    queryFn: () => sessionAPI.getPendingInvitations(userEmail),
+    enabled: !!userEmail,
+    structuralSharing: true,
+    ...sharedQueryOptions,
+  });
+  
+  // Coordinated refresh function
+  const refreshBoth = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: sessionKeys.user(userEmail) }),
+      queryClient.invalidateQueries({ queryKey: ['pendingInvitations', userEmail] })
+    ]);
+  }, [queryClient, userEmail]);
+  
+  // Set up synchronized 30-second interval using useEffect for proper cleanup
+  useEffect(() => {
+    if (!userEmail) return;
+    
+    const intervalId = setInterval(() => {
+      // Only refresh if queries are enabled and user is present
+      if (userEmail && !document.hidden) {
+        refreshBoth();
+      }
+    }, 30 * 1000);
+    
+    return () => clearInterval(intervalId);
+  }, [userEmail, refreshBoth]);
+  
+  return {
+    sessions: sessionsQuery,
+    invitations: invitationsQuery,
+    refreshBoth,
+    // Combined loading states
+    isRefreshing: sessionsQuery.isFetching || invitationsQuery.isFetching,
+    isInitialLoading: sessionsQuery.isLoading || invitationsQuery.isLoading,
+  };
+};
+
+/**
  * Utility hook for session-related actions with UserContext integration
  */
 export const useSessionActions = () => {
@@ -411,6 +563,8 @@ export const useSessionActions = () => {
   const deleteSession = useDeleteSession();
   const inviteUser = useInviteUser();
   const leaveSession = useLeaveSession();
+  const joinSession = useJoinSession();
+  const rejectInvitation = useRejectInvitation();
   const removeParticipant = useRemoveParticipant();
   const promoteToOwner = usePromoteToOwner();
   const updateRole = useUpdateRole();
@@ -458,6 +612,24 @@ export const useSessionActions = () => {
       }
     }, [leaveSession, userEmail]),
 
+    joinSession: useCallback(async (sessionId) => {
+      try {
+        await joinSession.mutateAsync({ sessionId, userEmail });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }, [joinSession, userEmail]),
+
+    rejectInvitation: useCallback(async (sessionId) => {
+      try {
+        await rejectInvitation.mutateAsync({ sessionId, userEmail });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }, [rejectInvitation, userEmail]),
+
     removeParticipant: useCallback(async (sessionId, participantEmail) => {
       try {
         await removeParticipant.mutateAsync({ sessionId, participantEmail, userEmail });
@@ -493,6 +665,8 @@ export const useSessionActions = () => {
     isDeleting: deleteSession.isPending,
     isInviting: inviteUser.isPending,
     isLeaving: leaveSession.isPending,
+    isJoining: joinSession.isPending,
+    isRejectingInvitation: rejectInvitation.isPending,
     isRemovingParticipant: removeParticipant.isPending,
     isPromoting: promoteToOwner.isPending,
     isUpdatingRole: updateRole.isPending,
@@ -501,6 +675,8 @@ export const useSessionActions = () => {
     deleteError: deleteSession.error,
     inviteError: inviteUser.error,
     leaveError: leaveSession.error,
+    joinError: joinSession.error,
+    rejectInvitationError: rejectInvitation.error,
     removeParticipantError: removeParticipant.error,
     promoteError: promoteToOwner.error,
     updateRoleError: updateRole.error,

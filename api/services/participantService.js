@@ -11,13 +11,32 @@ const User = require('../models/User');
 class ParticipantService {
   /**
    * Get all participants for a session
+   * Note: Returns only ACTIVE participants (excludes pending invitations)
+   * For invited participants, use the pending invitations endpoint
    */
   async getSessionParticipants(sessionId) {
+    try {
+      const participants = await SessionParticipant.find({ 
+        sessionId,
+        status: 'active'  // Only return active participants
+      });
+      return participants;
+    } catch (error) {
+      console.error('Error getting session participants:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get ALL participants for a session (including invited)
+   * Use this for admin/management purposes only
+   */
+  async getAllSessionParticipants(sessionId) {
     try {
       const participants = await SessionParticipant.find({ sessionId });
       return participants;
     } catch (error) {
-      console.error('Error getting session participants:', error);
+      console.error('Error getting all session participants:', error);
       throw error;
     }
   }

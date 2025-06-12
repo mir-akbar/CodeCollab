@@ -156,4 +156,129 @@ router.put('/last-active', requireAuth, asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * GET /api/users/:email/pending-invitations
+ * Get pending session invitations for a user
+ */
+router.get('/:email/pending-invitations', requireAuth, asyncHandler(async (req, res) => {
+  try {
+    const { email } = req.params;
+    const decodedEmail = decodeURIComponent(email);
+    
+    // Security check: users can only view their own invitations
+    const requestingUserEmail = req.user.mongoUser.email;
+    if (decodedEmail !== requestingUserEmail) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only view your own pending invitations'
+      });
+    }
+
+    const User = require('../models/User');
+    const user = await User.findByEmail(decodedEmail);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const SessionParticipant = require('../models/SessionParticipant');
+    const Session = require('../models/Session');
+    
+    // Find all pending invitations for this user
+    const pendingInvitations = await SessionParticipant.find({
+      cognitoId: user.cognitoId,
+      status: 'invited'
+    }).lean();
+
+    // Fetch session details for each invitation
+    const invitationsWithSessionDetails = await Promise.all(
+      pendingInvitations.map(async (invitation) => {
+        const session = await Session.findOne({ sessionId: invitation.sessionId }).lean();
+        return {
+          ...invitation,
+          session: session ? {
+            sessionId: session.sessionId,
+            name: session.name,
+            description: session.description,
+            createdAt: session.createdAt
+          } : null
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      invitations: invitationsWithSessionDetails,
+      count: invitationsWithSessionDetails.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching pending invitations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch pending invitations'
+    });
+  }
+}));
+
+/**
+ * DELETE /api/users/:email/invitations/:sessionId
+ * Reject/decline a session invitation
+ */
+router.delete('/:email/invitations/:sessionId', requireAuth, asyncHandler(async (req, res) => {
+  try {
+    const { email, sessionId } = req.params;
+    const decodedEmail = decodeURIComponent(email);
+    
+    // Security check: users can only manage their own invitations
+    const requestingUserEmail = req.user.mongoUser.email;
+    if (decodedEmail !== requestingUserEmail) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only manage your own invitations'
+      });
+    }
+
+    const User = require('../models/User');
+    const user = await User.findByEmail(decodedEmail);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const SessionParticipant = require('../models/SessionParticipant');
+    
+    // Find the specific invitation
+    const invitation = await SessionParticipant.findOne({
+      cognitoId: user.cognitoId,
+      sessionId: sessionId,
+      status: 'invited'
+    });
+
+    if (!invitation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Invitation not found or already processed'
+      });
+    }
+
+    // Remove the invitation record (decline)
+    await SessionParticipant.findByIdAndDelete(invitation._id);
+
+    res.json({
+      success: true,
+      message: 'Invitation declined successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error declining invitation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to decline invitation'
+    });
+  }
+}));
+
 module.exports = router;

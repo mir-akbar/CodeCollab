@@ -27,13 +27,14 @@ import { SessionTabs, SessionFilters } from '../SessionNavigation';
 import { SessionList, SessionCardSkeleton } from '../SessionDisplay';
 import { SessionFooter } from '../SessionUI';
 import { CreateSessionDialog, InvitationDialog, DeleteSessionDialog } from '../SessionActions';
+import { PendingInvitations } from '../../PendingInvitations';
 import { 
   Plus, 
   RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
-  useSessions
+  useSessionsWithInvitations
 } from '@/hooks/useSessions';
 import { useSessionManagerState } from '@/hooks/useSessionState';
 import { getFilteredSessions } from '@/utils/sessionUtils';
@@ -69,8 +70,9 @@ export function SessionManager({ userEmail }) {
     initialTab: "all"
   });
 
-  // Hooks
-  const { data: sessions = [], isLoading, isFetching, error, refetch } = useSessions();
+  // Coordinated data fetching for better synchronization
+  const { sessions: sessionsQuery, invitations: invitationsQuery, refreshBoth } = useSessionsWithInvitations();
+  const { data: sessions = [], isLoading, isFetching, error } = sessionsQuery;
 
   // Filter sessions based on tab and search/sort
   const filteredSessions = getFilteredSessions(sessions, activeTab, filters, userEmail);
@@ -103,17 +105,19 @@ export function SessionManager({ userEmail }) {
 
   /**
    * Handles session refresh with loading state management
+   * Uses coordinated refresh to ensure perfect synchronization
    * @async
    * @function
    */
   const handleRefresh = async () => {
     setLoading('refreshing', true);
     try {
-      await refetch();
-      toast.success('Sessions refreshed successfully');
+      // Use coordinated refresh for perfect synchronization
+      await refreshBoth();
+      toast.success('Sessions and invitations refreshed successfully');
     } catch (refreshError) {
-      console.error('Session refresh failed:', refreshError);
-      toast.error('Failed to refresh sessions. Please try again.');
+      console.error('Refresh failed:', refreshError);
+      toast.error('Failed to refresh data. Please try again.');
     } finally {
       setLoading('refreshing', false);
     }
@@ -184,6 +188,17 @@ export function SessionManager({ userEmail }) {
             >
               Try Again
             </Button>
+          </div>
+        )}
+
+        {/* Pending Invitations Section */}
+        {!showInitialLoading && (
+          <div className="mb-6">
+            <PendingInvitations 
+              userEmail={userEmail} 
+              showSkeleton={loadingStates.refreshing}
+              invitationsQuery={invitationsQuery}
+            />
           </div>
         )}
 

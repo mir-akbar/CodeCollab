@@ -460,36 +460,44 @@ class SessionParticipantController {
     try {
       // Resolve user email to cognitoId
       const User = require('../models/User');
-      let user = await User.findByEmail(email.trim().toLowerCase());
+      const user = await User.findByEmail(email.trim().toLowerCase());
       if (!user) {
-        // Create user if they don't exist (for self-joining open sessions)
-        user = await User.createFromCognito({
-          email: email.trim().toLowerCase(),
-          name: email.split('@')[0],
-          cognitoId: `temp_join_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        return res.status(404).json({
+          success: false,
+          error: "User not found. Please create an account first."
         });
       }
 
-      const participant = await participantService.addParticipant({
-        sessionId, 
+      // Check if user has a pending invitation
+      const SessionParticipant = require('../models/SessionParticipant');
+      const pendingInvitation = await SessionParticipant.findOne({
+        sessionId,
         cognitoId: user.cognitoId,
-        role: 'editor', // Default role for joining
-        invitedBy: null // No inviter for direct joins
+        status: 'invited'
       });
+
+      if (!pendingInvitation) {
+        return res.status(403).json({
+          success: false,
+          error: "No pending invitation found for this session"
+        });
+      }
+
+      // Accept the invitation using the participant service
+      const result = await participantService.acceptInvitation(sessionId, user.cognitoId);
 
       res.status(200).json({ 
         success: true,
         message: "Successfully joined session",
-        participant: participant
+        participant: result.participant
       });
     } catch (error) {
       console.error("Error joining session:", error);
       
       // Handle specific error types with appropriate status codes
-      if (error.message.includes('not invited') || 
-          error.message.includes('already active') ||
-          error.message.includes('not found')) {
-        res.status(403).json({ 
+      if (error.message.includes('not found') || 
+          error.message.includes('already active')) {
+        res.status(400).json({ 
           success: false,
           error: error.message 
         });
