@@ -1,6 +1,7 @@
 /**
  * Y-WebSocket Server
- * Simple WebSocket server for Y.js document synchronization
+ * Simple Y.js WebSocket server compatible with y-websocket client
+ * Acts as a simple message relay without server-side document processing
  */
 
 const WebSocketServer = require('ws').WebSocketServer;
@@ -9,60 +10,74 @@ class YjsWebSocketServer {
   constructor(server) {
     this.server = server;
     this.wss = null;
-    this.rooms = new Map(); // Track active rooms
-    this.docs = new Map(); // Store Y.js documents
-    this.connectionsByUser = new Map(); // Track connections by user to prevent duplicates
-    this.heartbeatInterval = null; // Heartbeat to keep connections alive
+    this.rooms = new Map(); // Track active rooms for our custom messaging
+    this.docs = new Map(); // Store Y.js documents for persistence
+    this.connectionsByUser = new Map(); // Track connections by user
+    this.heartbeatInterval = null;
   }
 
   /**
-   * Initialize WebSocket server
+   * Initialize WebSocket server with proper Y.js support
    */
   initialize() {
     console.log('🔌 Setting up Y-WebSocket server...');
     
-    // Create WebSocket server that handles session-specific paths
+    // Create WebSocket server that handles Y.js connections
     this.wss = new WebSocketServer({
       server: this.server,
       verifyClient: (info) => {
-        // Allow connections to /yjs-websocket or /yjs-websocket/<sessionId>
         const pathname = info.req.url;
         return pathname.startsWith('/yjs-websocket');
       }
     });
 
-    // Handle WebSocket connections
+    // Handle WebSocket connections 
     this.wss.on('connection', (ws, req) => {
-      // Extract room name from URL path following Y.js conventions
+      // Extract document name from URL - Y-WebSocket sends room name in the URL path
       const urlPath = req.url;
-      let roomName = null;
-      let docType = 'default';
+      let docName = 'default';
       
-      // Y.js standard: /yjs-websocket should handle room names via WebSocket messages
-      // But we can also extract from URL for compatibility
+      console.log(`🔍 Parsing WebSocket URL: ${urlPath}`);
+      
+      // Y-WebSocket client sends room name as the second path segment
+      // Example: /yjs-websocket/session123%2Fsrc-main-js or /yjs-websocket/session123/file.js
       if (urlPath.startsWith('/yjs-websocket/')) {
-        const pathSegments = urlPath.split('/');
-        if (pathSegments.length >= 3) {
-          roomName = pathSegments.slice(2).join('/'); // Everything after /yjs-websocket/
-          
-          // Determine doc type from room name pattern
-          if (roomName.includes('/chat-')) {
-            docType = 'chat';
-          } else if (roomName.includes('/')) {
-            docType = 'file';
-          } else {
-            docType = 'session';
-          }
+        const pathParts = urlPath.split('?')[0]; // Remove query parameters first
+        const pathSegments = pathParts.split('/');
+        
+        if (pathSegments.length >= 4) {
+          // Full path: /yjs-websocket/sessionId/fileName -> extract sessionId/fileName  
+          const sessionId = decodeURIComponent(pathSegments[2]);
+          const fileName = decodeURIComponent(pathSegments[3]);
+          docName = `${sessionId}/${fileName}`;
+          console.log(`📁 Extracted full room name: ${docName}`);
+        } else if (pathSegments.length >= 3) {
+          // Fallback: decode the single segment (might be URL-encoded full path)
+          const encodedRoom = pathSegments[2];
+          docName = decodeURIComponent(encodedRoom);
+          console.log(`📁 Extracted room name from encoded segment: ${docName}`);
         }
       }
       
-      console.log(`🔗 New Y-WebSocket connection - Room: ${roomName || 'pending'}, Type: ${docType}`);
+      // If no room name found, try extracting from query parameters
+      if (docName === 'default' && urlPath.includes('?')) {
+        const params = new URLSearchParams(urlPath.split('?')[1]);
+        docName = params.get('room') || params.get('doc') || 'default';
+        console.log(`📁 Room name from params: ${docName}`);
+      }
       
-      // Store connection info
-      ws.roomName = roomName;
-      ws.docType = docType;
+      console.log(`🔗 New Y-WebSocket connection for document: ${docName}`);
+      
+      // Store document name for our custom handling
+      ws.docName = docName;
       ws.isAlive = true;
       ws.lastActivity = Date.now();
+      
+      // Track this connection
+      if (!this.rooms.has(docName)) {
+        this.rooms.set(docName, new Set());
+      }
+      this.rooms.get(docName).add(ws);
       
       // Set up heartbeat
       ws.on('pong', () => {
@@ -70,42 +85,36 @@ class YjsWebSocketServer {
         ws.lastActivity = Date.now();
       });
 
-      // Auto-join room if we have a room name
-      if (roomName) {
-        this.joinRoom(ws, roomName, docType);
-      }
-
+      // Handle messages - simple Y.js message forwarding
       ws.on('message', (message) => {
         try {
-          // Check if it's a Y.js binary message first
-          if (message instanceof Buffer || message instanceof Uint8Array) {
-            // This is a Y.js update - broadcast to other clients in the same room
-            this.broadcastYjsUpdate(ws, message);
-            return;
-          }
-
-          // Try to parse as JSON for control messages
-          const messageString = message.toString();
-          if (messageString.startsWith('{') || messageString.startsWith('[')) {
-            try {
-              const data = JSON.parse(messageString);
-              this.handleMessage(ws, data);
-            } catch (jsonError) {
-              console.warn('Failed to parse JSON message:', jsonError.message);
-              // Still treat as Y.js binary message as fallback
-              this.broadcastYjsUpdate(ws, message);
+          // Try to parse as JSON for our custom control messages
+          if (typeof message === 'string' || Buffer.isBuffer(message)) {
+            const messageString = message.toString();
+            if (messageString.startsWith('{')) {
+              try {
+                const data = JSON.parse(messageString);
+                // Handle our custom message types
+                if (data.type && typeof data.type === 'string' && this.isCustomMessageType(data.type)) {
+                  this.handleCustomMessage(ws, data);
+                  return; // Don't pass to Y.js if it's our custom message
+                }
+              } catch {
+                // Not JSON or not our custom message, treat as Y.js binary
+              }
             }
-          } else {
-            // Non-JSON string message, treat as Y.js binary
-            this.broadcastYjsUpdate(ws, message);
           }
+          
+          // Forward Y.js binary messages to other clients
+          this.broadcastYjsMessage(ws, message);
+          
         } catch (error) {
           console.error('Error handling WebSocket message:', error);
         }
       });
 
       ws.on('close', () => {
-        console.log(`🔌 Y-WebSocket connection closed - Room: ${ws.roomName || 'unknown'}, User: ${ws.userEmail || 'unknown'}`);
+        console.log(`🔌 Y-WebSocket connection closed for document: ${docName}`);
         this.cleanup(ws);
       });
 
@@ -113,41 +122,40 @@ class YjsWebSocketServer {
         console.error('❌ Y-WebSocket error:', error);
         this.cleanup(ws);
       });
+      
+      // Note: We don't send sync messages since we're acting as a simple relay
+      // Each client will handle their own Y.js document state
     });
 
-    // Start heartbeat to detect dead connections
+    // Start heartbeat
     this.startHeartbeat();
 
-    console.log('✅ Y-WebSocket server initialized');
+    console.log('✅ Y-WebSocket server initialized with proper Y.js support');
   }
 
   /**
-   * Start heartbeat to detect dead connections
+   * Check if message type is one of our custom types
    */
-  startHeartbeat() {
-    this.heartbeatInterval = setInterval(() => {
-      this.wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) {
-          console.log('💀 Terminating dead connection');
-          return ws.terminate();
-        }
-        
-        ws.isAlive = false;
-        ws.ping();
-      });
-    }, 30000); // Check every 30 seconds
+  isCustomMessageType(type) {
+    const customTypes = [
+      'set-user-info',
+      'file-upload-progress', 
+      'file-deleted',
+      'file-uploaded',
+      'chat-message',
+      'video-signal',
+      'user-presence'
+    ];
+    return customTypes.includes(type);
   }
 
   /**
-   * Handle incoming WebSocket messages
+   * Handle custom control messages (non-Y.js protocol)
    */
-  handleMessage(ws, data) {
-    const { type, room, docName } = data;
+  handleCustomMessage(ws, data) {
+    const { type } = data;
     
     switch (type) {
-      case 'join-room':
-        this.joinRoom(ws, room, docName);
-        break;
       case 'set-user-info':
         this.updateUserInfo(ws, data.userInfo);
         break;
@@ -160,9 +168,6 @@ class YjsWebSocketServer {
       case 'file-uploaded':
         this.broadcastFileUploaded(ws, data);
         break;
-      case 'code-edit':
-        this.broadcastCodeEdit(ws, data);
-        break;
       case 'chat-message':
         this.broadcastChatMessage(ws, data);
         break;
@@ -173,61 +178,8 @@ class YjsWebSocketServer {
         this.broadcastUserPresence(ws, data);
         break;
       default:
-        console.warn(`⚠️ Unknown message type: ${type}`);
+        console.warn(`⚠️ Unknown custom message type: ${type}`);
     }
-  }
-
-  /**
-   * Join a Y.js room
-   */
-  joinRoom(ws, room, docName, userInfo = {}) {
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Set());
-    }
-    
-    // Check for existing connections from the same user to prevent duplicates
-    if (userInfo.email) {
-      const userKey = `${userInfo.email}-${room}-${docName}`;
-      const existingConnections = this.getConnectionsByUserKey(userKey);
-      
-      // Close existing connections to prevent duplicates
-      existingConnections.forEach(existingWs => {
-        if (existingWs !== ws && existingWs.readyState === existingWs.OPEN) {
-          console.log(`🔄 Closing duplicate connection for user: ${userInfo.email}`);
-          existingWs.terminate();
-        }
-      });
-    }
-    
-    this.rooms.get(room).add(ws);
-    ws.room = room;
-    ws.docName = docName;
-    ws.userId = userInfo.userId;
-    ws.userEmail = userInfo.email;
-    ws.joinedAt = new Date().toISOString();
-    
-    // Track user connections
-    if (userInfo.email) {
-      const userKey = `${userInfo.email}-${room}-${docName}`;
-      if (!this.connectionsByUser.has(userKey)) {
-        this.connectionsByUser.set(userKey, new Set());
-      }
-      this.connectionsByUser.get(userKey).add(ws);
-    }
-    
-    console.log(`👥 Client joined room: ${room}, doc: ${docName}, user: ${userInfo.email || 'unknown'}`);
-    
-    // Notify other users in room about new participant
-    this.broadcastToRoom(room, {
-      type: 'user-joined',
-      room,
-      user: {
-        userId: ws.userId,
-        email: ws.userEmail,
-        joinedAt: ws.joinedAt
-      },
-      totalUsers: this.rooms.get(room).size
-    }, ws);
   }
 
   /**
@@ -237,7 +189,8 @@ class YjsWebSocketServer {
     if (!userInfo) return;
     
     const oldEmail = ws.userEmail;
-    const oldUserKey = oldEmail ? `${oldEmail}-${ws.room}-${ws.docName}` : null;
+    const docName = ws.docName;
+    const oldUserKey = oldEmail ? `${oldEmail}-${docName}` : null;
     
     ws.userId = userInfo.userId || userInfo.cognitoId;
     ws.userEmail = userInfo.email;
@@ -252,37 +205,36 @@ class YjsWebSocketServer {
     }
     
     if (userInfo.email) {
-      const newUserKey = `${userInfo.email}-${ws.room}-${ws.docName}`;
+      const newUserKey = `${userInfo.email}-${docName}`;
       if (!this.connectionsByUser.has(newUserKey)) {
         this.connectionsByUser.set(newUserKey, new Set());
       }
       this.connectionsByUser.get(newUserKey).add(ws);
     }
     
-    console.log(`👤 Updated user info for ${ws.room}: ${oldEmail || 'unknown'} → ${ws.userEmail}`);
+    console.log(`👤 Updated user info for ${docName}: ${oldEmail || 'unknown'} → ${ws.userEmail}`);
     
     // Notify other users in room about updated user info
-    if (ws.room) {
-      this.broadcastToRoom(ws.room, {
-        type: 'user-info-updated',
-        room: ws.room,
-        user: {
-          userId: ws.userId,
-          email: ws.userEmail,
-          name: ws.userName,
-          joinedAt: ws.joinedAt
-        },
-        totalUsers: this.rooms.get(ws.room)?.size || 0
-      }, ws);
-    }
+    this.broadcastToRoom(docName, {
+      type: 'user-info-updated',
+      room: docName,
+      user: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName,
+        joinedAt: ws.joinedAt
+      },
+      totalUsers: this.rooms.get(docName)?.size || 0
+    }, ws);
   }
 
   /**
    * Broadcast file upload progress
    */
   broadcastUploadProgress(ws, data) {
-    const { room } = data;
-    this.broadcastToRoom(room, data, ws);
+    const { room, sessionId } = data;
+    const roomName = room || sessionId;
+    this.broadcastToRoom(roomName, data, ws);
   }
 
   /**
@@ -290,8 +242,9 @@ class YjsWebSocketServer {
    */
   broadcastFileDeleted(ws, data) {
     const { room, sessionId } = data;
-    console.log(`🗑️  Broadcasting file deletion in room: ${room || sessionId}`);
-    this.broadcastToRoom(room || sessionId, {
+    const roomName = room || sessionId;
+    console.log(`🗑️  Broadcasting file deletion in room: ${roomName}`);
+    this.broadcastToRoom(roomName, {
       ...data,
       type: 'file-deleted',
       timestamp: new Date().toISOString()
@@ -303,23 +256,11 @@ class YjsWebSocketServer {
    */
   broadcastFileUploaded(ws, data) {
     const { room, sessionId } = data;
-    console.log(`📁 Broadcasting file upload in room: ${room || sessionId}`);
-    this.broadcastToRoom(room || sessionId, {
+    const roomName = room || sessionId;
+    console.log(`📁 Broadcasting file upload in room: ${roomName}`);
+    this.broadcastToRoom(roomName, {
       ...data,
       type: 'file-uploaded',
-      timestamp: new Date().toISOString()
-    }, ws);
-  }
-
-  /**
-   * Broadcast code editing changes (Y.js integration)
-   */
-  broadcastCodeEdit(ws, data) {
-    const { room } = data;
-    console.log(`🔧 Broadcasting code edit in room: ${room}`);
-    this.broadcastToRoom(room, {
-      ...data,
-      type: 'code-edit',
       timestamp: new Date().toISOString()
     }, ws);
   }
@@ -328,9 +269,10 @@ class YjsWebSocketServer {
    * Broadcast chat messages
    */
   broadcastChatMessage(ws, data) {
-    const { room } = data;
-    console.log(`💬 Broadcasting chat message in room: ${room}`);
-    this.broadcastToRoom(room, {
+    const { room, sessionId } = data;
+    const roomName = room || sessionId;
+    console.log(`💬 Broadcasting chat message in room: ${roomName}`);
+    this.broadcastToRoom(roomName, {
       ...data,
       type: 'chat-message',
       timestamp: new Date().toISOString()
@@ -341,15 +283,16 @@ class YjsWebSocketServer {
    * Broadcast video signaling (WebRTC)
    */
   broadcastVideoSignal(ws, data) {
-    const { room, targetUser } = data;
-    console.log(`📹 Broadcasting video signal in room: ${room}`);
+    const { room, sessionId, targetUser } = data;
+    const roomName = room || sessionId;
+    console.log(`📹 Broadcasting video signal in room: ${roomName}`);
     
     if (targetUser) {
       // Direct message to specific user
-      this.sendToUser(room, targetUser, data);
+      this.sendToUser(roomName, targetUser, data);
     } else {
       // Broadcast to all users in room
-      this.broadcastToRoom(room, {
+      this.broadcastToRoom(roomName, {
         ...data,
         type: 'video-signal',
         timestamp: new Date().toISOString()
@@ -361,36 +304,14 @@ class YjsWebSocketServer {
    * Broadcast user presence updates
    */
   broadcastUserPresence(ws, data) {
-    const { room } = data;
-    console.log(`👤 Broadcasting user presence in room: ${room}`);
-    this.broadcastToRoom(room, {
+    const { room, sessionId } = data;
+    const roomName = room || sessionId;
+    console.log(`👤 Broadcasting user presence in room: ${roomName}`);
+    this.broadcastToRoom(roomName, {
       ...data,
       type: 'user-presence',
       timestamp: new Date().toISOString()
     }, ws);
-  }
-
-  /**
-   * Broadcast Y.js binary updates to other clients in the same room
-   */
-  broadcastYjsUpdate(ws, message) {
-    const room = ws.roomName;
-    if (!room) return;
-    
-    const clients = this.rooms.get(room);
-    if (clients) {
-      clients.forEach(client => {
-        if (client !== ws && client.readyState === client.OPEN && client.docType === ws.docType) {
-          try {
-            client.send(message);
-          } catch (error) {
-            console.error('Error broadcasting Y.js update:', error);
-            // Remove failed client
-            this.cleanup(client);
-          }
-        }
-      });
-    }
   }
 
   /**
@@ -414,8 +335,13 @@ class YjsWebSocketServer {
       let sentCount = 0;
       clients.forEach(ws => {
         if (ws !== excludeWs && ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify(message));
-          sentCount++;
+          try {
+            ws.send(JSON.stringify(message));
+            sentCount++;
+          } catch (error) {
+            console.error('Error sending message to client:', error);
+            this.cleanup(ws);
+          }
         }
       });
       
@@ -437,7 +363,12 @@ class YjsWebSocketServer {
     if (clients) {
       clients.forEach(ws => {
         if (ws.userId === targetUserId && ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify(message));
+          try {
+            ws.send(JSON.stringify(message));
+          } catch (error) {
+            console.error('Error sending message to user:', error);
+            this.cleanup(ws);
+          }
         }
       });
     }
@@ -464,13 +395,13 @@ class YjsWebSocketServer {
    * Cleanup when client disconnects
    */
   cleanup(ws) {
-    if (ws.room && this.rooms.has(ws.room)) {
-      const room = ws.room;
+    if (ws.docName && this.rooms.has(ws.docName)) {
+      const room = ws.docName;
       this.rooms.get(room).delete(ws);
       
       // Remove from user tracking
       if (ws.userEmail) {
-        const userKey = `${ws.userEmail}-${ws.room}-${ws.docName}`;
+        const userKey = `${ws.userEmail}-${ws.docName}`;
         if (this.connectionsByUser.has(userKey)) {
           this.connectionsByUser.get(userKey).delete(ws);
           if (this.connectionsByUser.get(userKey).size === 0) {
@@ -501,6 +432,66 @@ class YjsWebSocketServer {
   }
 
   /**
+   * Start heartbeat to detect dead connections
+   */
+  startHeartbeat() {
+    this.heartbeatInterval = setInterval(() => {
+      this.wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+          console.log(`💀 Terminating dead connection for document: ${ws.docName || 'unknown'}`);
+          return ws.terminate();
+        }
+        
+        ws.isAlive = false;
+        ws.ping();
+      });
+    }, 30000); // Check every 30 seconds
+  }
+
+  /**
+   * Broadcast Y.js binary message to other clients in the same room
+   * Simple relay without server-side document manipulation
+   */
+  broadcastYjsMessage(ws, message) {
+    const room = ws.docName;
+    if (!room) {
+      console.warn('⚠️ No room name for WebSocket, cannot broadcast');
+      return;
+    }
+    
+    const clients = this.rooms.get(room);
+    if (clients) {
+      let broadcastCount = 0;
+      console.log(`📡 Broadcasting Y.js message in room "${room}" to ${clients.size - 1} other clients`);
+      
+      // Simply relay the message to other clients without server-side processing
+      // This avoids Y.js document corruption issues
+      clients.forEach(client => {
+        if (client !== ws && client.readyState === client.OPEN) {
+          try {
+            client.send(message);
+            broadcastCount++;
+          } catch (error) {
+            console.error('Error broadcasting Y.js message:', error);
+            this.cleanup(client);
+          }
+        }
+      });
+      
+      console.log(`✅ Y.js message broadcasted to ${broadcastCount} clients in room "${room}"`);
+    } else {
+      console.warn(`⚠️ No clients found in room "${room}" for Y.js broadcast`);
+    }
+  }
+
+  /**
+   * Get connections by user key to prevent duplicates
+   */
+  getConnectionsByUserKey(userKey) {
+    return this.connectionsByUser.get(userKey) || new Set();
+  }
+
+  /**
    * Get server statistics
    */
   getStats() {
@@ -511,6 +502,36 @@ class YjsWebSocketServer {
         clientCount: clients.size
       }))
     };
+  }
+
+  /**
+   * Check if a room exists
+   */
+  hasRoom(room) {
+    return this.rooms.has(room);
+  }
+
+  /**
+   * Create a new room if it doesn't exist
+   */
+  createRoom(room) {
+    if (!this.rooms.has(room)) {
+      this.rooms.set(room, new Set());
+      console.log(`🏠 Created new Y-WebSocket room: ${room}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Stop heartbeat
+   */
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      console.log('💔 Heartbeat stopped');
+    }
   }
 
   /**
@@ -534,75 +555,6 @@ class YjsWebSocketServer {
       this.connectionsByUser.clear();
       
       console.log('✅ Y-WebSocket server shutdown complete');
-    }
-  }
-
-  /**
-   * Check if a room exists
-   */
-  hasRoom(room) {
-    return this.rooms.has(room);
-  }
-
-  /**
-   * Create a new room if it doesn't exist
-   */
-  createRoom(room) {
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Set());
-      console.log(`🏠 Created new Y-WebSocket room: ${room}`);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Get connections by user key to prevent duplicates
-   */
-  getConnectionsByUserKey(userKey) {
-    return this.connectionsByUser.get(userKey) || new Set();
-  }
-
-  /**
-   * Start heartbeat to detect dead connections
-   */
-  startHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
-
-    this.heartbeatInterval = setInterval(() => {
-      this.wss.clients.forEach(ws => {
-        if (!ws.isAlive) {
-          console.log(`💔 Terminating dead connection for user: ${ws.userEmail || 'unknown'}`);
-          ws.terminate();
-          return;
-        }
-
-        // Check for inactive connections (no activity for 5 minutes)
-        const now = Date.now();
-        if (now - ws.lastActivity > 300000) { // 5 minutes
-          console.log(`⏰ Terminating inactive connection for user: ${ws.userEmail || 'unknown'}`);
-          ws.terminate();
-          return;
-        }
-
-        ws.isAlive = false;
-        ws.ping();
-      });
-    }, 30000); // Check every 30 seconds
-
-    console.log('💓 Heartbeat started for Y-WebSocket connections');
-  }
-
-  /**
-   * Stop heartbeat
-   */
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-      console.log('💔 Heartbeat stopped');
     }
   }
 }

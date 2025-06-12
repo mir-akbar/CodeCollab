@@ -111,35 +111,55 @@ export function MonacoEditor({
       }
     }
 
-    if (!sessionId || !filePath) {
-      console.warn('Cannot setup collaboration: missing sessionId or filePath');
-      return;
-    }
-  }, [sessionId, filePath, fileContent, contentLoaded]);
-
-  // Setup collaboration binding separately after content is initialized
-  useEffect(() => {
-    if (editorRef.current && isConnected && isCollaborationReady && hasContentSet && !bindingRef.current && filePath) {
+    // Set up collaboration binding immediately after editor mount if ready
+    if (sessionId && filePath && isConnected) {
       try {
-        console.log('🔗 Setting up Monaco collaboration binding for:', filePath);
-        bindingRef.current = createBinding(editorRef.current, onContentChange);
+        console.log(`🔗 [MONACO EDITOR] Setting up collaboration binding on mount for: ${filePath}`);
+        bindingRef.current = createBinding(editor, onContentChange);
         
-        // Initialize YJS content if needed
-        if (fileContent) {
+        // Initialize YJS content if we have file content
+        if (fileContent && fileContent.trim()) {
           setTimeout(() => {
             try {
               const currentContent = getContent();
-              if (currentContent.length === 0 && fileContent.trim()) {
-                console.log('📝 Initializing YJS content for:', filePath);
+              if (currentContent.length === 0) {
+                console.log('📝 Initializing YJS content on mount for:', filePath);
                 initializeContent(fileContent);
               }
             } catch (error) {
-              console.warn('Error initializing YJS content:', error);
+              console.warn('Error initializing YJS content on mount:', error);
             }
           }, 100);
         }
       } catch (error) {
-        console.error('Error creating Monaco collaboration binding:', error);
+        console.error('Error creating collaboration binding on mount:', error);
+      }
+    }
+  }, [sessionId, filePath, fileContent, contentLoaded, isConnected, createBinding, onContentChange, getContent, initializeContent]);
+
+  // Setup collaboration binding as fallback if not set up during mount
+  useEffect(() => {
+    if (editorRef.current && isConnected && isCollaborationReady && !bindingRef.current && filePath && hasContentSet) {
+      try {
+        console.log('🔗 Setting up fallback Monaco collaboration binding for:', filePath);
+        bindingRef.current = createBinding(editorRef.current, onContentChange);
+        
+        // Initialize YJS content if needed
+        if (fileContent && fileContent.trim()) {
+          setTimeout(() => {
+            try {
+              const currentContent = getContent();
+              if (currentContent.length === 0) {
+                console.log('📝 Initializing YJS content (fallback) for:', filePath);
+                initializeContent(fileContent);
+              }
+            } catch (error) {
+              console.warn('Error initializing YJS content (fallback):', error);
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Error creating fallback collaboration binding:', error);
       }
     }
   }, [isConnected, isCollaborationReady, hasContentSet, createBinding, onContentChange, filePath, fileContent, getContent, initializeContent]);
@@ -158,36 +178,20 @@ export function MonacoEditor({
     };
   }, []);
 
-  // Reset initialization state when file changes - but prevent excessive resets
+  // Reset state when file changes (editor will remount due to key prop)
   useEffect(() => {
     if (filePath && filePath !== currentFilePath) {
       console.log(`📁 [MONACO EDITOR] File path changed from ${currentFilePath} to ${filePath}`);
       
-      // IMMEDIATELY reset content state FIRST to prevent race conditions
+      // Reset content state immediately for new file
       setHasContentSet(false);
       
-      // Clear existing editor content immediately to prevent showing wrong content
-      if (editorRef.current) {
-        const model = editorRef.current.getModel();
-        if (model) {
-          console.log(`🧹 [MONACO EDITOR] Clearing editor content for file switch`);
-          model.setValue(''); // Clear content immediately
-        }
-      }
+      // Note: bindingRef cleanup happens automatically due to editor remount
+      bindingRef.current = null;
       
-      // Clean up existing binding when file changes
-      if (bindingRef.current) {
-        try {
-          bindingRef.current.destroy();
-        } catch (error) {
-          console.warn('Error destroying Monaco binding on file change:', error);
-        }
-        bindingRef.current = null;
-      }
-      
-      // Update currentFilePath last
+      // Update currentFilePath 
       setCurrentFilePath(filePath);
-      console.log(`🔄 [MONACO EDITOR] currentFilePath updated to: ${filePath}, hasContentSet reset to false`);
+      console.log(`🔄 [MONACO EDITOR] State reset for new file: ${filePath}`);
     }
   }, [filePath, currentFilePath]);
 
