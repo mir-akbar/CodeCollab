@@ -6,6 +6,7 @@
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { MonacoBinding } from 'y-monaco';
+import { injectUserCursorStyles, removeUserCursorStyles, updateCursorElements } from '@/utils/cursorStyles';
 
 class CodeCollaborationService {
   constructor() {
@@ -195,7 +196,18 @@ class CodeCollaborationService {
       }
     }
 
-    // Create new binding
+    // Ensure user presence is set BEFORE creating binding to prevent label flickering
+    const userState = connection.awareness.getLocalState();
+    if (userState?.user) {
+      console.log('👤 Refreshing user presence before binding creation:', userState.user.name);
+      // Force refresh of local awareness state
+      connection.awareness.setLocalStateField('user', {
+        ...userState.user,
+        timestamp: Date.now()
+      });
+    }
+
+    // Create new binding with enhanced awareness configuration
     const binding = new MonacoBinding(
       connection.ytext,
       editor.getModel(),
@@ -204,6 +216,60 @@ class CodeCollaborationService {
     );
 
     this.bindings.set(connectionKey, binding);
+
+    // Immediately inject cursor styles for all existing users to prevent flickering
+    const currentStates = connection.awareness.getStates();
+    currentStates.forEach((state, clientId) => {
+      if (state?.user) {
+        console.log('🎨 Injecting immediate cursor style for client:', clientId, state.user.name);
+        this.injectUserCursorStyle(clientId, state.user);
+      }
+    });
+
+    // Also update cursor elements immediately
+    requestAnimationFrame(() => {
+      this.updateAllCursorElements(currentStates);
+    });
+
+    // Set up MutationObserver to catch new cursor elements and label them immediately
+    const editorElement = editor.getDomNode();
+    if (editorElement && !this.cursorObservers?.has(connectionKey)) {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // Check if this node or its children contain cursor elements
+              const newCursorElements = node.classList?.contains('yRemoteSelectionHead') 
+                ? [node] 
+                : node.querySelectorAll?.('.yRemoteSelectionHead') || [];
+              
+              // Immediately set data attributes for new cursor elements
+              [...newCursorElements].forEach(cursorElement => {
+                const clientId = Array.from(cursorElement.classList)
+                  .find(cls => cls.startsWith('yRemoteSelectionHead-'))
+                  ?.replace('yRemoteSelectionHead-', '');
+                
+                if (clientId && !cursorElement.hasAttribute('data-user-name')) {
+                  const userState = connection.awareness.getStates().get(parseInt(clientId));
+                  const userName = userState?.user?.name || 'Anonymous';
+                  cursorElement.setAttribute('data-user-name', userName);
+                  console.log(`⚡ Immediately labeled new cursor for client ${clientId}: ${userName}`);
+                }
+              });
+            }
+          });
+        });
+      });
+      
+      observer.observe(editorElement, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Store observer for cleanup
+      if (!this.cursorObservers) this.cursorObservers = new Map();
+      this.cursorObservers.set(connectionKey, observer);
+    }
 
     // Set up content change listener
     if (onContentChange) {
@@ -220,10 +286,15 @@ class CodeCollaborationService {
       binding._contentObserver = contentObserver;
     }
 
-    // Set up cursor tracking
+    // Enhanced cursor tracking with user information
     const updateCursor = () => {
       if (connection.awareness && editor) {
         const selection = editor.getSelection();
+        
+        // Get current user info
+        const userState = connection.awareness.getLocalState();
+        const userName = userState?.user?.name || 'Anonymous';
+        
         connection.awareness.setLocalStateField('cursor', {
           anchor: {
             lineNumber: selection.startLineNumber,
@@ -234,11 +305,61 @@ class CodeCollaborationService {
             column: selection.endColumn
           }
         });
+        
+        // Ensure user info is maintained
+        if (userState?.user) {
+          connection.awareness.setLocalStateField('user', {
+            ...userState.user,
+            name: userName
+          });
+        }
       }
     };
 
     editor.onDidChangeCursorPosition(updateCursor);
     editor.onDidChangeCursorSelection(updateCursor);
+
+    // Set up awareness state monitoring for debugging and cursor styling
+    connection.awareness.on('change', (changes) => {
+      console.log('👥 Awareness state changed for', filePath, ':', {
+        added: Array.from(changes.added),
+        updated: Array.from(changes.updated), 
+        removed: Array.from(changes.removed),
+        states: Array.from(connection.awareness.getStates().entries()).map(([clientId, state]) => ({
+          clientId,
+          user: state.user,
+          cursor: state.cursor
+        }))
+      });
+      
+      // Update cursor styles for all users
+      const userStates = connection.awareness.getStates();
+      
+      // Inject styles for new/updated users
+      changes.added.forEach(clientId => {
+        const state = userStates.get(clientId);
+        if (state?.user) {
+          this.injectUserCursorStyle(clientId, state.user);
+        }
+      });
+      
+      changes.updated.forEach(clientId => {
+        const state = userStates.get(clientId);
+        if (state?.user) {
+          this.injectUserCursorStyle(clientId, state.user);
+        }
+      });
+      
+      // Remove styles for disconnected users
+      changes.removed.forEach(clientId => {
+        this.removeUserCursorStyle(clientId);
+      });
+      
+      // Update cursor DOM elements with user names using requestAnimationFrame for smoother updates
+      requestAnimationFrame(() => {
+        this.updateAllCursorElements(userStates);
+      });
+    });
 
     console.log('✅ Monaco binding created for:', filePath);
     return binding;
@@ -282,11 +403,22 @@ class CodeCollaborationService {
     if (!connection || !connection.awareness) return;
 
     try {
-      connection.awareness.setLocalStateField('user', {
-        name: user.name || user.email?.split('@')[0] || 'Anonymous',
+      const userName = user.name || user.email?.split('@')[0] || 'Anonymous';
+      const userColor = this.stringToColor(user.email || user.name);
+      
+      const userInfo = {
+        name: userName,
         email: user.email,
-        color: this.stringToColor(user.email || user.name),
+        color: userColor,
+        colorLight: userColor + '33', // Add transparency for selections
         timestamp: Date.now()
+      };
+      
+      connection.awareness.setLocalStateField('user', userInfo);
+      
+      console.log('👤 Set user presence for collaboration:', {
+        connectionKey,
+        user: userInfo
       });
     } catch (error) {
       console.error('Error setting user presence:', error);
@@ -380,10 +512,26 @@ class CodeCollaborationService {
       this.bindings.delete(connectionKey);
     }
 
-    // Clean up connection
+    // Clean up cursor observer
+    if (this.cursorObservers?.has(connectionKey)) {
+      const observer = this.cursorObservers.get(connectionKey);
+      observer.disconnect();
+      this.cursorObservers.delete(connectionKey);
+      console.log('🧹 Cleaned up cursor observer for:', connectionKey);
+    }
+
+    // Clean up connection and cursor styles
     const connection = this.connections.get(connectionKey);
     if (connection) {
       try {
+        // Clean up cursor styles for all users in this connection
+        if (connection.awareness) {
+          const userStates = connection.awareness.getStates();
+          userStates.forEach((state, clientId) => {
+            this.removeUserCursorStyle(clientId);
+          });
+        }
+        
         // Clear all event listeners
         if (connection.listeners) {
           connection.listeners.clear();
@@ -437,6 +585,12 @@ class CodeCollaborationService {
       const [sessionId, filePath] = connectionKey.split('-', 2);
       this.disconnect(sessionId, filePath);
     }
+    
+    // Clean up any remaining cursor observers
+    if (this.cursorObservers) {
+      this.cursorObservers.forEach(observer => observer.disconnect());
+      this.cursorObservers.clear();
+    }
   }
 
   /**
@@ -463,6 +617,159 @@ class CodeCollaborationService {
       color += ("00" + value.toString(16)).slice(-2);
     }
     return color;
+  }
+
+  /**
+   * Inject user-specific cursor styles
+   */
+  injectUserCursorStyle(clientId, userInfo) {
+    if (typeof injectUserCursorStyles !== 'undefined') {
+      injectUserCursorStyles(clientId, userInfo);
+    } else {
+      // Fallback implementation
+      this.injectUserCursorStyleFallback(clientId, userInfo);
+    }
+  }
+
+  /**
+   * Remove user cursor styles
+   */
+  removeUserCursorStyle(clientId) {
+    if (typeof removeUserCursorStyles !== 'undefined') {
+      removeUserCursorStyles(clientId);
+    } else {
+      // Fallback implementation
+      this.removeUserCursorStyleFallback(clientId);
+    }
+  }
+
+  /**
+   * Update all cursor DOM elements
+   */
+  updateAllCursorElements(userStates) {
+    if (typeof updateCursorElements !== 'undefined') {
+      updateCursorElements(userStates);
+    } else {
+      // Fallback implementation
+      this.updateCursorElementsFallback(userStates);
+    }
+  }
+
+  /**
+   * Fallback cursor style injection
+   */
+  injectUserCursorStyleFallback(clientId, userInfo) {
+    const styleId = `yjs-cursor-style-${clientId}`;
+    
+    // Remove existing style
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
+    if (!userInfo?.color) return;
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    
+    const color = userInfo.color;
+    const lightColor = userInfo.colorLight || (color + '33');
+    const userName = userInfo.name || 'Anonymous';
+    
+    style.innerHTML = `
+      .yRemoteSelection-${clientId} {
+        background-color: ${lightColor} !important;
+      }
+      
+      .yRemoteSelectionHead-${clientId} {
+        background-color: ${color} !important;
+        border-left-color: ${color} !important;
+      }
+      
+      .yRemoteSelectionHead-${clientId}::after {
+        /* Let CSS attr() handle the content - this prevents flickering */
+        background-color: ${color};
+        color: ${this.isLightColor(color) ? '#333' : 'white'};
+        position: absolute;
+        top: -1.3em;
+        left: -2px;
+        font-size: 0.7em;
+        font-weight: 500;
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+        z-index: 1001;
+        pointer-events: none;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    `;
+    
+    document.head.appendChild(style);
+    console.log(`💅 Injected cursor styles for ${userName} (${clientId}):`, color);
+  }
+
+  /**
+   * Fallback cursor style removal
+   */
+  removeUserCursorStyleFallback(clientId) {
+    const styleId = `yjs-cursor-style-${clientId}`;
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.remove();
+      console.log(`🗑️ Removed cursor styles for client ${clientId}`);
+    }
+  }
+
+  /**
+   * Fallback cursor element update
+   */
+  updateCursorElementsFallback(userStates) {
+    // Find all cursor elements and update their data attributes
+    const cursorElements = document.querySelectorAll('.yRemoteSelectionHead');
+    
+    cursorElements.forEach((element) => {
+      const clientId = Array.from(element.classList)
+        .find(cls => cls.startsWith('yRemoteSelectionHead-'))
+        ?.replace('yRemoteSelectionHead-', '');
+      
+      if (clientId && userStates.has(parseInt(clientId))) {
+        const userState = userStates.get(parseInt(clientId));
+        const userName = userState?.user?.name || 'Anonymous';
+        
+        // Set data attribute for CSS immediately to prevent "User" fallback
+        element.setAttribute('data-user-name', userName);
+        console.log(`🏷️ Set cursor label for client ${clientId}: ${userName}`);
+      }
+    });
+    
+    // Also check for any cursor elements without data-user-name and fix them
+    const unlabeledCursors = document.querySelectorAll('.yRemoteSelectionHead:not([data-user-name])');
+    if (unlabeledCursors.length > 0) {
+      console.log(`🔍 Found ${unlabeledCursors.length} unlabeled cursor elements, setting fallback`);
+      unlabeledCursors.forEach(element => {
+        // Set a temporary label to prevent flickering
+        element.setAttribute('data-user-name', 'Anonymous');
+      });
+    }
+  }
+
+  /**
+   * Check if color is light (for text contrast)
+   */
+  isLightColor(color) {
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      return brightness > 155;
+    }
+    return false;
   }
 }
 

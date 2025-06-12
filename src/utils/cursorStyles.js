@@ -27,10 +27,29 @@ export function injectUserCursorStyles(clientId, userInfo) {
       border-left-color: ${color} !important;
     }
     
-    .yRemoteSelectionHead-${clientId}::before {
-      content: "${userName}";
+    .yRemoteSelectionHead-${clientId}::after {
+      /* Let CSS attr() handle the content - this prevents flickering */
       background-color: ${color};
       color: ${isLightColor(color) ? '#333' : 'white'};
+    }
+    
+    /* Additional styling for better visibility */
+    .yRemoteSelectionHead-${clientId}::after {
+      position: absolute;
+      top: -1.3em;
+      left: -2px;
+      font-size: 0.7em;
+      font-weight: 500;
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      z-index: 1001;
+      pointer-events: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   `;
   
@@ -64,4 +83,32 @@ export function cleanupAllCursorStyles() {
   const cursorStyles = document.querySelectorAll('[id^="yjs-cursor-style-"]');
   cursorStyles.forEach(style => style.remove());
   console.log('🧹 Cleaned up all YJS cursor styles');
+}
+
+/**
+ * Update cursor DOM elements with user names manually
+ * This is a fallback for when y-monaco doesn't set data attributes
+ */
+export function updateCursorElements(userStates) {
+  // Find all cursor elements in the Monaco editor
+  const cursorElements = document.querySelectorAll('.yRemoteSelectionHead');
+  
+  cursorElements.forEach((element, index) => {
+    const clientId = Array.from(element.classList)
+      .find(cls => cls.startsWith('yRemoteSelectionHead-'))
+      ?.replace('yRemoteSelectionHead-', '');
+    
+    if (clientId && userStates.has(parseInt(clientId))) {
+      const userState = userStates.get(parseInt(clientId));
+      const userName = userState?.user?.name || 'Anonymous';
+      
+      // Set data attribute for CSS to use
+      element.setAttribute('data-user-name', userName);
+      
+      // Also inject specific styles for this client if not already done
+      if (userState?.user) {
+        injectUserCursorStyles(clientId, userState.user);
+      }
+    }
+  });
 }
