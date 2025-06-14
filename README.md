@@ -1,4 +1,4 @@
-# **CodeLab: Collaborative Real-ti- 🚀 **YJS Collaboration** - Multi-user real-time code editing with Y-WebSocket
+# **CodeCollab: Collaborative Real-time Code Editor**
 
 [![Security Status](https://img.shields.io/badge/Security-Secured-green)](./docs/MONGODB_SECURITY_FIX_REPORT.md)
 [![YJS Status](https://img.shields.io/badge/YJS-Fixed-blue)](#yjs-improvements)
