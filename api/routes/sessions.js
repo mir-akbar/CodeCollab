@@ -73,16 +73,30 @@ router.post('/:sessionId/join', requireAuth, participantController.joinSession);
 router.post('/:sessionId/leave', requireAuth, participantController.leaveSession);
 
 /**
+ * POST /api/sessions/:sessionId/transfer-ownership
+ * Transfer ownership of a session
+ */
+router.post('/:sessionId/transfer-ownership', requireAuth, participantController.transferOwnership);
+
+/**
  * PATCH /api/sessions/:sessionId/participants/:participantId/role
  * Update participant role
  */
 router.patch('/:sessionId/participants/:participantId/role', requireAuth, participantController.updateParticipantRole);
 
 /**
- * DELETE /api/sessions/:sessionId/participants/:participantId
- * Remove participant from session
+ * POST /api/sessions/:sessionId/update-role
+ * Update participant role (by email)
  */
-router.delete('/:sessionId/participants/:participantId', requireAuth, participantController.removeParticipant);
+router.post('/:sessionId/update-role', requireAuth, participantController.updateParticipantRole);
+
+/**
+ * POST /api/sessions/:sessionId/remove-participant
+ * Remove participant from session (by email)
+ */
+router.post('/:sessionId/remove-participant', requireAuth, participantController.removeParticipant);
+
+
 
 // ===== SESSION ACTIVITY ROUTES =====
 

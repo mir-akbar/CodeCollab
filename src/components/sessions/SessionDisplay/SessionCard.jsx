@@ -34,7 +34,7 @@
 import { motion } from 'framer-motion';
 import { AccessLevelBadge } from '../SessionUI/AccessLevelBadge';
 import { Button } from '@/components/ui/button';
-import { Star, Trash, LogIn, LogOut, Crown, UserPlus } from 'lucide-react';
+import { Star, Trash, LogIn, LogOut, Crown, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from "@/components/ui/badge";
 import { Users, Calendar } from "lucide-react";
@@ -44,6 +44,7 @@ import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayNam
 import { navigateToSession } from '@/utils/sessionUtils';
 import { useDeleteSession, useLeaveSession, useSessionParticipants } from '@/hooks/useSessions';
 import { useFavorites } from '@/hooks/useFavorites';
+import { UserManagementDialog } from '../dialogs';
 import { 
   formatSessionDate,
   getParticipantCount,
@@ -87,7 +88,6 @@ export const SessionCard = ({
   // Permission checks using enhanced system
   const permissions = {
     canDelete: canDeleteSession(userRole),
-    canInvite: canManageParticipants(userRole),
     canManage: canManageParticipants(userRole)
   };
 
@@ -232,16 +232,21 @@ export const SessionCard = ({
             </div>
           )}
         </div>
-        {permissions.canInvite && (
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={() => onInvite(activeSession)}
-            className="gap-1"
+        {permissions.canManage && (
+          <UserManagementDialog 
+            session={activeSession} 
+            userEmail={userEmail}
+            onInvite={onInvite}
           >
-            <UserPlus className="h-4 w-4" />
-            <span>Invite</span>
-          </Button>
+            <Button 
+              variant="secondary" 
+              size="sm"
+              className="gap-1"
+            >
+              <Settings className="h-4 w-4" />
+              <span>Manage</span>
+            </Button>
+          </UserManagementDialog>
         )}
       </div>
 

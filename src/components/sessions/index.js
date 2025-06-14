@@ -17,11 +17,13 @@ export {
   SessionCardSkeleton 
 } from './SessionDisplay';
 
-// Action Components
+// Dialog Components
 export { 
   CreateSessionDialog, 
-  InvitationDialog 
-} from './SessionActions';
+  InvitationDialog,
+  DeleteSessionDialog,
+  UserManagementDialog
+} from './dialogs';
 
 // Navigation Components
 export { 

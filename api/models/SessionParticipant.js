@@ -49,7 +49,7 @@ const SessionParticipantSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['owner', 'admin', 'editor', 'viewer'],
-    default: 'viewer',
+    default: 'viewer',  // Default to viewer for security (principle of least privilege)
     required: true
   },
   status: {
@@ -175,7 +175,7 @@ SessionParticipantSchema.methods.hasPermission = function(action) {
     'edit': ['owner', 'admin', 'editor'],
     'invite': ['owner', 'admin'],
     'remove': ['owner', 'admin'],
-    'changeRoles': ['owner'],
+    'changeRoles': ['owner', 'admin'],  // Admins can also assign/change roles
     'delete': ['owner'],
     'transfer': ['owner']
   };
@@ -185,16 +185,21 @@ SessionParticipantSchema.methods.hasPermission = function(action) {
 
 /**
  * Can assign role check (can only assign roles equal or lower)
+ * Owners can assign any role, admins can assign editor/viewer only
  */
 SessionParticipantSchema.methods.canAssignRole = function(targetRole) {
-  const roleHierarchy = {
-    'owner': 4,
-    'admin': 3,
-    'editor': 2,
-    'viewer': 1
-  };
+  // Owners can assign any role except owner (to prevent multiple owners)
+  if (this.role === 'owner') {
+    return targetRole !== 'owner';
+  }
 
-  return roleHierarchy[this.role] >= roleHierarchy[targetRole];
+  // Admins can assign editor and viewer roles only
+  if (this.role === 'admin') {
+    return targetRole === 'editor' || targetRole === 'viewer';
+  }
+
+  // Editors and viewers cannot assign roles
+  return false;
 };
 
 /**

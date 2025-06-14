@@ -15,6 +15,8 @@
 const participantService = require("../services/participantService");
 const { asyncHandler } = require("../middleware/errorHandler");
 const SessionValidationUtils = require("../utils/sessionValidation");
+const ParticipantValidation = require("../utils/participantValidation");
+const ParticipantErrorHandler = require("../utils/participantErrorHandler");
 
 class SessionParticipantController {
 
@@ -26,158 +28,90 @@ class SessionParticipantController {
    */
   inviteToSession = asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
-    const { inviteeEmail, role, inviterEmail } = req.body; // Validation middleware normalizes these fields
+    const { inviteeEmail, role, inviterEmail } = req.body;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
+    // Step 1: Validate invitation request
+    const validation = await ParticipantValidation.validateInvitation({
+      sessionId,
+      inviteeEmail,
+      inviterEmail,
+      role
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
 
-    if (!SessionValidationUtils.isValidEmail(inviteeEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid invitee email is required" 
-      });
-    }
-
-    if (!SessionValidationUtils.isValidEmail(inviterEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid inviter email is required" 
-      });
-    }
-
-    if (role && !SessionValidationUtils.isValidRole(role)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid role. Must be one of: owner, admin, editor, viewer" 
-      });
-    }
-
-    // Prevent self-invitation
-    if (inviteeEmail.toLowerCase() === inviterEmail.toLowerCase()) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Cannot invite yourself to a session" 
-      });
-    }
+    const { inviterUser, inviteeUser, role: validatedRole } = validation;
 
     try {
-      // Step 1: Resolve inviter email to cognitoId
-      const User = require('../models/User');
-      let inviterUser = await User.findByEmail(inviterEmail.trim().toLowerCase());
-      if (!inviterUser) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Inviter user not found. Please ensure you are logged in." 
-        });
-      }
+      // Step 2: Check if inviter has permission to invite users
+      const permissionCheck = await ParticipantValidation.checkPermission(
+        sessionId,
+        inviterUser.cognitoId,
+        'invite',
+        res
+      );
+      
+      if (!permissionCheck) return; // Permission denied, response already sent
 
-      // Step 1.5: Check if inviter has permission to invite users
-      const SessionParticipant = require('../models/SessionParticipant');
-      const inviterParticipant = await SessionParticipant.findOne({ 
-        sessionId, 
-        cognitoId: inviterUser.cognitoId,
-        status: { $in: ['active', 'invited'] }
-      });
+      // Step 3: Check if inviter can assign the requested role
+      const targetRole = validatedRole || 'viewer'; // Default to viewer for security
+      const roleCheck = await ParticipantValidation.checkRoleAssignment(
+        sessionId,
+        inviterUser.cognitoId,
+        targetRole,
+        res
+      );
+      
+      if (!roleCheck) return; // Role assignment denied, response already sent
 
-      if (!inviterParticipant) {
-        return res.status(403).json({ 
-          success: false,
-          error: "You are not a participant in this session" 
-        });
-      }
-
-      if (!inviterParticipant.hasPermission('invite')) {
-        return res.status(403).json({ 
-          success: false,
-          error: "You don't have permission to invite users to this session. Only admins and owners can invite users." 
-        });
-      }
-
-      // Check if inviter can assign the requested role
-      if (!inviterParticipant.canAssignRole(role || 'editor')) {
-        return res.status(403).json({ 
-          success: false,
-          error: `You don't have permission to assign the ${role || 'editor'} role. You can only assign roles equal to or lower than your own.` 
-        });
-      }
-
-      // Step 2: Find or create invitee user
-      let inviteeUser = await User.findByEmail(inviteeEmail.trim().toLowerCase());
+      // Step 4: Handle case where invitee doesn't exist - create placeholder user
+      let targetInviteeUser = inviteeUser;
       const userExistedBefore = !!inviteeUser;
       
       if (!inviteeUser) {
-        // Create placeholder user for non-existent account
         console.log(`Creating placeholder user for invited email: ${inviteeEmail}`);
-        inviteeUser = await User.createFromCognito({
+        const User = require('../models/User');
+        targetInviteeUser = await User.createFromCognito({
           email: inviteeEmail.trim().toLowerCase(),
           name: inviteeEmail.split('@')[0],
           cognitoId: `temp_invite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         });
       }
 
-      // Step 3: Add participant using cognitoIds
+      // Step 5: Add participant using cognitoIds
       try {
         await participantService.addParticipant({
           sessionId, 
-          cognitoId: inviteeUser.cognitoId,
-          role: role || 'editor',
+          cognitoId: targetInviteeUser.cognitoId,
+          role: targetRole,
           invitedBy: inviterUser.cognitoId
         });
 
-        res.status(200).json({ 
-          success: true,
-          message: userExistedBefore 
+        ParticipantErrorHandler.success(res, 
+          userExistedBefore 
             ? "User invited to session successfully"
             : "Invitation sent to new user - they can join when they create an account",
-          userExistedBefore,
-          inviteeEmail: inviteeUser.email
-        });
+          {
+            userExistedBefore,
+            inviteeEmail: targetInviteeUser.email
+          }
+        );
 
       } catch (participantError) {
         // Handle case where user is already a participant
         if (participantError.message.includes('already a participant')) {
-          // Check current participant status and role
-          const existingParticipant = await participantService.getParticipant(sessionId, inviteeUser.cognitoId);
+          const existingParticipant = await participantService.getParticipant(sessionId, targetInviteeUser.cognitoId);
           
           if (existingParticipant) {
-            // User is already in the session, provide informative response
-            res.status(200).json({
-              success: true,
-              message: `${inviteeEmail} is already a ${existingParticipant.role} in this session`,
-              userExistedBefore,
-              inviteeEmail: inviteeUser.email,
-              currentRole: existingParticipant.role,
-              alreadyParticipant: true
-            });
-            return;
+            return ParticipantErrorHandler.participantExists(res, inviteeEmail, existingParticipant.role);
           }
         }
         
-        // Re-throw for other participant-related errors
         throw participantError;
       }
       
     } catch (error) {
-      console.error("Error inviting user:", error);
-      
-      // Handle specific error types with appropriate status codes
-      if (error.message.includes('Permission denied')) {
-        res.status(403).json({ 
-          success: false,
-          error: error.message 
-        });
-      } else {
-        res.status(500).json({ 
-          success: false,
-          error: "Internal server error",
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-      }
+      ParticipantErrorHandler.handleServiceError(res, error, "inviting user");
     }
   });
 
@@ -191,22 +125,24 @@ class SessionParticipantController {
     const { sessionId } = req.params;
     const { userEmail } = req;
 
-    // Resolve user email to cognitoId
-    const User = require('../models/User');
-    const user = await User.findByEmail(userEmail);
-    if (!user) {
-      return res.status(404).json({ 
-        success: false,
-        error: "User not found" 
-      });
+    // Step 1: Validate input and resolve user
+    const validation = await ParticipantValidation.validateSessionJoin({
+      sessionId,
+      userEmail
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
+
+    const { user } = validation;
+
+    try {
+      // Step 2: Remove participant (leave session)
+      await participantService.removeParticipant(sessionId, user.cognitoId);
+
+      ParticipantErrorHandler.success(res, "Left session successfully");
+    } catch (error) {
+      ParticipantErrorHandler.handleServiceError(res, error, "leaving session");
     }
-
-    await participantService.removeParticipant(sessionId, user.cognitoId);
-
-    res.status(200).json({ 
-      success: true,
-      message: "Left session successfully" 
-    });
   });
 
   /**
@@ -220,63 +156,34 @@ class SessionParticipantController {
     const { participantEmail, removerEmail } = req.body;
     const userEmail = removerEmail || req.userEmail;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
+    // Step 1: Validate removal request
+    const validation = await ParticipantValidation.validateParticipantRemoval({
+      sessionId,
+      participantEmail,
+      removerEmail: userEmail
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
 
-    if (!SessionValidationUtils.isValidEmail(participantEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid participant email is required" 
-      });
-    }
-
-    if (!SessionValidationUtils.isValidEmail(userEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid remover email is required" 
-      });
-    }
-
-    // Prevent self-removal (should use leave session instead)
-    if (participantEmail.toLowerCase() === userEmail.toLowerCase()) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Use the leave session endpoint to remove yourself from a session" 
-      });
-    }
+    const { participantUser, removerUser } = validation;
 
     try {
-      // Resolve participant email to cognitoId
-      const User = require('../models/User');
-      const participantUser = await User.findByEmail(participantEmail.trim().toLowerCase());
-      if (!participantUser) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Participant not found" 
-        });
-      }
-
-      await participantService.removeParticipant(
-        sessionId, 
-        participantUser.cognitoId
+      // Step 2: Check if remover has permission to remove participants
+      const permissionCheck = await ParticipantValidation.checkPermission(
+        sessionId,
+        removerUser.cognitoId,
+        'remove',
+        res
       );
+      
+      if (!permissionCheck) return; // Permission denied, response already sent
 
-      res.status(200).json({ 
-        success: true,
-        message: "Participant removed successfully" 
-      });
+      // Step 3: Remove participant
+      await participantService.removeParticipant(sessionId, participantUser.cognitoId);
+
+      ParticipantErrorHandler.success(res, "Participant removed successfully");
     } catch (error) {
-      console.error("Error removing participant:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
+      ParticipantErrorHandler.handleServiceError(res, error, "removing participant");
     }
   });
 
@@ -291,72 +198,38 @@ class SessionParticipantController {
     const { newOwnerEmail, currentOwnerEmail } = req.body;
     const userEmail = currentOwnerEmail || req.userEmail;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
+    // Step 1: Validate ownership transfer request
+    const validation = await ParticipantValidation.validateOwnershipTransfer({
+      sessionId,
+      currentOwnerEmail: userEmail,
+      newOwnerEmail
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
 
-    if (!SessionValidationUtils.isValidEmail(newOwnerEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid new owner email is required" 
-      });
-    }
-
-    if (!SessionValidationUtils.isValidEmail(userEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid current owner email is required" 
-      });
-    }
-
-    // Prevent transferring to same user
-    if (newOwnerEmail.toLowerCase() === userEmail.toLowerCase()) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Cannot transfer ownership to the current owner" 
-      });
-    }
+    const { currentOwnerUser, newOwnerUser } = validation;
 
     try {
-      // Resolve emails to cognitoIds
-      const User = require('../models/User');
-      const currentOwnerUser = await User.findByEmail(userEmail.trim().toLowerCase());
-      if (!currentOwnerUser) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Current owner not found" 
-        });
-      }
+      // Step 2: Check if current user is the owner
+      const permissionCheck = await ParticipantValidation.checkPermission(
+        sessionId,
+        currentOwnerUser.cognitoId,
+        'transfer',
+        res
+      );
+      
+      if (!permissionCheck) return; // Permission denied, response already sent
 
-      const newOwnerUser = await User.findByEmail(newOwnerEmail.trim().toLowerCase());
-      if (!newOwnerUser) {
-        return res.status(404).json({ 
-          success: false,
-          error: "New owner not found" 
-        });
-      }
-
+      // Step 3: Transfer ownership
       await participantService.transferOwnership(
         sessionId, 
         currentOwnerUser.cognitoId, 
         newOwnerUser.cognitoId
       );
 
-      res.status(200).json({ 
-        success: true,
-        message: "Ownership transferred successfully" 
-      });
+      ParticipantErrorHandler.success(res, "Ownership transferred successfully");
     } catch (error) {
-      console.error("Error transferring ownership:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
+      ParticipantErrorHandler.handleServiceError(res, error, "transferring ownership");
     }
   });
 
@@ -371,63 +244,39 @@ class SessionParticipantController {
     const { participantEmail, newRole, updaterEmail } = req.body;
     const userEmail = updaterEmail || req.userEmail;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
+    // Step 1: Validate role update request
+    const validation = await ParticipantValidation.validateRoleUpdate({
+      sessionId,
+      participantEmail,
+      updaterEmail: userEmail,
+      newRole
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
 
-    if (!SessionValidationUtils.isValidEmail(participantEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid participant email is required" 
-      });
-    }
-
-    if (!SessionValidationUtils.isValidRole(newRole)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid role is required. Must be one of: owner, admin, editor, viewer" 
-      });
-    }
-
-    if (!SessionValidationUtils.isValidEmail(userEmail)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid updater email is required" 
-      });
-    }
+    const { participantUser, updaterUser } = validation;
 
     try {
-      // Resolve participant email to cognitoId
-      const User = require('../models/User');
-      const participantUser = await User.findByEmail(participantEmail.trim().toLowerCase());
-      if (!participantUser) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Participant not found" 
-        });
-      }
+      // Step 2: Check if updater can assign roles
+      const roleCheck = await ParticipantValidation.checkRoleAssignment(
+        sessionId,
+        updaterUser.cognitoId,
+        newRole,
+        res
+      );
+      
+      if (!roleCheck) return; // Role assignment denied, response already sent
 
+      // Step 3: Update participant role
       await participantService.updateParticipantRole(
         sessionId, 
         participantUser.cognitoId, 
         newRole
       );
 
-      res.status(200).json({ 
-        success: true,
-        message: "Participant role updated successfully" 
-      });
+      ParticipantErrorHandler.success(res, "Participant role updated successfully");
     } catch (error) {
-      console.error("Error updating participant role:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Internal server error",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
+      ParticipantErrorHandler.handleServiceError(res, error, "updating participant role");
     }
   });
 
@@ -442,33 +291,18 @@ class SessionParticipantController {
     const { userEmail } = req.body;
     const email = userEmail || req.userEmail;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
+    // Step 1: Validate session join request
+    const validation = await ParticipantValidation.validateSessionJoin({
+      sessionId,
+      userEmail: email
+    }, res);
+    
+    if (!validation) return; // Validation failed, response already sent
 
-    if (!SessionValidationUtils.isValidEmail(email)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Valid user email is required" 
-      });
-    }
+    const { user } = validation;
 
     try {
-      // Resolve user email to cognitoId
-      const User = require('../models/User');
-      const user = await User.findByEmail(email.trim().toLowerCase());
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          error: "User not found. Please create an account first."
-        });
-      }
-
-      // Check if user has a pending invitation
+      // Step 2: Check if user has a pending invitation
       const SessionParticipant = require('../models/SessionParticipant');
       const pendingInvitation = await SessionParticipant.findOne({
         sessionId,
@@ -477,37 +311,17 @@ class SessionParticipantController {
       });
 
       if (!pendingInvitation) {
-        return res.status(403).json({
-          success: false,
-          error: "No pending invitation found for this session"
-        });
+        return ParticipantErrorHandler.permissionDenied(res, "No pending invitation found for this session");
       }
 
-      // Accept the invitation using the participant service
+      // Step 3: Accept the invitation
       const result = await participantService.acceptInvitation(sessionId, user.cognitoId);
 
-      res.status(200).json({ 
-        success: true,
-        message: "Successfully joined session",
+      ParticipantErrorHandler.success(res, "Successfully joined session", {
         participant: result.participant
       });
     } catch (error) {
-      console.error("Error joining session:", error);
-      
-      // Handle specific error types with appropriate status codes
-      if (error.message.includes('not found') || 
-          error.message.includes('already active')) {
-        res.status(400).json({ 
-          success: false,
-          error: error.message 
-        });
-      } else {
-        res.status(500).json({ 
-          success: false,
-          error: "Internal server error",
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-      }
+      ParticipantErrorHandler.handleServiceError(res, error, "joining session");
     }
   });
 
@@ -520,31 +334,22 @@ class SessionParticipantController {
   getParticipants = asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
+    // Step 1: Validate session ID
+    const validationErrors = SessionValidationUtils.validateInputs({ sessionId });
+    if (validationErrors.length > 0) {
+      return ParticipantErrorHandler.validationError(res, validationErrors);
     }
 
     try {
+      // Step 2: Get participants
       const participants = await participantService.getSessionParticipants(sessionId);
 
-      // Return participants information
-      res.status(200).json({ 
-        success: true,
-        participants: participants,
+      ParticipantErrorHandler.success(res, "Participants retrieved successfully", {
+        participants,
         totalParticipants: participants.length
       });
-
     } catch (error) {
-      console.error("Error getting session participants:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Failed to get session participants",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
+      ParticipantErrorHandler.handleServiceError(res, error, "getting session participants");
     }
   });
 
@@ -557,44 +362,26 @@ class SessionParticipantController {
   getParticipant = asyncHandler(async (req, res) => {
     const { sessionId, participantId } = req.params;
 
-    // Enhanced validation
-    if (!SessionValidationUtils.isValidSessionId(sessionId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid session ID format" 
-      });
-    }
-
-    if (!participantId) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Participant ID is required" 
-      });
+    // Step 1: Validate inputs
+    const validationErrors = SessionValidationUtils.validateInputs({ sessionId });
+    if (validationErrors.length > 0 || !participantId) {
+      const errors = validationErrors.length > 0 ? validationErrors : ["Participant ID is required"];
+      return ParticipantErrorHandler.validationError(res, errors);
     }
 
     try {
+      // Step 2: Get participant details
       const participant = await participantService.getParticipant(sessionId, participantId);
       
       if (!participant) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Participant not found in this session" 
-        });
+        return ParticipantErrorHandler.userNotFound(res, "Participant not found in this session");
       }
 
-      // Return participant information
-      res.status(200).json({ 
-        success: true,
-        participant: participant
+      ParticipantErrorHandler.success(res, "Participant details retrieved successfully", {
+        participant
       });
-
     } catch (error) {
-      console.error("Error getting participant details:", error);
-      res.status(500).json({ 
-        success: false,
-        error: "Failed to get participant details",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
+      ParticipantErrorHandler.handleServiceError(res, error, "getting participant details");
     }
   });
 }

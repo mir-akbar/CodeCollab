@@ -10,7 +10,7 @@
  */
 const ROLE_PERMISSIONS = {
   owner: ['view', 'edit', 'invite', 'remove', 'changeRoles', 'delete', 'transfer'],
-  admin: ['view', 'edit', 'invite', 'remove'],
+  admin: ['view', 'edit', 'invite', 'remove', 'changeRoles'],  // Admins can also manage roles
   editor: ['view', 'edit'],
   viewer: ['view']
 };
@@ -34,9 +34,21 @@ function hasPermission(role, action) {
 
 /**
  * Check if role can assign target role (can only assign equal or lower roles)
+ * Updated logic: Owners can assign any role except owner, admins can assign editor/viewer
  */
 function canAssignRole(currentRole, targetRole) {
-  return ROLE_HIERARCHY[currentRole] >= ROLE_HIERARCHY[targetRole];
+  // Owners can assign any role except owner (to prevent multiple owners)
+  if (currentRole === 'owner') {
+    return targetRole !== 'owner';
+  }
+
+  // Admins can assign editor and viewer roles only
+  if (currentRole === 'admin') {
+    return targetRole === 'editor' || targetRole === 'viewer';
+  }
+
+  // Editors and viewers cannot assign roles
+  return false;
 }
 
 /**

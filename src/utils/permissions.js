@@ -11,29 +11,29 @@ const INVITE_POLICIES = {
   OPEN: 'open'
 };
 
-// Permission matrix - mirrors backend permissions.js
+// Permission matrix - MUST match backend permissions.js exactly
 const ROLE_PERMISSIONS = {
   owner: [
-    'view', 'edit', 'invite', 'remove', 'changeRoles', 'delete', 'transfer', 
-    'manageSettings', 'export', 'viewAnalytics'
+    'view', 'edit', 'invite', 'remove', 'changeRoles', 'delete', 'transfer'
   ],
   admin: [
-    'view', 'edit', 'invite', 'remove', 'changeRoles', 'export'
+    'view', 'edit', 'invite', 'remove', 'changeRoles'
   ],
   editor: [
-    'view', 'edit', 'invite'
+    'view', 'edit'
   ],
   viewer: [
     'view'
   ]
 };
 
-// Role hierarchy for assignments
+// Role hierarchy for assignments - MUST match backend logic exactly
+// Owners can assign any role except owner, admins can assign editor/viewer only
 const ROLE_HIERARCHY = {
-  owner: ['owner', 'admin', 'editor', 'viewer'],
-  admin: ['editor', 'viewer'],
-  editor: ['viewer'],
-  viewer: []
+  owner: ['admin', 'editor', 'viewer'], // Owners can assign any role except owner
+  admin: ['editor', 'viewer'], // Admins can assign editor/viewer roles only
+  editor: [], // Editors cannot assign roles
+  viewer: [] // Viewers cannot assign roles
 };
 
 /**
@@ -114,11 +114,12 @@ export const roleToAccess = (role) => {
 
 /**
  * Check if user can manage session settings
+ * Note: Only owners have settings management in current backend
  * @param {string} role - User's role
  * @returns {boolean} - Whether user can manage settings
  */
 export const canManageSettings = (role) => {
-  return hasPermission(role, 'manageSettings');
+  return role === 'owner'; // Only owners can manage settings
 };
 
 /**
@@ -180,10 +181,7 @@ export const getPermissionSummary = (role) => {
     canRemove: hasPermission(role, 'remove'),
     canChangeRoles: hasPermission(role, 'changeRoles'),
     canDelete: hasPermission(role, 'delete'),
-    canTransfer: hasPermission(role, 'transfer'),
-    canManageSettings: hasPermission(role, 'manageSettings'),
-    canExport: hasPermission(role, 'export'),
-    canViewAnalytics: hasPermission(role, 'viewAnalytics')
+    canTransfer: hasPermission(role, 'transfer')
   };
 };
 

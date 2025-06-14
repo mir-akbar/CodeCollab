@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { SessionTabs, SessionFilters } from '../SessionNavigation';
 import { SessionList, SessionCardSkeleton } from '../SessionDisplay';
 import { SessionFooter } from '../SessionUI';
-import { CreateSessionDialog, InvitationDialog, DeleteSessionDialog } from '../SessionActions';
+import { CreateSessionDialog, InvitationDialog, DeleteSessionDialog } from '../dialogs';
 import { PendingInvitations } from '../../PendingInvitations';
 import { 
   Plus, 
