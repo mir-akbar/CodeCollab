@@ -47,7 +47,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Crown, Shield, Edit, Eye, Trash2, MoreVertical, UserPlus } from 'lucide-react';
-import { useSessionParticipants, useUpdateRole, useRemoveParticipant } from '@/hooks/useSessions';
+import { useSessionParticipants, useUpdateRole, useRemoveParticipant } from '@/hooks/sessions';
 import { getUserRole, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 import { toast } from 'sonner';
 import PropTypes from 'prop-types';

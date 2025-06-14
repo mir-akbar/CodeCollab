@@ -36,7 +36,7 @@ import PropTypes from 'prop-types';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from "sonner";
-import { useCreateSession } from "@/hooks/useSessions";
+import { useCreateSession } from "@/hooks/sessions";
 import { useUser } from '@/contexts/UserContext';
 import { logDebugInfo } from '../utils/sessionComponentUtils';
 

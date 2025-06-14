@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUser } from '@/contexts/UserContext';
-import { usePendingInvitations, useSessionActions } from '@/hooks/useSessions';
+import { usePendingInvitations, useSessionActions } from '@/hooks/sessions';
 import { toast } from 'sonner';
 import PropTypes from 'prop-types';
 import { PendingInvitationsSkeleton } from './PendingInvitationsSkeleton';

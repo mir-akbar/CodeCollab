@@ -12,7 +12,7 @@ import axios from "axios";
 import { useAuth } from '@/hooks/useAuth';
 import { useUser } from '@/contexts/UserContext';
 import { useSessionAwareness } from '@/hooks/useSessionAwareness';
-import { useSessionActions } from '@/hooks/useSessions';
+import { useSessionActions } from '@/hooks/sessions';
 import PropTypes from 'prop-types';
 import { 
   getUserRole, 

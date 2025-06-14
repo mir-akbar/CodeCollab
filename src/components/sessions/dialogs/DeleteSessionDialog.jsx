@@ -60,7 +60,7 @@ import {
   Loader2 
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useDeleteSession } from '@/hooks/useSessions';
+import { useDeleteSession } from '@/hooks/sessions';
 import { logDebugInfo, formatSessionDate, getParticipantCount } from '../utils/sessionComponentUtils';
 import PropTypes from 'prop-types';
 

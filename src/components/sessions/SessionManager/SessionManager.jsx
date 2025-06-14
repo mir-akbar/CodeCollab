@@ -35,7 +35,7 @@ import {
 import { toast } from 'sonner';
 import { 
   useSessionsWithInvitations
-} from '@/hooks/useSessions';
+} from '@/hooks/sessions';
 import { useSessionManagerState } from '@/hooks/useSessionState';
 import { getFilteredSessions } from '@/utils/sessionUtils';
 import PropTypes from 'prop-types';

@@ -42,7 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import PropTypes from "prop-types";
 import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 import { navigateToSession } from '@/utils/sessionUtils';
-import { useDeleteSession, useLeaveSession, useSessionParticipants } from '@/hooks/useSessions';
+import { useDeleteSession, useLeaveSession, useSessionParticipants } from '@/hooks/sessions';
 import { useFavorites } from '@/hooks/useFavorites';
 import { UserManagementDialog } from '../dialogs';
 import { 

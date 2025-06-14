@@ -56,7 +56,7 @@ import {
 } from '@/components/ui/select';
 import { Mail, Users, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useInviteUser } from '@/hooks/useSessions';
+import { useInviteUser } from '@/hooks/sessions';
 import { useUser } from '@/contexts/UserContext';
 import { logDebugInfo } from '../utils/sessionComponentUtils';
 import PropTypes from 'prop-types';
