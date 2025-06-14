@@ -1,16 +1,43 @@
-# **CodeLab: Collaborative Real-Time Code Editor**
+# **CodeLab: Collaborative Real-ti- 🚀 **YJS Collaboration** - Multi-user real-time code editing with Y-WebSocket
+> - 💬 **Integrated Chat** - Real-time messaging via Y-WebSocket infrastructure Code Editor**
 
 [![Security Status](https://img.shields.io/badge/Security-Secured-green)](./docs/MONGODB_SECURITY_FIX_REPORT.md)
 [![YJS Status](https://img.shields.io/badge/YJS-Fixed-blue)](#yjs-improvements)
 [![Organization](https://img.shields.io/badge/Structure-Organized-orange)](./docs/PROJECT_ORGANIZATION.md)
 
 ## **Overview**
-CodeLab is a production-ready, web-based collaborative code editor designed for seamless real-time coding experiences. Built with enterprise-grade security and performance optimizations, it enables live code synchronization, syntax highlighting, and integrated communication for distributed development teams.
+CodeLab is a web-based collaborative code editor designed for real-time coding experiences. It provides live code synchronization, multi-user editing, file management, and integrated communication tools for distributed development teams. 
 
-> **Latest Updates (2025):** 
-> - 🔒 **Security hardened** - All MongoDB credentials secured with environment variables
-> - 🚀 **YJS content duplication fixed** - Robust multi-user collaborative editing
-> - 📁 **Project reorganized** - Clean, maintainable codebase structure
+**Core collaborative features are fully operational**, including real-time editing with conflict resolution, integrated chat, code execution, and session management with role-based access control.
+
+## **🚦 Feature Status**
+
+### **✅ Fully Implemented**
+- ✅ **Real-time Collaborative Editing** - YJS + Y-WebSocket with Monaco Editor
+- ✅ **User Authentication** - AWS Cognito integration with JWT tokens
+- ✅ **Session Management** - Create, join, leave sessions with role-based permissions
+- ✅ **File Management** - Upload, download, organize files with MongoDB storage
+- ✅ **Integrated Chat** - Real-time messaging via Y-WebSocket infrastructure
+- ✅ **Code Execution** - JavaScript, Python, Java via JDoodle API
+- ✅ **User Presence** - Live cursor tracking and awareness indicators
+
+### **🚧 In Progress**
+- 🚧 **Video Calling** - UI framework ready, WebRTC signaling partially implemented
+- 🚧 **Advanced Permissions** - Granular file-level permissions in development
+- 🚧 **Performance Optimization** - Database indexing and query optimization ongoing
+
+### **📋 Planned**
+- 📋 **Screen Sharing** - WebRTC-based screen sharing for video calls
+- 📋 **Plugin System** - Extension architecture for custom functionality
+- 📋 **Advanced Analytics** - Session metrics and collaboration insights
+
+> **Current Status (Jun 2025):** 
+> - 🔒 **AWS Cognito Authentication** - Secure user management and JWT tokens
+> - 🚀 **YJS Collaboration** - Multi-user real-time code editing with Y-WebSocket
+> - 💬 **Integrated Chat** - Real-time messaging via Y-WebSocket infrastructure
+> - ⚡ **Code Execution** - JavaScript, Python, Java execution via JDoodle API
+> - 📁 **File Management** - MongoDB storage with real-time file operations
+> - 🎯 **Session Control** - Role-based permissions (owner, admin, editor, viewer)
 
 ---
 
@@ -32,9 +59,8 @@ CodeLab is a production-ready, web-based collaborative code editor designed for 
 - **Session Management**: Secure user authentication and authorization
 
 ### **📡 Communication Suite**
-- **Integrated Text Chat**: Context-aware messaging during coding sessions
-- **WebRTC Audio/Video**: Low-latency voice and video calls
-
+- **Integrated Text Chat**: Context-aware messaging during coding sessions via Y-WebSocket
+- **Video Calling**: UI framework in place, WebRTC integration in development
 - **Presence Indicators**: Real-time user activity status
 
 ### **📁 Smart File Management**
@@ -53,9 +79,9 @@ CodeLab is a production-ready, web-based collaborative code editor designed for 
 ### **Frontend Architecture**
 - **React 18**: Modern component-based UI with Concurrent Features
 - **Monaco Editor**: Microsoft's VS Code editor engine
-- **Socket.IO Client**: Real-time bidirectional communication
 - **YJS**: Conflict-free collaborative editing framework
-- **WebRTC**: Peer-to-peer communication protocol
+- **y-websocket Client**: Real-time collaborative editing via YJS
+- **TanStack Query**: Server state management and caching
 
 ### **Backend Infrastructure**
 - **Node.js 18+**: High-performance JavaScript runtime
@@ -63,19 +89,16 @@ CodeLab is a production-ready, web-based collaborative code editor designed for 
 - **y-websocket**: WebSocket server for YJS document synchronization
 - **YJS Backend**: Collaborative document synchronization
 - **JWT Authentication**: Secure stateless user sessions
-- **JWT Authentication**: Secure stateless user sessions
+- **AWS Cognito**: User authentication and management
 
 ### **Database & Storage**
 - **MongoDB Atlas**: Cloud-native document database
 - **GridFS**: Large file storage and streaming
-- **Redis**: Session caching and real-time data
 - **Environment-Based Config**: Secure credential management
 
 ### **DevOps & Security**
 - **Environment Variables**: Secure configuration management
-- **Automated Testing**: Comprehensive YJS and collaboration tests
-- **Docker Ready**: Containerized deployment support
-- **CI/CD Pipeline**: Automated testing and deployment
+- **Docker (Planning)**: Containerized deployment support
 
 ---
 
@@ -91,13 +114,7 @@ CodeLab/
 │   ├── 📁 services/
 │   │   └── fileStorageService.js    # MongoDB & YJS integration
 │   ├── 📁 db/
-│   │   └── index.js                 # Database connection logic
-│   └── 📁 scripts/                  # Organized utility scripts
-│       ├── 📁 analysis/             # Performance & monitoring tools
-│       ├── 📁 database/             # DB management scripts
-│       ├── 📁 tests/                # Backend testing utilities
-│       ├── 📁 cleanup/              # Maintenance scripts
-│       └── 📁 debug/                # Development debugging tools
+│   │   └── index.js                 # Database connection logic                
 │
 ├── 📁 src/                          # Frontend React Application
 │   ├── 📁 components/               # Reusable UI components
@@ -110,55 +127,22 @@ CodeLab/
 │   │   ├── LoginPage.jsx            # User authentication
 │   │   └── ...                      # Additional pages
 │   └── App.jsx                      # Root application component
-│
-├── 📁 tests/                        # Testing Suite
-│   ├── 📁 yjs/                      # YJS collaboration tests
-│   ├── 📁 awareness/                # User presence tests
-│   └── test-yjs-duplication-fix.js  # Multi-user simulation
-│
-├── 📁 docs/                         # Documentation
-│   ├── PROJECT_ORGANIZATION.md      # Structure guide
-│   ├── MONGODB_SECURITY_FIX_REPORT.md # Security improvements
-│   └── DECLUTTER_SUMMARY.md         # Reorganization details
-│
-└── 📁 archives/                     # Legacy files and backups
 ```
-
-### **🎯 Clean API Organization**
-Our API structure has been completely reorganized from 23+ scattered files to a logical, maintainable architecture:
-
-- **`/config/`**: Centralized configuration management
-- **`/services/`**: Business logic and external integrations  
-- **`/scripts/analysis/`**: Performance monitoring and metrics
-- **`/scripts/database/`**: Database utilities and migrations
-- **`/scripts/tests/`**: Backend testing and validation
-- **`/scripts/cleanup/`**: Maintenance and optimization tools
-
----
 
 ## **🚀 Recent Major Improvements**
 
 ### **YJS Content Duplication Fix** {#yjs-improvements}
-We've completely resolved the critical YJS content duplication issue that occurred when multiple users opened the same file simultaneously.
+We've implemented robust YJS document management to ensure reliable multi-user collaboration.
 
 **✅ What Was Fixed:**
-- **Root Cause**: YJS room management was accumulating ALL updates including initial content loads
-- **Solution**: Replaced array-based update accumulation with proper YJS document state management
-- **Result**: Clean, conflict-free collaborative editing for unlimited concurrent users
+- **Root Cause**: Proper YJS room management and document state synchronization
+- **Solution**: Enhanced Y-WebSocket provider integration with conflict resolution
+- **Result**: Stable collaborative editing for multiple concurrent users
 
 **🔧 Technical Implementation:**
-```javascript
-// Before: Problematic array accumulation
-yjsRooms.get(room).push(update)
-
-// After: Proper YJS document state management
-Y.applyUpdate(roomData.doc, new Uint8Array(update))
-```
-
-**📋 Testing:**
-- Comprehensive multi-user simulation tests created
-- Verified with concurrent browser sessions
-- Load tested with 10+ simultaneous editors
+- Upgraded y-websocket provider with proper reconnection handling
+- Implemented awareness-based presence indicators
+- Enhanced document synchronization with MongoDB persistence
 
 ### **🔒 MongoDB Security Hardening**
 Complete elimination of hardcoded credentials and implementation of enterprise-grade security practices.
@@ -232,10 +216,10 @@ Transformed cluttered codebase into a professional, maintainable structure.
 ```bash
 # Terminal 1: Start backend server
 cd api
-npm run dev    # Starts on http://localhost:3001
+npm start    # Starts on http://localhost:3001
 
 # Terminal 2: Start frontend
-npm start      # Starts on http://localhost:3000
+npm run dev      # Starts on http://localhost:5173
 ```
 
 **Production Mode:**
@@ -250,71 +234,31 @@ npm run serve
 Create a `.env` file in the `/api` directory:
 
 ```env
-# Database Configuration
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/codelab
+# Database Configuration (choose one)
+MONGODB_ATLAS_URI=mongodb+srv://username:password@cluster.mongodb.net/codelab
+# OR for local development:
+MONGODB_LOCAL_URI=mongodb://localhost:27017/code_colab
+
+# Database Name
 DB_NAME=code_colab
 
 # Server Configuration  
 PORT=3001
-NODE_ENV=production
+NODE_ENV=development
 
-# Security (Optional)
+# Security (required for production)
 JWT_SECRET=your-super-secure-jwt-secret
-SESSION_SECRET=your-session-secret
+JWT_REFRESH_SECRET=your-refresh-secret
+
+# AWS Cognito (if using)
+AWS_COGNITO_USER_POOL_ID=your-user-pool-id
+AWS_COGNITO_CLIENT_ID=your-client-id
+AWS_REGION=your-aws-region
+
+# Code Execution API
+JDOODLE_CLIENT_ID=your-jdoodle-client-id
+JDOODLE_CLIENT_SECRET=your-jdoodle-secret
 ```
-
----
-
-## **🧪 Testing & Quality Assurance**
-
-### **YJS Collaboration Testing**
-Run comprehensive multi-user simulation tests:
-
-```bash
-# Multi-user YJS duplication test
-node test-yjs-duplication-fix.js
-
-# Awareness and presence testing
-cd tests/awareness/
-npm test
-```
-
-### **Security Validation**
-```bash
-# Run security audit
-cd api/scripts/tests/
-node security-audit.js
-
-# Database connection test
-node database-connection-test.js
-```
-
-### **Performance Testing**
-```bash
-# Load testing for collaborative features
-cd api/scripts/analysis/
-node performance-monitor.js
-```
-
----
-
-## **📚 Documentation**
-
-### **Comprehensive Guides**
-- **[Project Organization](./docs/PROJECT_ORGANIZATION.md)**: Complete structure overview
-- **[Security Fix Report](./docs/MONGODB_SECURITY_FIX_REPORT.md)**: Detailed security improvements
-- **[Declutter Summary](./docs/DECLUTTER_SUMMARY.md)**: Reorganization details
-
-### **API Documentation**
-- **YJS Integration**: Real-time collaborative editing endpoints
-- **File Management**: CRUD operations for project files
-- **User Management**: Authentication and session handling
-- **WebSocket Events**: Real-time communication protocols
-
-### **Frontend Architecture**
-- **Component Library**: Reusable UI component documentation
-- **State Management**: Redux/Context API implementation
-- **Real-time Features**: Socket.IO integration patterns
 
 ---
 
@@ -362,15 +306,6 @@ npm run build
 npm run start:prod
 ```
 
-### **Docker Deployment**
-```bash
-# Build container
-docker build -t codelab:latest .
-
-# Run with environment variables
-docker run -e MONGODB_URI=$MONGODB_URI -p 3000:3000 codelab:latest
-```
-
 ### **Cloud Deployment**
 - **Vercel**: Frontend deployment ready
 - **Railway/Heroku**: Backend API deployment
@@ -397,17 +332,10 @@ docker run -e MONGODB_URI=$MONGODB_URI -p 3000:3000 codelab:latest
 
 ---
 
-## **📄 License**
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
 ## **🙏 Acknowledgments**
 
 - **YJS Team**: For the exceptional collaborative editing framework
 - **Monaco Editor**: Microsoft's powerful VS Code editor engine
-- **Socket.IO**: Real-time communication infrastructure
 - **MongoDB**: Robust document database platform
 
 ---
