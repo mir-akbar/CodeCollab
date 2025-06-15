@@ -6,6 +6,8 @@ const { config } = require('./environment');
 
 // Enhanced connection with Atlas fallback to Local
 const connectDB = async (options = {}) => {
+    // Priority order: MONGODB_URI -> MONGODB_ATLAS_URI -> Local fallback
+    const primaryUri = config.MONGODB_URI;
     const atlasUri = config.MONGODB_ATLAS_URI;
     const localUri = config.MONGODB_LOCAL_URI;
     
@@ -16,7 +18,24 @@ const connectDB = async (options = {}) => {
         ...options
     };
     
-    // Try Atlas first if available
+    // Try primary URI first (usually MONGODB_URI for production)
+    if (primaryUri && primaryUri !== 'mongodb://localhost:27017/code_colab' && primaryUri !== 'undefined') {
+        try {
+            console.log('🔗 Attempting MongoDB connection (Primary URI)...');
+            console.log(`📍 Database: ${config.DB_NAME}`);
+            
+            await mongoose.connect(primaryUri, defaultOptions);
+            console.log('✅ MongoDB connection successful (Primary URI)');
+            console.log('🌍 Using MongoDB Atlas/Cloud');
+            
+            return mongoose.connection;
+        } catch (error) {
+            console.log('⚠️  Primary MongoDB connection failed:', error.message);
+            console.log('🔄 Trying Atlas URI...');
+        }
+    }
+    
+    // Try Atlas URI as fallback
     if (atlasUri && atlasUri !== 'undefined') {
         try {
             console.log('🔗 Attempting MongoDB Atlas connection...');

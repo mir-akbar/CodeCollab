@@ -16,6 +16,12 @@ const loadEnvironmentVariables = () => {
   } else {
     console.log('⚠️  .env file not found, using system environment variables only');
   }
+  
+  // Debug: Log which MongoDB variables are available
+  console.log('🔍 MongoDB Environment Debug:');
+  console.log('  MONGODB_URI:', process.env.MONGODB_URI ? '✅ Set' : '❌ Not set');
+  console.log('  MONGODB_ATLAS_URI:', process.env.MONGODB_ATLAS_URI ? '✅ Set' : '❌ Not set');
+  console.log('  MONGODB_LOCAL_URI:', process.env.MONGODB_LOCAL_URI ? '✅ Set' : '❌ Not set');
 };
 
 // Initialize environment loading
