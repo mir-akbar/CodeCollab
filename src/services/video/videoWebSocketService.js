@@ -5,6 +5,7 @@
 
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { WEB_SOCKET_API_URL } from '../../config/environment.js';
 
 class VideoWebSocketService {
   constructor() {
@@ -25,7 +26,7 @@ class VideoWebSocketService {
     const roomName = `video-${sessionId}`;
     
     // Create Y-WebSocket provider
-    const wsUrl = `ws://localhost:3001/yjs-websocket/video-${sessionId}`;
+    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket/video-${sessionId}`;
     const provider = new WebsocketProvider(wsUrl, roomName, doc);
     
     const connection = {

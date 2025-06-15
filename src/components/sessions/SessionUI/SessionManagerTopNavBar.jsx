@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useUser } from "@/contexts/UserContext";
+import { API_URL } from "@/config/environment.js";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -46,7 +47,7 @@ export default function SessionManagerTopNavBar() {
         if (sessionId && userEmail) {
             const fetchSessionData = async () => {
                 try {
-                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}`, {
+                    const response = await fetch(`${API_URL}/api/sessions/${sessionId}`, {
                         credentials: 'include' // Include HTTP-only cookies
                     });
                     if (response.ok) {

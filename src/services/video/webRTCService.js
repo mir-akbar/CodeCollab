@@ -1,19 +1,66 @@
 /**
  * WebRTC Service
- * Handles peer-to-peer video/audio connections
+ * Handles peer-to-peer video/audio connections with production-ready configuration
  */
+
+import { env } from '../../config/environment.js';
 
 class WebRTCService {
   constructor() {
     this.peerConnections = new Map(); // userId -> RTCPeerConnection
     this.localStream = null;
+    
+    // ICE servers configuration - includes both STUN and optional TURN servers
     this.configuration = {
       iceServers: [
+        // Free STUN servers for NAT discovery
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-        // Add TURN servers for production
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        
+        // Optional TURN servers for production (configured via environment)
+        ...(env.TURN_SERVER_URL ? [{
+          urls: env.TURN_SERVER_URL,
+          username: env.TURN_USERNAME || 'codelab',
+          credential: env.TURN_PASSWORD || 'turnpassword'
+        }] : []),
+        
+        // Optional backup TURN server
+        ...(env.TURN_SERVER_URL_BACKUP ? [{
+          urls: env.TURN_SERVER_URL_BACKUP,
+          username: env.TURN_USERNAME || 'codelab',
+          credential: env.TURN_PASSWORD || 'turnpassword'
+        }] : [])
+      ],
+      
+      // Optimized configuration
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     };
+    
+    console.log('🎥 WebRTC Service initialized');
+    if (env.IS_DEVELOPMENT) {
+      this.logConfiguration();
+    }
+  }
+
+  /**
+   * Log current configuration (development only)
+   */
+  logConfiguration() {
+    const hasSTUN = this.configuration.iceServers.some(server => 
+      server.urls.includes('stun:')
+    );
+    const hasTURN = this.configuration.iceServers.some(server => 
+      server.urls.includes('turn:')
+    );
+    
+    console.log('🔧 WebRTC Configuration:', {
+      STUN_servers: hasSTUN ? 'Configured' : 'None',
+      TURN_servers: hasTURN ? 'Configured' : 'None (STUN only)',
+      note: hasTURN ? 'Production ready' : 'Demo/development mode'
+    });
   }
 
   /**

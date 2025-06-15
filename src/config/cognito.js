@@ -1,7 +1,9 @@
+import { env } from './environment.js';
+
 export const cognitoConfig = {
-  UserPoolId: import.meta.env.VITE_AWS_COGNITO_USER_POOL_ID,
-  ClientId: import.meta.env.VITE_AWS_COGNITO_CLIENT_ID,
-  region: import.meta.env.VITE_AWS_REGION || 'ap-south-1',
+  UserPoolId: env.AWS_COGNITO_USER_POOL_ID,
+  ClientId: env.AWS_COGNITO_CLIENT_ID,
+  region: env.AWS_REGION,
 };
 // Add this validation to help with debugging
 if (!cognitoConfig.UserPoolId || !cognitoConfig.ClientId) {

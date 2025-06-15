@@ -5,6 +5,7 @@
 
 import { WebsocketProvider } from 'y-websocket';
 import { injectUserCursorStyles, removeUserCursorStyles } from '../../utils/cursorStyles';
+import { WEB_SOCKET_API_URL } from '../../config/environment.js';
 
 export class YjsWebSocketProvider {
   constructor(roomName, socket, doc, awareness) {
@@ -19,8 +20,8 @@ export class YjsWebSocketProvider {
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
     
-    // Get WebSocket URL from environment or default to localhost
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/yjs-websocket';
+    // Get WebSocket URL from environment
+    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket`;
     
     // Create y-websocket provider with better error handling
     this.provider = new WebsocketProvider(wsUrl, roomName, doc, {

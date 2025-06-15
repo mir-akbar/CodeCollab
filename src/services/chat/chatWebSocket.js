@@ -5,6 +5,7 @@
 
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { WEB_SOCKET_API_URL } from '../../config/environment.js';
 
 class ChatWebSocketService {
   constructor() {
@@ -21,7 +22,7 @@ class ChatWebSocketService {
     const roomName = `chat-${sessionId}`;
     
     // Create Y-WebSocket provider with session-specific chat URL
-    const wsUrl = `ws://localhost:3001/yjs-websocket/chat-${sessionId}`;
+    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket/chat-${sessionId}`;
     const provider = new WebsocketProvider(wsUrl, roomName, doc);
     
     const connection = {

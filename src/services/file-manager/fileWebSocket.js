@@ -5,6 +5,7 @@
 
 import { WebsocketProvider } from 'y-websocket';
 import { Doc } from 'yjs';
+import { WEB_SOCKET_API_URL } from '../../config/environment.js';
 
 class FileWebSocketService {
   constructor() {
@@ -24,7 +25,7 @@ class FileWebSocketService {
 
     const doc = new Doc();
     // Use session-specific URL if not provided
-    const finalWsUrl = wsUrl || `ws://localhost:3001/yjs-websocket/${sessionId}`;
+    const finalWsUrl = wsUrl || `${WEB_SOCKET_API_URL}/yjs-websocket/${sessionId}`;
     const provider = new WebsocketProvider(finalWsUrl, sessionId, doc);
 
     this.docs.set(sessionId, doc);

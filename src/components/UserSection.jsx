@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { API_URL } from "../common/Constant";
+import { API_URL } from "../config/environment";
 import axios from "axios";
 import { useAuth } from '@/hooks/useAuth';
 import { useUser } from '@/contexts/UserContext';

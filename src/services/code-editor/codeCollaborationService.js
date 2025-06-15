@@ -7,6 +7,7 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { MonacoBinding } from 'y-monaco';
 import { injectUserCursorStyles, removeUserCursorStyles, updateCursorElements } from '@/utils/cursorStyles';
+import { WEB_SOCKET_API_URL } from '../../config/environment.js';
 
 class CodeCollaborationService {
   constructor() {
@@ -41,7 +42,7 @@ class CodeCollaborationService {
       const roomName = `${sessionId}/${filePath.replace(/[/\\:]/g, '-')}`;
       
       // Create Y-WebSocket provider with consistent base URL
-      const wsUrl = `ws://localhost:3001/yjs-websocket`;
+      const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket`;
       const provider = new WebsocketProvider(wsUrl, roomName, doc, {
         connect: true, // Connect automatically
         maxBackoffTime: 5000, // Recommended by docs

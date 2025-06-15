@@ -4,9 +4,7 @@
  */
 
 import axios from 'axios';
-
-// API Configuration
-const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { API_URL } from '../config/environment.js';
 
 // Token storage in memory (not localStorage for security)
 let accessToken = null;

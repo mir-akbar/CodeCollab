@@ -91,14 +91,49 @@ class CodeLabServer {
       next();
     });
 
-    // Health check endpoint
-    this.app.get('/health', (req, res) => {
-      res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        version: '2.0.0',
-        environment: process.env.NODE_ENV || 'development'
-      });
+    // Enhanced health check endpoint for Railway deployment
+    this.app.get('/health', async (req, res) => {
+      try {
+        // Check database connection
+        const { mongoose } = require('mongoose');
+        const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+        
+        // Basic service checks
+        const checks = {
+          database: dbStatus,
+          memory: {
+            used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+            total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+            external: Math.round(process.memoryUsage().external / 1024 / 1024)
+          },
+          uptime: Math.round(process.uptime()),
+          version: '2.0.0',
+          environment: process.env.NODE_ENV || 'development',
+          port: this.port
+        };
+        
+        // If database is disconnected, return 503
+        if (dbStatus === 'disconnected') {
+          return res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            checks,
+            error: 'Database connection lost'
+          });
+        }
+        
+        res.status(200).json({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          checks
+        });
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          error: error.message
+        });
+      }
     });
 
     console.log('✅ Middleware setup complete');

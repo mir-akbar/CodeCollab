@@ -9,11 +9,12 @@ import {
   AuthenticationDetails,
   CognitoUserAttribute 
 } from 'amazon-cognito-identity-js';
+import { env } from '../config/environment.js';
 
 // Cognito Configuration
 const poolData = {
-  UserPoolId: import.meta.env.VITE_AWS_COGNITO_USER_POOL_ID,
-  ClientId: import.meta.env.VITE_AWS_COGNITO_CLIENT_ID
+  UserPoolId: env.AWS_COGNITO_USER_POOL_ID,
+  ClientId: env.AWS_COGNITO_CLIENT_ID
 };
 
 const userPool = new CognitoUserPool(poolData);

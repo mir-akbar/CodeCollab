@@ -294,7 +294,23 @@ npm run dev:debug
 
 ## **🚀 Deployment**
 
-### **Production Deployment**
+### **Railway Deployment (Recommended)**
+
+**Quick Start:**
+```bash
+# 1. Quick deployment with automated script
+./deploy-capstone.sh
+
+# 2. Or follow step-by-step guide
+# See QUICK_RAILWAY_DEPLOY.md
+```
+
+**Production Ready:**
+- **📋 [Railway Deployment Checklist](RAILWAY_DEPLOYMENT_CHECKLIST.md)** - Complete production checklist
+- **📖 [Railway Best Practices Guide](RAILWAY_DEPLOYMENT_GUIDE.md)** - Comprehensive deployment guide
+- **⚡ [Quick Deploy Guide](QUICK_RAILWAY_DEPLOY.md)** - Streamlined deployment steps
+
+### **Alternative Deployment Options**
 ```bash
 # Environment setup
 export MONGODB_URI="your-production-mongodb-uri"
@@ -305,10 +321,81 @@ npm run build
 npm run start:prod
 ```
 
-### **Cloud Deployment**
+### **Cloud Deployment Options**
+- **Railway** (Recommended): Full-stack deployment with database
 - **Vercel**: Frontend deployment ready
-- **Railway/Heroku**: Backend API deployment
+- **Heroku**: Backend API deployment alternative
 - **MongoDB Atlas**: Production database hosting
+
+---
+
+## **🎓 CAPSTONE PROJECT DEPLOYMENT**
+
+### **Free Deployment for Academic Projects**
+
+Deploy CodeWorkspace completely **FREE** for capstone demonstrations using Railway's best practices:
+
+```bash
+# Option 1: Automated deployment
+chmod +x deploy-capstone.sh
+./deploy-capstone.sh
+
+# Option 2: Manual deployment following Railway best practices
+# See QUICK_RAILWAY_DEPLOY.md for step-by-step instructions
+```
+
+### **Railway Deployment Benefits**
+- ✅ **Railway Best Practices**: Following official Railway recommendations
+- ✅ **Private Networking**: Optimized service communication
+- ✅ **Reference Variables**: Dynamic configuration management
+- ✅ **Health Checks**: Production-ready monitoring
+- ✅ **Auto-scaling**: Horizontal scaling with replicas
+- ✅ **Zero-downtime Deployments**: Rolling updates
+
+**Free Resources Used:**
+- 🆓 **Railway.app** - Backend hosting (500 hours/month free, $5 credit)
+- 🆓 **MongoDB Atlas** - Database (512MB free tier)
+- 🆓 **AWS Cognito** - Authentication (50,000 MAUs free)
+- 🆓 **Google STUN servers** - Video chat basic functionality
+
+**Production Features:**
+- 👥 Multi-user real-time code editing
+- 💬 Integrated chat system via Y-WebSocket
+- 📹 **Full video calling with WebRTC**
+- 📁 Advanced file upload and management
+- 🔐 Enterprise-grade authentication
+- 📱 Responsive design for all devices
+- 🏥 Health monitoring and error recovery
+- 📊 Performance optimization
+
+### **Demo-Ready Features**
+- **Real-time collaboration** - Multiple users editing simultaneously
+- **Video chat integration** - Face-to-face coding sessions
+- **Secure authentication** - AWS Cognito powered
+- **File management** - Upload, organize, and share code files
+- **Mobile responsive** - Works on tablets and phones
+- **Professional UI** - Modern, clean interface
+
+> **Note**: The deployment follows Railway's production readiness checklist, making it suitable for both academic demonstrations and potential production use.
+
+---
+
+## **🚀 Quick Deploy to Railway**
+
+**Ready to deploy? Choose your path:**
+
+- 📋 **[Production Checklist](RAILWAY_DEPLOYMENT_CHECKLIST.md)** - Complete Railway deployment checklist
+- ⚡ **[Quick Deploy Guide](QUICK_RAILWAY_DEPLOY.md)** - 15-minute deployment for demos  
+- 📖 **[Best Practices Guide](RAILWAY_DEPLOYMENT_GUIDE.md)** - Comprehensive Railway setup
+- 🎯 **[Environment Template](.env.railway.example)** - Railway-specific configuration
+
+```bash
+# One-command deployment
+./deploy-capstone.sh
+
+# Or follow step-by-step guide
+# See QUICK_RAILWAY_DEPLOY.md
+```
 
 ---
 

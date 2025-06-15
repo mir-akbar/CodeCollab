@@ -7,6 +7,7 @@ import { createContext } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropTypes from 'prop-types';
 import { apiClient, setTokens, clearTokens, hasValidToken } from '../services/apiClient';
+import { API_URL } from '../config/environment.js';
 import { 
   getCurrentCognitoUser,
   signupWithCognito,
@@ -25,7 +26,7 @@ async function getCurrentUser() {
     if (!hasValidToken()) {
       // Try to refresh from httpOnly cookie
       try {
-        const refreshResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'}/api/auth/refresh`, {
+        const refreshResponse = await fetch(`${API_URL}/api/auth/refresh`, {
           method: 'POST',
           credentials: 'include',
         });

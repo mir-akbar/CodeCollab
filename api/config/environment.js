@@ -33,15 +33,10 @@ const config = {
   PORT: parseInt(process.env.PORT) || 3001,
   NODE_ENV: process.env.NODE_ENV || 'development',
   
-  // Security Configuration
-  JWT_SECRET: process.env.JWT_SECRET || 'development-secret-change-in-production',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'development-refresh-secret-change-in-production',
-  JWT_ACCESS_TOKEN_EXPIRY: process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m',
-  JWT_REFRESH_TOKEN_EXPIRY: process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d',
+  // Security Configuration  
+  // Note: Using AWS Cognito JWT tokens only - no custom authentication needed
   
-  // Session Configuration
-  SESSION_SECRET: process.env.SESSION_SECRET || 'development-session-secret-change-in-production',
-  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'localhost',
+  // Cookie Configuration
   COOKIE_SECURE: process.env.NODE_ENV === 'production',
   COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE || 'lax',
   
