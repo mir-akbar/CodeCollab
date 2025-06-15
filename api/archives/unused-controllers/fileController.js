@@ -2,7 +2,7 @@
  * ⚠️  ARCHIVED: UNUSED ENHANCED FILE CONTROLLER ⚠️
  * 
  * STATUS: Modern, Production-Ready, Currently Unused
- * CREATED: December 2024
+ * CREATED: Jun 2025
  * REASON FOR ARCHIVAL: Current direct route → service pattern is cleaner
  * 
  * This is NOT a legacy file! It's an enhanced controller that provides

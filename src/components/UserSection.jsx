@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield, Check, X } from 'lucide-react';
+import { Users, LogOut, UserPlus, Mail, Crown, Edit, Eye, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
