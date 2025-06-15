@@ -144,7 +144,15 @@ class YjsWebSocketServer {
       'file-uploaded',
       'chat-message',
       'video-signal',
-      'user-presence'
+      'user-presence',
+      // Video call signaling
+      'video-call-start',
+      'video-call-join',
+      'video-call-leave',
+      'video-offer',
+      'video-answer',
+      'video-ice-candidate',
+      'video-media-state'
     ];
     return customTypes.includes(type);
   }
@@ -170,6 +178,28 @@ class YjsWebSocketServer {
         break;
       case 'chat-message':
         this.broadcastChatMessage(ws, data);
+        break;
+      // Enhanced Video Call Signaling
+      case 'video-call-start':
+        this.handleVideoCallStart(ws, data);
+        break;
+      case 'video-call-join':
+        this.handleVideoCallJoin(ws, data);
+        break;
+      case 'video-call-leave':
+        this.handleVideoCallLeave(ws, data);
+        break;
+      case 'video-offer':
+        this.handleVideoOffer(ws, data);
+        break;
+      case 'video-answer':
+        this.handleVideoAnswer(ws, data);
+        break;
+      case 'video-ice-candidate':
+        this.handleVideoIceCandidate(ws, data);
+        break;
+      case 'video-media-state':
+        this.handleVideoMediaState(ws, data);
         break;
       case 'video-signal':
         this.broadcastVideoSignal(ws, data);
@@ -310,6 +340,148 @@ class YjsWebSocketServer {
     this.broadcastToRoom(roomName, {
       ...data,
       type: 'user-presence',
+      timestamp: new Date().toISOString()
+    }, ws);
+  }
+
+  // =============================================================================
+  // VIDEO CALL SIGNALING METHODS
+  // =============================================================================
+
+  /**
+   * Handle video call start
+   */
+  handleVideoCallStart(ws, data) {
+    const { sessionId } = data;
+    console.log(`📹 Video call started in session: ${sessionId} by ${ws.userEmail}`);
+    
+    this.broadcastToRoom(sessionId, {
+      type: 'video-call-started',
+      sessionId,
+      initiator: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    }, ws);
+  }
+
+  /**
+   * Handle user joining video call
+   */
+  handleVideoCallJoin(ws, data) {
+    const { sessionId } = data;
+    console.log(`📹 User ${ws.userEmail} joining video call in session: ${sessionId}`);
+    
+    this.broadcastToRoom(sessionId, {
+      type: 'video-call-user-joined',
+      sessionId,
+      user: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    }, ws);
+  }
+
+  /**
+   * Handle user leaving video call
+   */
+  handleVideoCallLeave(ws, data) {
+    const { sessionId } = data;
+    console.log(`📹 User ${ws.userEmail} leaving video call in session: ${sessionId}`);
+    
+    this.broadcastToRoom(sessionId, {
+      type: 'video-call-user-left',
+      sessionId,
+      user: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    }, ws);
+  }
+
+  /**
+   * Handle WebRTC offer
+   */
+  handleVideoOffer(ws, data) {
+    const { sessionId, targetUserId, offer } = data;
+    console.log(`📹 WebRTC offer from ${ws.userEmail} to ${targetUserId}`);
+    
+    this.sendToUser(sessionId, targetUserId, {
+      type: 'video-offer',
+      sessionId,
+      offer,
+      from: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Handle WebRTC answer
+   */
+  handleVideoAnswer(ws, data) {
+    const { sessionId, targetUserId, answer } = data;
+    console.log(`📹 WebRTC answer from ${ws.userEmail} to ${targetUserId}`);
+    
+    this.sendToUser(sessionId, targetUserId, {
+      type: 'video-answer',
+      sessionId,
+      answer,
+      from: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Handle ICE candidate exchange
+   */
+  handleVideoIceCandidate(ws, data) {
+    const { sessionId, targetUserId, candidate } = data;
+    console.log(`📹 ICE candidate from ${ws.userEmail} to ${targetUserId}`);
+    
+    this.sendToUser(sessionId, targetUserId, {
+      type: 'video-ice-candidate',
+      sessionId,
+      candidate,
+      from: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Handle media state changes (mute/unmute, video on/off)
+   */
+  handleVideoMediaState(ws, data) {
+    const { sessionId, hasVideo, hasAudio } = data;
+    console.log(`📹 Media state change from ${ws.userEmail}: video=${hasVideo}, audio=${hasAudio}`);
+    
+    this.broadcastToRoom(sessionId, {
+      type: 'video-media-state-changed',
+      sessionId,
+      user: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      hasVideo,
+      hasAudio,
       timestamp: new Date().toISOString()
     }, ws);
   }
