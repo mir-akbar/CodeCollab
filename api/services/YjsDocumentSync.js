@@ -7,6 +7,7 @@ class YjsDocumentSync {
   constructor(fileStorageCore, yjsServer = null) {
     this.fileStorageCore = fileStorageCore;
     this.yjsServer = yjsServer;
+    this.docs = new Map(); // Store Y.js documents to prevent duplication
   }
 
   /**
@@ -61,7 +62,7 @@ class YjsDocumentSync {
 
   /**
    * Y-WebSocket Document Synchronization - get Y.js document state from file
-   * Enhanced for pure Y-WebSocket collaboration with room setup
+   * Enhanced for pure Y-WebSocket collaboration with room setup and deduplication
    */
   async getDocumentFromFile(sessionId, filePath) {
     if (!this.yjsServer) {
@@ -70,6 +71,25 @@ class YjsDocumentSync {
 
     try {
       console.log(`📥 Y-WebSocket: Retrieving document from file ${filePath} in session ${sessionId}`);
+      
+      const roomId = `${sessionId}-${filePath}`;
+      
+      // Check if room already exists with content to prevent duplication
+      if (this.yjsServer.hasRoom(roomId)) {
+        console.log(`🏠 Y-WebSocket: Room ${roomId} already exists, checking for existing content`);
+        
+        // Check if there's already an initialized document in the room
+        if (this.docs && this.docs.has(roomId)) {
+          const existingDoc = this.docs.get(roomId);
+          const existingContent = existingDoc.getText('monaco').toString();
+          
+          if (existingContent.length > 0) {
+            console.log(`♻️  Y-WebSocket: Reusing existing document content (${existingContent.length} chars) for room ${roomId}`);
+            const Y = require('yjs');
+            return Y.encodeStateAsUpdate(existingDoc);
+          }
+        }
+      }
       
       let content = '';
       
@@ -88,34 +108,39 @@ class YjsDocumentSync {
         }
       }
 
-      // Create Y.js document with the content
+      // Create Y.js document with the content (only once per room)
       const Y = require('yjs');
       const doc = new Y.Doc();
       const ytext = doc.getText('monaco');
       
+      // Initialize content only if we have content and this is the first time
       if (content.length > 0) {
         ytext.insert(0, content);
+        console.log(`📝 Y-WebSocket: Initialized document with ${content.length} characters`);
       }
       
+      // Store the document for future reference to prevent re-initialization
+      this.docs.set(roomId, doc);
+      
       // Ensure Y-WebSocket room exists for this file
-      const roomId = `${sessionId}-${filePath}`;
       if (!this.yjsServer.hasRoom(roomId)) {
         this.yjsServer.createRoom(roomId);
         console.log(`🏠 Y-WebSocket: Created room ${roomId} for file collaboration`);
       }
       
-      // Notify Y-WebSocket room about document retrieval
+      // Notify Y-WebSocket room about document retrieval (only for new documents)
       this.yjsServer.broadcastToRoom(roomId, {
-        type: 'document-loaded',
+        type: 'document-initialized',
         sessionId,
         filePath,
         contentLength: content.length,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        isFirstInitialization: true
       });
       
       // Return the document state as a Uint8Array
       const documentState = Y.encodeStateAsUpdate(doc);
-      console.log(`🔄 Y-WebSocket: Document state prepared for room ${roomId}`);
+      console.log(`🔄 Y-WebSocket: Document state prepared for room ${roomId} (first initialization)`);
       
       return documentState;
     } catch (error) {

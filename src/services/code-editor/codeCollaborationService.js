@@ -209,6 +209,36 @@ class CodeCollaborationService {
     }
 
     // Create new binding with enhanced awareness configuration
+    // First, check if we need to sync content between Y.js document and editor
+    const editorContent = editor.getModel().getValue();
+    const yjsContent = connection.ytext.toString();
+    
+    console.log(`🔄 Creating Monaco binding - Content check:`, {
+      filePath,
+      editorContentLength: editorContent.length,
+      yjsContentLength: yjsContent.length,
+      contentsMatch: editorContent === yjsContent
+    });
+    
+    // Prevent content duplication by ensuring only one source of truth
+    if (editorContent.length > 0 && yjsContent.length > 0 && editorContent !== yjsContent) {
+      console.warn(`⚠️  Content mismatch detected! Editor and Y.js have different content for: ${filePath}`);
+      console.warn(`Editor content preview: "${editorContent.substring(0, 100)}..."`);
+      console.warn(`Y.js content preview: "${yjsContent.substring(0, 100)}..."`);
+      
+      // Use Y.js content as the source of truth (it has the collaborative state)
+      console.log('🔄 Using Y.js content as source of truth to prevent duplication');
+      editor.getModel().setValue(yjsContent);
+    } else if (editorContent.length > 0 && yjsContent.length === 0) {
+      // Editor has content but Y.js is empty - initialize Y.js with editor content
+      console.log('📝 Initializing Y.js document with editor content');
+      connection.ytext.insert(0, editorContent);
+    } else if (yjsContent.length > 0 && editorContent.length === 0) {
+      // Y.js has content but editor is empty - set editor content
+      console.log('📝 Setting editor content from Y.js document');
+      editor.getModel().setValue(yjsContent);
+    }
+    
     const binding = new MonacoBinding(
       connection.ytext,
       editor.getModel(),
@@ -375,22 +405,61 @@ class CodeCollaborationService {
   }
 
   /**
-   * Initialize content in YJS document (only if empty)
+   * Initialize content in YJS document (only if empty and not already being initialized)
    */
   initializeContent(sessionId, filePath, content) {
     const connectionKey = `${sessionId}-${filePath}`;
     const connection = this.connections.get(connectionKey);
     
-    if (!connection) return false;
-
-    // Only initialize if document is empty
-    if (connection.ytext.length === 0 && content && content.trim()) {
-      console.log('📝 Initializing document content for:', filePath);
-      connection.ytext.insert(0, content);
-      return true;
+    if (!connection) {
+      console.warn('No connection found for content initialization:', connectionKey);
+      return false;
     }
+
+    // Check if document is empty and content is provided
+    if (!content || !content.trim()) {
+      console.log('No content to initialize for:', filePath);
+      return false;
+    }
+
+    // Get current Y.js document content
+    const currentContent = connection.ytext.toString();
     
-    return false;
+    // Only initialize if document is completely empty
+    if (currentContent.length === 0) {
+      // Add a flag to prevent race conditions during initialization
+      if (connection._initializing) {
+        console.log('Content initialization already in progress for:', filePath);
+        return false;
+      }
+      
+      connection._initializing = true;
+      
+      try {
+        console.log(`📝 Initializing document content for: ${filePath} (${content.length} chars)`);
+        
+        // Double-check that document is still empty after marking as initializing
+        if (connection.ytext.length === 0) {
+          connection.ytext.insert(0, content);
+          console.log(`✅ Successfully initialized content for: ${filePath}`);
+          return true;
+        } else {
+          console.log(`⚠️  Document was populated by another user while initializing: ${filePath}`);
+          return false;
+        }
+      } catch (error) {
+        console.error('Error initializing content:', error);
+        return false;
+      } finally {
+        // Clear the initialization flag after a short delay
+        setTimeout(() => {
+          connection._initializing = false;
+        }, 1000);
+      }
+    } else {
+      console.log(`📄 Document already has content (${currentContent.length} chars), skipping initialization for:`, filePath);
+      return false;
+    }
   }
 
   /**

@@ -75,11 +75,16 @@ export function MonacoEditor({
         
         const model = editor.getModel();
         if (model) {
-          model.setValue(fileContent);
+          // Check if the model already has content to prevent duplication
+          const currentModelContent = model.getValue();
+          if (currentModelContent.length === 0 || currentModelContent !== fileContent) {
+            model.setValue(fileContent);
+            console.log(`✅ [MONACO EDITOR] Content set in Monaco Editor for: ${filePath}`);
+          } else {
+            console.log(`📄 [MONACO EDITOR] Content already set in Monaco Editor for: ${filePath}`);
+          }
           setHasContentSet(true);
-          
           trackFileLoading.contentSet(filePath);
-          console.log(`✅ [MONACO EDITOR] Content set in Monaco Editor for: ${filePath}`);
         }
       } catch (error) {
         console.error(`❌ [MONACO EDITOR] Error setting editor content:`, error);
@@ -100,11 +105,16 @@ export function MonacoEditor({
         
         const model = editor.getModel();
         if (model) {
-          model.setValue(fileContent);
+          // Check if content is already set to prevent duplication
+          const currentModelContent = model.getValue();
+          if (currentModelContent.length === 0) {
+            model.setValue(fileContent);
+            console.log(`✅ [MONACO EDITOR] Content set on editor mount for: ${filePath}`);
+          } else {
+            console.log(`📄 [MONACO EDITOR] Content already exists on editor mount for: ${filePath} (${currentModelContent.length} chars)`);
+          }
           setHasContentSet(true);
-          
           trackFileLoading.contentSet(filePath);
-          console.log(`✅ [MONACO EDITOR] Content set on editor mount for: ${filePath}`);
         }
       } catch (error) {
         console.error(`❌ [MONACO EDITOR] Error setting content on mount:`, error);
@@ -117,14 +127,19 @@ export function MonacoEditor({
         console.log(`🔗 [MONACO EDITOR] Setting up collaboration binding on mount for: ${filePath}`);
         bindingRef.current = createBinding(editor, onContentChange);
         
-        // Initialize YJS content if we have file content
+        // Initialize YJS content if we have file content and Y.js document is empty
         if (fileContent && fileContent.trim()) {
           setTimeout(() => {
             try {
               const currentContent = getContent();
               if (currentContent.length === 0) {
                 console.log('📝 Initializing YJS content on mount for:', filePath);
-                initializeContent(fileContent);
+                const initialized = initializeContent(fileContent);
+                if (!initialized) {
+                  console.log('⚠️  Content initialization skipped (document not empty or race condition):', filePath);
+                }
+              } else {
+                console.log(`📄 YJS document already has content (${currentContent.length} chars), skipping initialization:`, filePath);
               }
             } catch (error) {
               console.warn('Error initializing YJS content on mount:', error);
@@ -151,7 +166,12 @@ export function MonacoEditor({
               const currentContent = getContent();
               if (currentContent.length === 0) {
                 console.log('📝 Initializing YJS content (fallback) for:', filePath);
-                initializeContent(fileContent);
+                const initialized = initializeContent(fileContent);
+                if (!initialized) {
+                  console.log('⚠️  Content initialization skipped (document not empty or race condition):', filePath);
+                }
+              } else {
+                console.log(`📄 YJS document already has content (${currentContent.length} chars), skipping fallback initialization:`, filePath);
               }
             } catch (error) {
               console.warn('Error initializing YJS content (fallback):', error);
