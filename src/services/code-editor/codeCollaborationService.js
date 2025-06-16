@@ -406,6 +406,7 @@ class CodeCollaborationService {
 
   /**
    * Initialize content in YJS document (only if empty and not already being initialized)
+   * Enhanced for production environments with additional safety checks
    */
   initializeContent(sessionId, filePath, content) {
     const connectionKey = `${sessionId}-${filePath}`;
@@ -425,40 +426,54 @@ class CodeCollaborationService {
     // Get current Y.js document content
     const currentContent = connection.ytext.toString();
     
-    // Only initialize if document is completely empty
-    if (currentContent.length === 0) {
-      // Add a flag to prevent race conditions during initialization
-      if (connection._initializing) {
-        console.log('Content initialization already in progress for:', filePath);
-        return false;
-      }
-      
-      connection._initializing = true;
-      
-      try {
-        console.log(`📝 Initializing document content for: ${filePath} (${content.length} chars)`);
-        
-        // Double-check that document is still empty after marking as initializing
-        if (connection.ytext.length === 0) {
-          connection.ytext.insert(0, content);
-          console.log(`✅ Successfully initialized content for: ${filePath}`);
-          return true;
-        } else {
-          console.log(`⚠️  Document was populated by another user while initializing: ${filePath}`);
-          return false;
-        }
-      } catch (error) {
-        console.error('Error initializing content:', error);
-        return false;
-      } finally {
-        // Clear the initialization flag after a short delay
-        setTimeout(() => {
-          connection._initializing = false;
-        }, 1000);
-      }
-    } else {
-      console.log(`📄 Document already has content (${currentContent.length} chars), skipping initialization for:`, filePath);
+    // PRODUCTION FIX: Enhanced content checking to prevent duplication
+    // Check if the content is identical to what we're trying to initialize
+    if (currentContent === content) {
+      console.log(`📄 Document already has identical content for: ${filePath}, skipping initialization`);
       return false;
+    }
+    
+    // Check if document has any content at all
+    if (currentContent.length > 0) {
+      console.log(`📄 Document already has content (${currentContent.length} chars), skipping initialization for:`, filePath);
+      
+      // Log a preview for debugging if content is different
+      if (currentContent !== content) {
+        console.log('Current content preview:', currentContent.substring(0, 100) + (currentContent.length > 100 ? '...' : ''));
+        console.log('New content preview:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
+      }
+      return false;
+    }
+
+    // Add a flag to prevent race conditions during initialization
+    if (connection._initializing) {
+      console.log('Content initialization already in progress for:', filePath);
+      return false;
+    }
+    
+    connection._initializing = true;
+    
+    try {
+      console.log(`📝 Initializing document content for: ${filePath} (${content.length} chars)`);
+      
+      // Triple-check that document is still empty after marking as initializing
+      const finalCheck = connection.ytext.toString();
+      if (finalCheck.length === 0) {
+        connection.ytext.insert(0, content);
+        console.log(`✅ Successfully initialized content for: ${filePath}`);
+        return true;
+      } else {
+        console.log(`⚠️  Document was populated by another process while initializing: ${filePath} (${finalCheck.length} chars)`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error initializing content:', error);
+      return false;
+    } finally {
+      // Clear the initialization flag after a delay to prevent rapid re-initialization
+      setTimeout(() => {
+        connection._initializing = false;
+      }, 2000); // Increased delay for production stability
     }
   }
 

@@ -62,7 +62,7 @@ class YjsDocumentSync {
 
   /**
    * Y-WebSocket Document Synchronization - get Y.js document state from file
-   * Enhanced for pure Y-WebSocket collaboration with room setup and deduplication
+   * Enhanced for pure Y-WebSocket collaboration with room setup and production-safe deduplication
    */
   async getDocumentFromFile(sessionId, filePath) {
     if (!this.yjsServer) {
@@ -74,20 +74,34 @@ class YjsDocumentSync {
       
       const roomId = `${sessionId}-${filePath}`;
       
-      // Check if room already exists with content to prevent duplication
-      if (this.yjsServer.hasRoom(roomId)) {
-        console.log(`🏠 Y-WebSocket: Room ${roomId} already exists, checking for existing content`);
+      // PRODUCTION FIX: Check Y.js WebSocket server for existing documents first
+      // This prevents duplication when Railway restarts connections
+      if (this.yjsServer.docs && this.yjsServer.docs.has(roomId)) {
+        const existingDoc = this.yjsServer.docs.get(roomId);
+        const existingContent = existingDoc.getText('monaco').toString();
         
-        // Check if there's already an initialized document in the room
-        if (this.docs && this.docs.has(roomId)) {
-          const existingDoc = this.docs.get(roomId);
-          const existingContent = existingDoc.getText('monaco').toString();
-          
-          if (existingContent.length > 0) {
-            console.log(`♻️  Y-WebSocket: Reusing existing document content (${existingContent.length} chars) for room ${roomId}`);
-            const Y = require('yjs');
-            return Y.encodeStateAsUpdate(existingDoc);
+        if (existingContent.length > 0) {
+          console.log(`♻️  Y-WebSocket: Found existing document in server (${existingContent.length} chars) for room ${roomId}`);
+          // Also store in our local docs for consistency
+          this.docs.set(roomId, existingDoc);
+          const Y = require('yjs');
+          return Y.encodeStateAsUpdate(existingDoc);
+        }
+      }
+      
+      // Check our local document cache
+      if (this.docs.has(roomId)) {
+        const existingDoc = this.docs.get(roomId);
+        const existingContent = existingDoc.getText('monaco').toString();
+        
+        if (existingContent.length > 0) {
+          console.log(`♻️  Y-WebSocket: Reusing local document content (${existingContent.length} chars) for room ${roomId}`);
+          // Also store in server docs for other connections
+          if (this.yjsServer.docs) {
+            this.yjsServer.docs.set(roomId, existingDoc);
           }
+          const Y = require('yjs');
+          return Y.encodeStateAsUpdate(existingDoc);
         }
       }
       
@@ -119,8 +133,12 @@ class YjsDocumentSync {
         console.log(`📝 Y-WebSocket: Initialized document with ${content.length} characters`);
       }
       
-      // Store the document for future reference to prevent re-initialization
+      // Store the document in BOTH locations to ensure persistence across connections
       this.docs.set(roomId, doc);
+      if (this.yjsServer.docs) {
+        this.yjsServer.docs.set(roomId, doc);
+        console.log(`🔄 Y-WebSocket: Document stored in both local and server caches for ${roomId}`);
+      }
       
       // Ensure Y-WebSocket room exists for this file
       if (!this.yjsServer.hasRoom(roomId)) {
@@ -140,7 +158,7 @@ class YjsDocumentSync {
       
       // Return the document state as a Uint8Array
       const documentState = Y.encodeStateAsUpdate(doc);
-      console.log(`🔄 Y-WebSocket: Document state prepared for room ${roomId} (first initialization)`);
+      console.log(`🔄 Y-WebSocket: Document state prepared for room ${roomId} (production-safe initialization)`);
       
       return documentState;
     } catch (error) {
