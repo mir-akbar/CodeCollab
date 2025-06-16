@@ -9,6 +9,7 @@ import { codeCollaborationService } from '../../services/code-editor/codeCollabo
 import { fileWebSocketService } from '../../services/file-manager/fileWebSocket';
 import { apiClient } from '../../services/apiClient';
 import { useUser } from '../../contexts/UserContext';
+import { endpoints } from '@/config/api';
 
 /**
  * Hook for managing collaborative code editing with upload coordination
@@ -233,7 +234,7 @@ export function useFileContent(sessionId, filePath) {
 export function useCodeExecution() {
   const executeCode = useCallback(async (language, code) => {
     try {
-      const response = await fetch('/api/execute/run', {
+      const response = await fetch(endpoints.execute, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

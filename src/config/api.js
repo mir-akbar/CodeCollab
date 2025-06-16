@@ -28,6 +28,10 @@ export const endpoints = {
   files: `${API_URL}/api/files`,
   fileById: (id) => `${API_URL}/api/files/${id}`,
   
+  // Code execution
+  execute: `${API_URL}/api/execute/run`,
+  executionLanguages: `${API_URL}/api/execute/languages`,
+  
   // Collaboration
   workspace: workspaceUrl,
   collaborate: (sessionId) => `${workspaceUrl}/${sessionId}`,
