@@ -347,6 +347,74 @@ module.exports = (yjsServer) => {
     res.json(stats);
   }));
 
+  // ==================== FILE SAVE/UPDATE OPERATIONS ====================
+
+  /**
+   * Save/update file content
+   * PUT /api/files/content
+   */
+  router.put("/content", requireAuth, asyncHandler(async (req, res) => {
+    const { path: filePath, sessionId, content } = req.body;
+    
+    // Validate required fields
+    if (!filePath) {
+      return res.status(400).json({ 
+        error: "File path is required",
+        hint: "Please provide a valid file path"
+      });
+    }
+    
+    if (!sessionId) {
+      return res.status(400).json({ 
+        error: "Session ID is required",
+        hint: "Please provide a valid session ID"
+      });
+    }
+    
+    if (content === undefined || content === null) {
+      return res.status(400).json({ 
+        error: "Content is required",
+        hint: "Please provide file content (can be empty string)"
+      });
+    }
+
+    try {
+      console.log('🔍 Save file request:', { filePath, sessionId, userEmail: req.user?.email });
+      
+      // Check if user has write access to this session (editor role required for saving)
+      const hasAccess = await accessService.checkSessionAccess(sessionId, req.user?.email || 'anonymous', 'editor');
+      console.log('🔍 Access check result:', { hasAccess, userEmail: req.user?.email });
+      
+      if (!hasAccess) {
+        console.log('❌ Access denied for user:', req.user?.email);
+        return res.status(403).json({ 
+          error: "Access denied",
+          hint: "You need editor permission to save files in this session"
+        });
+      }
+
+      // Save the file content
+      const result = await fileStorageService.saveFileContent(sessionId, filePath, content);
+      
+      res.json({
+        success: true,
+        message: "File saved successfully",
+        filePath,
+        size: content.length,
+        lastModified: new Date().toISOString(),
+        ...result
+      });
+
+    } catch (error) {
+      console.error("Error saving file content:", error);
+      res.status(500).json({ 
+        error: "Failed to save file",
+        details: error.message,
+        hint: "Please try again or contact support if the issue persists"
+      });
+    }
+  }));
+
   // ==================== FILE DELETION OPERATIONS ====================
 
   /**

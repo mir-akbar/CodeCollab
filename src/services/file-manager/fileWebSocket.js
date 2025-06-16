@@ -24,25 +24,65 @@ class FileWebSocketService {
     }
 
     const doc = new Doc();
-    // Use session-specific URL if not provided
-    const finalWsUrl = wsUrl || `${WEB_SOCKET_API_URL}/yjs-websocket/${sessionId}`;
-    const provider = new WebsocketProvider(finalWsUrl, sessionId, doc);
+    // Fix URL construction - Y.js WebSocket expects room name as the URL path
+    // Backend expects: /yjs-websocket/{roomName} where roomName should be just the sessionId
+    // The backend will parse this as the document name for file events
+    const roomName = sessionId; // Use sessionId directly as room name
+    const finalWsUrl = wsUrl || `${WEB_SOCKET_API_URL}/yjs-websocket`;
+    
+    console.log(`🔌 Attempting Y-WebSocket connection to: ${finalWsUrl} with room: ${roomName}`);
+    
+    try {
+      const provider = new WebsocketProvider(finalWsUrl, roomName, doc, {
+        // Add connection options for better error handling
+        connect: true,
+        awareness: undefined, // Let it create its own awareness
+        params: {}, // Empty params to avoid issues
+        resyncInterval: 10000, // 10 second resync
+        maxBackoffTime: 30000, // Max 30 second backoff
+      });
 
-    this.docs.set(sessionId, doc);
-    this.providers.set(sessionId, provider);
+      this.docs.set(sessionId, doc);
+      this.providers.set(sessionId, provider);
 
-    // Connection event handlers
-    provider.on('status', (event) => {
-      this.isConnected = event.status === 'connected';
-      console.log(`🔌 Y-WebSocket ${event.status} for session ${sessionId}`);
-    });
+      // Enhanced connection event handlers
+      provider.on('status', (event) => {
+        this.isConnected = event.status === 'connected';
+        console.log(`🔌 Y-WebSocket ${event.status} for session ${sessionId}`);
+        
+        if (event.status === 'connected') {
+          console.log('✅ Y-WebSocket connection established successfully');
+        } else if (event.status === 'disconnected') {
+          console.warn('⚠️ Y-WebSocket disconnected, will attempt to reconnect');
+        }
+      });
 
-    provider.on('connection-error', (error) => {
-      console.error('🚨 Y-WebSocket connection error:', error);
-      this.isConnected = false;
-    });
+      provider.on('connection-error', (error) => {
+        console.error('🚨 Y-WebSocket connection error:', error);
+        console.error('🔍 Connection details:', {
+          url: finalWsUrl,
+          sessionId,
+          error: error.message || error
+        });
+        this.isConnected = false;
+      });
 
-    return provider;
+      // Add connection-close handler
+      provider.on('connection-close', (event) => {
+        console.warn('🔌 Y-WebSocket connection closed:', event);
+        this.isConnected = false;
+      });
+
+      return provider;
+    } catch (error) {
+      console.error('❌ Failed to create Y-WebSocket provider:', error);
+      console.error('🔍 Error details:', {
+        url: finalWsUrl,
+        sessionId,
+        error: error.message || error
+      });
+      throw error;
+    }
   }
 
   /**

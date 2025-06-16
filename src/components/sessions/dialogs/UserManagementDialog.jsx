@@ -25,7 +25,6 @@
  * </UserManagementDialog>
  * ```
  */
-import { useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
@@ -51,6 +50,7 @@ import { useSessionParticipants, useUpdateRole, useRemoveParticipant } from '@/h
 import { getUserRole, canManageParticipants, getRoleDisplayName } from '@/utils/permissions';
 import { toast } from 'sonner';
 import PropTypes from 'prop-types';
+import useDialogStore from '@/stores/dialogStore';
 
 /**
  * Role configuration with display properties
@@ -68,8 +68,13 @@ export const UserManagementDialog = ({
   children, 
   onInvite 
 }) => {
-  const [userToRemove, setUserToRemove] = useState(null);
-  const [isOpen, setIsOpen] = useState(false);
+  // Zustand state
+  const {
+    userManagement: { userToRemove, isOpen },
+    setUserToRemove,
+    setUserManagementOpen,
+    resetUserManagement
+  } = useDialogStore();
   
   const sessionId = session?.sessionId || session?.id;
   const currentUserRole = getUserRole(session, userEmail);
@@ -182,7 +187,7 @@ export const UserManagementDialog = ({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={setUserManagementOpen}>
         <DialogTrigger asChild>{children}</DialogTrigger>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader className="pb-4">

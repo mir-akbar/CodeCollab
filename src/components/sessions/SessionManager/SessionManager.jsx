@@ -33,10 +33,10 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSessionStore, useUIStore } from '@/stores';
 import { 
   useSessionsWithInvitations
 } from '@/hooks/sessions';
-import { useSessionManagerState } from '@/hooks/useSessionState';
 import { getFilteredSessions } from '@/utils/sessionUtils';
 import PropTypes from 'prop-types';
 
@@ -51,31 +51,24 @@ import PropTypes from 'prop-types';
  * @returns {JSX.Element} Rendered SessionManager component
  */
 export function SessionManager({ userEmail }) {
-  // Enhanced state management using shared hooks
-  const {
-    // Dialog state
-    dialogs,
-    openDialog,
+  // Zustand stores for state management
+  const { activeSessionTab } = useUIStore();
+  const { 
+    dialogs, 
+    openDialog, 
     closeDialog,
-    // Filter state
-    activeTab,
-    setActiveTab,
-    filters,
-    setFilters,
-    // Loading state
-    loadingStates,
-    setLoading
-  } = useSessionManagerState({
-    initialFilters: { search: "", sort: "recent" },
-    initialTab: "all"
-  });
+    filters, 
+    updateFilters,
+    loadingStates, 
+    setLoading 
+  } = useSessionStore();
 
   // Coordinated data fetching for better synchronization
   const { sessions: sessionsQuery, invitations: invitationsQuery, refreshBoth } = useSessionsWithInvitations();
   const { data: sessions = [], isLoading, isFetching, error } = sessionsQuery;
 
   // Filter sessions based on tab and search/sort
-  const filteredSessions = getFilteredSessions(sessions, activeTab, filters, userEmail);
+  const filteredSessions = getFilteredSessions(sessions, activeSessionTab, filters, userEmail);
 
     /**
    * Handles session creation dialog opening
@@ -223,14 +216,11 @@ export function SessionManager({ userEmail }) {
             {/* Filters */}
             <SessionFilters 
               filters={filters} 
-              onFilterChange={setFilters}
+              onFilterChange={updateFilters}
             />
 
-            {/* Tabs */}
-            <SessionTabs 
-              activeTab={activeTab} 
-              onTabChange={setActiveTab}
-            />
+            {/* Tabs - now self-contained */}
+            <SessionTabs />
 
             {/* Sessions List with refresh loading overlay */}
             <div className="relative">

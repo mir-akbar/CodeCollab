@@ -21,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 export default function SessionManagerTopNavBar() {
     const { logout } = useAuth();
-    const { userEmail, userProfile } = useUser();
+    const { userEmail } = useUser();
     const [userData, setUserData] = useState({
         name: "",
         email: "",
@@ -34,13 +34,13 @@ export default function SessionManagerTopNavBar() {
 
     useEffect(() => {
         // Update user data when auth context changes
-        if (userProfile && userEmail) {
+        if (userEmail) {
             setUserData({
-                name: userProfile.name || userProfile.displayName || userEmail.split('@')[0] || "User",
+                name: userEmail.split('@')[0] || "User",
                 email: userEmail,
             });
         }
-    }, [userProfile, userEmail]);
+    }, [userEmail]);
 
     useEffect(() => {
         // If we have a session ID, fetch the session data to determine user permissions

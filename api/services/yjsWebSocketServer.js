@@ -91,14 +91,16 @@ class YjsWebSocketServer {
       this.roomManager.addClientToRoom(docName, ws);
       
       // PRODUCTION FIX: Send existing document state to new connections
-      // This prevents content duplication when users join existing collaborative sessions
+      // DISABLED: This causes content duplication in production due to WebSocket connection instability
+      // Let Y.js clients handle their own document synchronization through standard y-websocket protocol
       setTimeout(() => {
-        this.documentStateManager.sendExistingDocumentState(ws, docName);
+        // this.documentStateManager.sendExistingDocumentState(ws, docName); // DISABLED
+        console.log(`🔄 Y.js client will handle document synchronization for: ${docName}`);
         
-        // Send recent chat history to new user
+        // Send recent chat history to new user (this is safe)
         this.chatManager.sendChatHistoryToUser(ws, docName);
         
-        // Send recent file event history to new user
+        // Send recent file event history to new user (this is safe)
         this.fileEventManager.sendFileHistoryToUser(ws, docName);
       }, 100); // Small delay to ensure client is ready
       
@@ -111,20 +113,32 @@ class YjsWebSocketServer {
       // Handle messages - simple Y.js message forwarding
       ws.on('message', (message) => {
         try {
-          // Try to parse as JSON for our custom control messages
-          if (typeof message === 'string' || Buffer.isBuffer(message)) {
-            const messageString = message.toString();
-            if (messageString.startsWith('{')) {
-              try {
+          // PRODUCTION FIX: Properly detect JSON vs binary Y.js messages
+          
+          // Only try to parse as JSON if it's clearly a string message
+          if (typeof message === 'string') {
+            try {
+              const data = JSON.parse(message);
+              if (data.type && typeof data.type === 'string' && this.isCustomMessageType(data.type)) {
+                this.handleCustomMessage(ws, data);
+                return; // Don't pass to Y.js if it's our custom message
+              }
+            } catch {
+              // Not valid JSON, treat as Y.js binary
+            }
+          } else if (Buffer.isBuffer(message) && message.length > 0) {
+            // Check if it's a JSON string in buffer format
+            try {
+              const messageString = message.toString('utf8');
+              if (messageString.startsWith('{') && messageString.endsWith('}')) {
                 const data = JSON.parse(messageString);
-                // Handle our custom message types
                 if (data.type && typeof data.type === 'string' && this.isCustomMessageType(data.type)) {
                   this.handleCustomMessage(ws, data);
                   return; // Don't pass to Y.js if it's our custom message
                 }
-              } catch {
-                // Not JSON or not our custom message, treat as Y.js binary
               }
+            } catch {
+              // Not JSON, treat as Y.js binary - this is the most common case
             }
           }
           
@@ -259,14 +273,19 @@ class YjsWebSocketServer {
    * Enhanced with production-safe document state preservation
    */
   broadcastYjsMessage(ws, message) {
-    // PRODUCTION FIX: Only process Y.js updates for document editing rooms
-    const shouldProcessUpdate = this.documentStateManager.shouldProcessYjsUpdate(ws.docName);
+    // PRODUCTION FIX: Disable server-side Y.js processing to prevent content duplication
+    // The server-side Y.js processing was causing corruption and content duplication errors
+    // in production environments. It's safer to use Y.js as a simple message relay.
+    
+    const shouldProcessUpdate = false; // Always false for production safety
+    
+    console.log(`🔄 Broadcasting Y.js message as simple relay (no server-side processing)`);
     
     this.roomManager.broadcastYjsMessage(
       ws, 
       message, 
-      shouldProcessUpdate, 
-      (room, updateBuffer) => this.documentStateManager.processYjsUpdate(room, updateBuffer)
+      shouldProcessUpdate, // Always false
+      null // No callback needed
     );
   }
 

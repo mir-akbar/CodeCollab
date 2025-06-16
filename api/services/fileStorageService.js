@@ -70,6 +70,13 @@ class PureYjsFileStorageService {
   }
 
   /**
+   * Save file content (alias for updateFileContent)
+   */
+  async saveFileContent(sessionId, filePath, content, cognitoId = null) {
+    return this.updateFileContent(sessionId, filePath, content, cognitoId);
+  }
+
+  /**
    * Delete a file
    */
   async deleteFile(sessionId, filePath) {

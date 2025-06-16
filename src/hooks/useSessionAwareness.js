@@ -20,12 +20,15 @@ export const useSessionAwareness = (sessionId) => {
 
     console.log('👥 Setting up session awareness for:', sessionId);
 
+    // Store the listeners map to avoid stale closure
+    const listeners = listenersRef.current;
+
     // Function to aggregate users from all file connections in this session
     const updateSessionUsers = () => {
       const allUsers = new Set();
       
       // Get all connections for this session
-      codeCollaborationService.connections.forEach((connection, connectionKey) => {
+      codeCollaborationService.connections.forEach((connection) => {
         if (connection.sessionId === sessionId && connection.awareness) {
           // Get all users from this file's awareness
           const awarenessStates = connection.awareness.getStates();
@@ -68,11 +71,14 @@ export const useSessionAwareness = (sessionId) => {
         updateSessionUsers();
       };
 
+      // Extract sessionId and filePath from connectionKey
+      const [sessionIdPart, filePath] = connectionKey.split('-', 2);
+      
       // Add listener
-      codeCollaborationService.on(connectionKey, 'awareness-changed', awarenessListener);
+      codeCollaborationService.on(sessionIdPart, filePath, 'awareness-changed', awarenessListener);
       
       // Store for cleanup
-      listenersRef.current.set(connectionKey, awarenessListener);
+      listeners.set(connectionKey, { listener: awarenessListener, sessionId: sessionIdPart, filePath });
       
       console.log('👥 Added awareness listener for:', connectionKey);
     };
@@ -104,11 +110,11 @@ export const useSessionAwareness = (sessionId) => {
     return () => {
       console.log('👥 Cleaning up session awareness for:', sessionId);
       
-      // Remove all listeners
-      listenersRef.current.forEach((listener, connectionKey) => {
-        codeCollaborationService.off(connectionKey, 'awareness-changed', listener);
+      // Remove all listeners using the captured listeners map
+      listeners.forEach((listenerData) => {
+        codeCollaborationService.off(listenerData.sessionId, listenerData.filePath, 'awareness-changed', listenerData.listener);
       });
-      listenersRef.current.clear();
+      listeners.clear();
       
       // Restore original connect method
       // Note: This is a simplified cleanup, in production you might want a more robust approach

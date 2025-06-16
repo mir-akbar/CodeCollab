@@ -39,11 +39,11 @@ export function useCodeCollaboration(sessionId, filePath) {
       }
     });
 
-    // Set a reasonable timeout for collaboration readiness (1.5 seconds should be enough)
+    // Set a reasonable timeout for collaboration readiness (3 seconds for better reliability)
     collaborationReadyTimeoutRef.current = setTimeout(() => {
       console.log('⚠️ Collaboration timeout, proceeding anyway for:', filePath);
       setIsCollaborationReady(true);
-    }, 1500);
+    }, 3000);
 
     return () => {
       cleanupFileEvents();
@@ -60,7 +60,6 @@ export function useCodeCollaboration(sessionId, filePath) {
       return;
     }
 
-    console.log('🔗 Initializing code collaboration for:', filePath);
     setIsLoading(true);
     setError(null);
 
@@ -71,10 +70,9 @@ export function useCodeCollaboration(sessionId, filePath) {
         name: userEmail.split('@')[0]
       });
 
-      const connectionKey = `${sessionId}-${filePath}`;
-
       // Set up event listeners
       const handleConnectionStatus = ({ connected }) => {
+        console.log('🔗 [HOOK] Connection status changed for', filePath, '- Connected:', connected);
         setIsConnected(connected);
         if (connected) {
           // Load initial users when connected
@@ -98,26 +96,37 @@ export function useCodeCollaboration(sessionId, filePath) {
       // Listen for awareness changes to update user count in real-time
       const handleAwarenessChange = () => {
         const currentUsers = codeCollaborationService.getOnlineUsers(sessionId, filePath);
-        console.log('👥 Awareness changed for', filePath, '- Users online:', currentUsers.length);
+        console.log('👥 [FILE-SPECIFIC] Awareness changed for', filePath, '- Users viewing this file:', currentUsers.length, currentUsers.map(u => u.name || u.email));
+        console.log('📝 [FILE-SPECIFIC] These users are actively viewing/editing:', filePath);
         setOnlineUsers([...currentUsers]);
       };
 
       // Subscribe to events
-      codeCollaborationService.on(connectionKey, 'connection-status', handleConnectionStatus);
-      codeCollaborationService.on(connectionKey, 'synced', handleSynced);
-      codeCollaborationService.on(connectionKey, 'awareness-changed', handleAwarenessChange);
+      console.log('🔗 [HOOK] Subscribing to connection events for:', filePath);
+      codeCollaborationService.on(sessionId, filePath, 'connection-status', handleConnectionStatus);
+      codeCollaborationService.on(sessionId, filePath, 'synced', handleSynced);
+      codeCollaborationService.on(sessionId, filePath, 'awareness-changed', handleAwarenessChange);
 
-      // Check if already connected
-      if (codeCollaborationService.isConnected(sessionId, filePath)) {
-        handleConnectionStatus({ connected: true, status: 'connected' });
-      }
+      // Check if already connected (this handles the case where connection happens before event listeners are set up)
+      // Use a small timeout to ensure connection setup is complete
+      setTimeout(() => {
+        const isCurrentlyConnected = codeCollaborationService.isConnected(sessionId, filePath);
+        console.log('🔗 [HOOK] Delayed connection status check for', filePath, ':', isCurrentlyConnected);
+        if (isCurrentlyConnected) {
+          console.log('🔗 [HOOK] Connection already established, setting state manually');
+          handleConnectionStatus({ connected: true, status: 'connected' });
+          
+          // Also manually trigger user count update
+          handleAwarenessChange();
+        }
+      }, 100);
 
       return () => {
         console.log('🧹 Cleaning up code collaboration for:', filePath);
         try {
-          codeCollaborationService.off(connectionKey, 'connection-status', handleConnectionStatus);
-          codeCollaborationService.off(connectionKey, 'synced', handleSynced);
-          codeCollaborationService.off(connectionKey, 'awareness-changed', handleAwarenessChange);
+          codeCollaborationService.off(sessionId, filePath, 'connection-status', handleConnectionStatus);
+          codeCollaborationService.off(sessionId, filePath, 'synced', handleSynced);
+          codeCollaborationService.off(sessionId, filePath, 'awareness-changed', handleAwarenessChange);
           codeCollaborationService.disconnect(sessionId, filePath);
         } catch (error) {
           console.warn('Error during collaboration cleanup:', error);

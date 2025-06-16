@@ -2,8 +2,11 @@ import { Bell } from 'lucide-react';
 import VideoPanel from './VideoPanel';
 import ChatPanel from './ChatPanel';
 import PropTypes from 'prop-types';
+import { useUIStore } from '@/stores';
 
-export function CollaborationPanel({ activeTab, setActiveTab, sessionId }) {
+export function CollaborationPanel({ sessionId }) {
+  const { activeCollaborationTab, setActiveCollaborationTab } = useUIStore();
+
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e] border border-[#444] mx-2 rounded-xl overflow-hidden">
       <div className="h-12 border-b border-[#444] flex items-center justify-between px-4">
@@ -13,9 +16,9 @@ export function CollaborationPanel({ activeTab, setActiveTab, sessionId }) {
         </button>
       </div>
 
-      <CollaborationTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+      <CollaborationTabs activeTab={activeCollaborationTab} setActiveTab={setActiveCollaborationTab} />
       <div className="flex-1 overflow-hidden">
-        <CollaborationContent activeTab={activeTab} sessionId={sessionId} />
+        <CollaborationContent activeTab={activeCollaborationTab} sessionId={sessionId} />
       </div>
     </div>
   );
@@ -58,6 +61,7 @@ function CollaborationContent({ activeTab, sessionId }) {
 
 
 function SettingsPanel({ sessionId }) {
+  // sessionId available for future settings features
   return (
     <div className="flex-1 p-4">
       <h3 className="text-lg font-semibold mb-4">Collaboration Settings</h3>
@@ -84,9 +88,8 @@ function SettingsPanel({ sessionId }) {
 }
 
 // PropTypes for components
+// PropTypes for components
 CollaborationPanel.propTypes = {
-  activeTab: PropTypes.string.isRequired,
-  setActiveTab: PropTypes.func.isRequired,
   sessionId: PropTypes.string
 };
 

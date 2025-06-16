@@ -36,7 +36,7 @@
  * - Accessibility compliance with ARIA labels
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -60,6 +60,7 @@ import { useInviteUser } from '@/hooks/sessions';
 import { useUser } from '@/contexts/UserContext';
 import { logDebugInfo } from '../utils/sessionComponentUtils';
 import PropTypes from 'prop-types';
+import useDialogStore from '@/stores/dialogStore';
 
 /**
  * Available role options for session participants
@@ -77,9 +78,14 @@ export function InvitationDialog({
   onClose, 
   session 
 }) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState('editor');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Zustand state
+  const {
+    invitation: { email, role, isSubmitting },
+    setInvitationEmail,
+    setInvitationRole,
+    setInvitationSubmitting,
+    resetInvitation
+  } = useDialogStore();
   
   const inviteUser = useInviteUser();
   const { userEmail } = useUser();
@@ -99,9 +105,8 @@ export function InvitationDialog({
    * @function resetForm
    */
   const resetForm = useCallback(() => {
-    setEmail('');
-    setRole('editor');
-  }, []);
+    resetInvitation();
+  }, [resetInvitation]);
 
   /**
    * Handles form submission with comprehensive validation
@@ -135,7 +140,7 @@ export function InvitationDialog({
       sessionName: session.name
     });
 
-    setIsSubmitting(true);
+    setInvitationSubmitting(true);
     
     try {
       const result = await inviteUser.mutateAsync({
@@ -178,9 +183,9 @@ export function InvitationDialog({
       
       toast.error(errorMessage);
     } finally {
-      setIsSubmitting(false);
+      setInvitationSubmitting(false);
     }
-  }, [email, role, session, validateEmail, inviteUser, userEmail, onClose, resetForm]);
+  }, [email, role, session, validateEmail, inviteUser, userEmail, onClose, resetForm, setInvitationSubmitting]);
 
   /**
    * Handles dialog close with form cleanup
@@ -217,7 +222,7 @@ export function InvitationDialog({
                 type="email"
                 placeholder="Enter email address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setInvitationEmail(e.target.value)}
                 className="pl-10"
                 disabled={isSubmitting}
                 autoComplete="email"
@@ -233,7 +238,7 @@ export function InvitationDialog({
           {/* Role Selection */}
           <div className="space-y-2">
             <Label htmlFor="role">Permission Level</Label>
-            <Select value={role} onValueChange={setRole} disabled={isSubmitting}>
+            <Select value={role} onValueChange={setInvitationRole} disabled={isSubmitting}>
               <SelectTrigger aria-describedby="role-help">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>

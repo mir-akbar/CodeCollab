@@ -160,9 +160,17 @@ class RoomManager {
     // Skip processing for chat rooms to prevent Y.js parsing errors
     if (shouldProcessUpdate) {
       try {
+        // Additional validation before processing Y.js updates
         if (Buffer.isBuffer(message) || message instanceof Uint8Array) {
-          // This is a Y.js binary update for document editing - process it to maintain server state
-          processYjsUpdateCallback(room, message);
+          // Validate that the message looks like valid Y.js binary data
+          if (message.length > 0) {
+            // This is a Y.js binary update for document editing - process it to maintain server state
+            processYjsUpdateCallback(room, message);
+          } else {
+            console.warn(`⚠️ Received empty Y.js message for room ${room}`);
+          }
+        } else {
+          console.warn(`⚠️ Received non-binary Y.js message for room ${room}: ${typeof message}`);
         }
       } catch (error) {
         console.warn(`Error processing Y.js update for room ${room}:`, error.message);

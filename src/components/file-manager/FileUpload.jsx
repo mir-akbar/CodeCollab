@@ -1,16 +1,15 @@
 /**
  * File Upload Component
- * Modern drag-and-drop file upload with progress tracking
+ * Modern drag-and-drop file upload with validation
  */
 
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import PropTypes from 'prop-types';
-import { Upload, File, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Upload, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFileManager } from '@/hooks/file-manager/useFileQueries';
-import { useUploadProgress } from '@/hooks/file-manager/useFileEvents';
+import { useFileUpload } from '@/hooks/file-manager/useFileQueries';
+import { useFileOperationsStore } from '@/stores/fileOperationsStore';
 import { useUser } from '@/contexts/UserContext';
 import { cn } from '@/lib/utils';
 
@@ -19,12 +18,25 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export function FileUpload({ sessionId, className }) {
   const { userEmail } = useUser();
-  const { uploadFile, isUploading } = useFileManager(sessionId);
-  const { uploadProgress, startUpload, updateProgress, completeUpload, failUpload } = useUploadProgress();
-  
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [validationError, setValidationError] = useState(null);
+  const { mutate: uploadFile, isPending: isUploading } = useFileUpload(sessionId);
   const fileInputRef = useRef(null);
+  
+  // Zustand store for UI state (just drag/drop and validation)
+  const {
+    sessions,
+    initializeSession,
+    setDragOver,
+    setValidationError,
+    clearValidationError
+  } = useFileOperationsStore();
+
+  // Initialize session if needed
+  if (!sessions[sessionId]) {
+    initializeSession(sessionId);
+  }
+  
+  const sessionData = sessions[sessionId] || {};
+  const { isDragOver = false, validationError = null } = sessionData;
 
   const validateFile = (file) => {
     // Check file extension
@@ -43,40 +55,33 @@ export function FileUpload({ sessionId, className }) {
   };
 
   const handleFileUpload = async (file) => {
-    setValidationError(null);
+    clearValidationError(sessionId);
 
     // Validate file
     const validationError = validateFile(file);
     if (validationError) {
-      setValidationError(validationError);
+      setValidationError(sessionId, validationError);
       return;
     }
 
     if (!userEmail) {
-      setValidationError('User email is required for file upload');
+      setValidationError(sessionId, 'User email is required for file upload');
       return;
     }
-
-    const fileId = `${Date.now()}-${file.name}`;
-    startUpload(fileId, file.name);
 
     try {
       await uploadFile({
         file,
-        userEmail,
-        onProgress: (progress) => updateProgress(fileId, progress)
+        userEmail
       });
-      
-      completeUpload(fileId);
     } catch (error) {
-      failUpload(fileId, error.message);
-      setValidationError(error.message);
+      setValidationError(sessionId, error.message);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    setIsDragOver(false);
+    setDragOver(sessionId, false);
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
@@ -86,12 +91,12 @@ export function FileUpload({ sessionId, className }) {
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    setIsDragOver(true);
+    setDragOver(sessionId, true);
   };
 
   const handleDragLeave = (e) => {
     e.preventDefault();
-    setIsDragOver(false);
+    setDragOver(sessionId, false);
   };
 
   const handleFileSelect = (e) => {
@@ -168,62 +173,6 @@ export function FileUpload({ sessionId, className }) {
           <AlertDescription>{validationError}</AlertDescription>
         </Alert>
       )}
-
-      {/* Upload Progress */}
-      {Object.keys(uploadProgress).length > 0 && (
-        <div className="space-y-2">
-          {Object.entries(uploadProgress).map(([fileId, progress]) => (
-            <UploadProgressItem
-              key={fileId}
-              fileName={progress.fileName}
-              progress={progress.progress}
-              status={progress.status}
-              error={progress.error}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function UploadProgressItem({ fileName, progress, status, error }) {
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'uploading':
-        return <Loader2 className="h-4 w-4 animate-spin" />;
-      case 'completed':
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      default:
-        return <File className="h-4 w-4" />;
-    }
-  };
-
-  return (
-    <div className="p-3 border rounded-lg bg-card">
-      <div className="flex items-center space-x-3">
-        {getStatusIcon()}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{fileName}</p>
-          {error && (
-            <p className="text-xs text-red-500 truncate">{error}</p>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {status === 'uploading' ? `${progress}%` : status}
-        </div>
-      </div>
-      
-      {status === 'uploading' && (
-        <div className="mt-2">
-          <Progress 
-            value={progress} 
-            className="h-2"
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -232,13 +181,6 @@ function UploadProgressItem({ fileName, progress, status, error }) {
 FileUpload.propTypes = {
   sessionId: PropTypes.string.isRequired,
   className: PropTypes.string
-};
-
-UploadProgressItem.propTypes = {
-  fileName: PropTypes.string.isRequired,
-  progress: PropTypes.number.isRequired,
-  status: PropTypes.oneOf(['uploading', 'completed', 'failed']).isRequired,
-  error: PropTypes.string
 };
 
 export default FileUpload;

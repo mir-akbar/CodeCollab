@@ -9,13 +9,13 @@
  * @since 1.0.0
  * 
  * @param {Object} props - Component properties
- * @param {string} props.activeTab - Currently active tab identifier
+ * @param {string} props.activeSessionTab - Currently active tab identifier
  * @param {Function} props.onTabChange - Callback when tab selection changes
  * 
  * @example
  * ```jsx
  * <SessionTabs
- *   activeTab="all"
+ *   activeSessionTab="all"
  *   onTabChange={(tab) => setActiveTab(tab)}
  * />
  * ```
@@ -28,6 +28,7 @@
  */
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code2, Zap, Share2, Star } from "lucide-react";
+import { useUIStore } from '@/stores';
 import PropTypes from "prop-types";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -40,21 +41,22 @@ import { useState, useEffect } from "react";
  */
 const TAB_ORDER = ["all", "created", "invited", "favorites"];
 
-export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
-  const [previousTab, setPreviousTab] = useState(activeTab);
+export const SessionTabs = () => {
+  const { activeSessionTab, setActiveSessionTab } = useUIStore();
+  const [previousTab, setPreviousTab] = useState(activeSessionTab);
   const [direction, setDirection] = useState(0);
   
   /**
    * Effect to handle tab change direction for smooth animations
    */
   useEffect(() => {
-    if (previousTab !== activeTab) {
+    if (previousTab !== activeSessionTab) {
       const prevIndex = TAB_ORDER.indexOf(previousTab);
-      const currentIndex = TAB_ORDER.indexOf(activeTab);
+      const currentIndex = TAB_ORDER.indexOf(activeSessionTab);
       setDirection(prevIndex < currentIndex ? 1 : -1);
-      setPreviousTab(activeTab);
+      setPreviousTab(activeSessionTab);
     }
-  }, [activeTab, previousTab]);
+  }, [activeSessionTab, previousTab]);
   
   /**
    * Handles tab selection change
@@ -62,7 +64,7 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
    * @param {string} value - Selected tab value
    */
   const handleTabChange = (value) => {
-    onTabChange(value);
+    setActiveSessionTab(value);
   };
   
   /**
@@ -97,16 +99,16 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
   };
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full relative">
+    <Tabs value={activeSessionTab} onValueChange={handleTabChange} className="w-full relative">
       <TabsList className="grid w-full grid-cols-4 relative overflow-hidden">
-        <TabIndicator value={activeTab} />
+        <TabIndicator value={activeSessionTab} />
         
         <TabsTrigger value="all" className="gap-2 z-10">
           <motion.div
             initial={{ scale: 0.9, opacity: 0.8 }}
             animate={{ 
-              scale: activeTab === "all" ? 1 : 0.9,
-              opacity: activeTab === "all" ? 1 : 0.8
+              scale: activeSessionTab === "all" ? 1 : 0.9,
+              opacity: activeSessionTab === "all" ? 1 : 0.8
             }}
             className="flex items-center gap-2"
           >
@@ -120,8 +122,8 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
           <motion.div
             initial={{ scale: 0.9, opacity: 0.8 }}
             animate={{ 
-              scale: activeTab === "created" ? 1 : 0.9,
-              opacity: activeTab === "created" ? 1 : 0.8
+              scale: activeSessionTab === "created" ? 1 : 0.9,
+              opacity: activeSessionTab === "created" ? 1 : 0.8
             }}
             className="flex items-center gap-2"
           >
@@ -135,8 +137,8 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
           <motion.div
             initial={{ scale: 0.9, opacity: 0.8 }}
             animate={{ 
-              scale: activeTab === "invited" ? 1 : 0.9,
-              opacity: activeTab === "invited" ? 1 : 0.8
+              scale: activeSessionTab === "invited" ? 1 : 0.9,
+              opacity: activeSessionTab === "invited" ? 1 : 0.8
             }}
             className="flex items-center gap-2"
           >
@@ -150,8 +152,8 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
           <motion.div
             initial={{ scale: 0.9, opacity: 0.8 }}
             animate={{ 
-              scale: activeTab === "favorites" ? 1 : 0.9,
-              opacity: activeTab === "favorites" ? 1 : 0.8
+              scale: activeSessionTab === "favorites" ? 1 : 0.9,
+              opacity: activeSessionTab === "favorites" ? 1 : 0.8
             }}
             className="flex items-center gap-2"
           >
@@ -163,7 +165,7 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
       </TabsList>
       
       <motion.div
-        key={activeTab}
+        key={activeSessionTab}
         initial={{ 
           x: direction * 20,
           opacity: 0
@@ -190,25 +192,6 @@ export const SessionTabs = ({ activeTab = "all", onTabChange }) => {
 
 /**
  * PropTypes validation for SessionTabs component
- * 
- * @typedef {Object} SessionTabsProps
- * @property {string} activeTab - Currently active tab
- * @property {Function} onTabChange - Tab change callback
+ * No props needed - uses Zustand store directly
  */
-SessionTabs.propTypes = {
-  /** 
-   * Currently active tab identifier.
-   * Must be one of: "all", "created", "invited", "favorites"
-   * @type {string}
-   * @required
-   */
-  activeTab: PropTypes.oneOf(["all", "created", "invited", "favorites"]).isRequired,
-  
-  /** 
-   * Callback function when tab selection changes.
-   * Receives the new tab value as parameter.
-   * @type {Function}
-   * @required
-   */
-  onTabChange: PropTypes.func.isRequired
-};
+SessionTabs.propTypes = {};

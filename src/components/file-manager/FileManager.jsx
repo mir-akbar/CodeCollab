@@ -3,7 +3,6 @@
  * Basic file tree with upload functionality
  */
 
-import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { RefreshCw, Files, Upload as UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,12 +11,13 @@ import { FileUpload } from './FileUpload';
 import { FileTree } from './FileTree';
 import { useFileManager } from '@/hooks/file-manager/useFileQueries';
 import { useFileEvents } from '@/hooks/file-manager/useFileEvents';
+import { useUIStore } from '@/stores';
 import { cn } from '@/lib/utils';
 
 export function FileManager({ sessionId, onFileSelect, onFileDeleted, selectedFilePath, userEmail, className }) {
   const { isRefreshing, refreshFiles, error } = useFileManager(sessionId);
   const { isConnected } = useFileEvents(sessionId);
-  const [activeTab, setActiveTab] = useState('files');
+  const { activeFileManagerTab, setActiveFileManagerTab } = useUIStore();
 
   const handleRefresh = () => {
     refreshFiles();
@@ -45,7 +45,7 @@ export function FileManager({ sessionId, onFileSelect, onFileDeleted, selectedFi
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+        <Tabs value={activeFileManagerTab} onValueChange={setActiveFileManagerTab} className="h-full flex flex-col">
           <div className="px-4 pt-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="files">

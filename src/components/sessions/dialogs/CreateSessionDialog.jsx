@@ -31,7 +31,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,10 +39,17 @@ import { toast } from "sonner";
 import { useCreateSession } from "@/hooks/sessions";
 import { useUser } from '@/contexts/UserContext';
 import { logDebugInfo } from '../utils/sessionComponentUtils';
+import useDialogStore from '@/stores/dialogStore';
 
 export const CreateSessionDialog = ({ open = false, onClose }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  // Zustand state
+  const {
+    createSession: { name, description, isSubmitting },
+    setCreateSessionName,
+    setCreateSessionDescription,
+    setCreateSessionSubmitting,
+    resetCreateSession
+  } = useDialogStore();
   const { userEmail } = useUser();
   
   // Use TanStack Query mutation directly
@@ -88,22 +95,13 @@ export const CreateSessionDialog = ({ open = false, onClose }) => {
 
       toast.success("Your new session has been created successfully");
       
-      resetForm();
+      resetCreateSession();
       onClose();
     } catch (error) {
       console.error("Error creating session:", error);
       toast.error(error.message || "Failed to create session");
     }
-  }, [name, description, userEmail, createSessionMutation, onClose]);
-
-  /**
-   * Resets form fields to initial state
-   * @function resetForm
-   */
-  const resetForm = useCallback(() => {
-    setName('');
-    setDescription('');
-  }, []);
+  }, [name, description, userEmail, createSessionMutation, onClose, resetCreateSession]);
 
   /**
    * Handles dialog close with form reset
@@ -113,9 +111,9 @@ export const CreateSessionDialog = ({ open = false, onClose }) => {
   const handleClose = useCallback((isOpen) => {
     if (!isOpen) {
       onClose();
-      resetForm();
+      resetCreateSession();
     }
-  }, [onClose, resetForm]);
+  }, [onClose, resetCreateSession]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -136,7 +134,7 @@ export const CreateSessionDialog = ({ open = false, onClose }) => {
             <Input
               id="name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setCreateSessionName(e.target.value)}
               placeholder="My Coding Session"
               maxLength={100}
               aria-required="true"
@@ -152,7 +150,7 @@ export const CreateSessionDialog = ({ open = false, onClose }) => {
             <Textarea
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => setCreateSessionDescription(e.target.value)}
               placeholder="Optional details about this session"
               className="bg-black resize-none"
               maxLength={500}

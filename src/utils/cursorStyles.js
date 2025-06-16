@@ -1,14 +1,40 @@
 // Dynamic CSS injection for YJS user-specific cursor styles
+const injectedStyles = new Map(); // Track what we've already injected
+const logThrottle = new Map(); // Throttle console logs
+
+function shouldLogStyleInjection(clientId) {
+  const now = Date.now();
+  const lastLogged = logThrottle.get(clientId);
+  
+  // Only log cursor style injection once every 2 seconds per client
+  if (!lastLogged || (now - lastLogged) > 2000) {
+    logThrottle.set(clientId, now);
+    return true;
+  }
+  return false;
+}
+
 export function injectUserCursorStyles(clientId, userInfo) {
   const styleId = `yjs-cursor-style-${clientId}`;
   
-  // Remove existing style for this client
-  const existingStyle = document.getElementById(styleId);
-  if (existingStyle) {
-    existingStyle.remove();
+  if (!userInfo || !userInfo.color) return;
+  
+  // Check if we've already injected identical styles for this user
+  const cacheKey = `${clientId}-${userInfo.color}-${userInfo.name}`;
+  if (injectedStyles.has(cacheKey)) {
+    // Styles already exist and are identical, skip injection
+    return;
   }
   
-  if (!userInfo || !userInfo.color) return;
+  // Also check if styles exist in DOM for this client (belt and suspenders approach)
+  const existingStyle = document.getElementById(styleId);
+  if (existingStyle) {
+    // Only log if we're actually changing something
+    const needsUpdate = !injectedStyles.has(cacheKey);
+    if (!needsUpdate) return;
+    
+    existingStyle.remove();
+  }
   
   const style = document.createElement('style');
   style.id = styleId;
@@ -54,7 +80,14 @@ export function injectUserCursorStyles(clientId, userInfo) {
   `;
   
   document.head.appendChild(style);
-  console.log(`💅 Injected cursor styles for ${userName} (${clientId}):`, color);
+  
+  // Cache that we've injected these styles
+  injectedStyles.set(cacheKey, true);
+  
+  // Throttled logging to reduce console spam
+  if (shouldLogStyleInjection(clientId)) {
+    console.log(`💅 Injected cursor styles for ${userName} (${clientId}):`, color);
+  }
 }
 
 export function removeUserCursorStyles(clientId) {
@@ -62,6 +95,14 @@ export function removeUserCursorStyles(clientId) {
   const existingStyle = document.getElementById(styleId);
   if (existingStyle) {
     existingStyle.remove();
+    
+    // Remove from cache
+    for (const [cacheKey] of injectedStyles.entries()) {
+      if (cacheKey.startsWith(`${clientId}-`)) {
+        injectedStyles.delete(cacheKey);
+      }
+    }
+    
     console.log(`🗑️ Removed cursor styles for client ${clientId}`);
   }
 }
@@ -93,7 +134,7 @@ export function updateCursorElements(userStates) {
   // Find all cursor elements in the Monaco editor
   const cursorElements = document.querySelectorAll('.yRemoteSelectionHead');
   
-  cursorElements.forEach((element, index) => {
+  cursorElements.forEach((element) => {
     const clientId = Array.from(element.classList)
       .find(cls => cls.startsWith('yRemoteSelectionHead-'))
       ?.replace('yRemoteSelectionHead-', '');

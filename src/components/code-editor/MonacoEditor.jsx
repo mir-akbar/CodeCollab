@@ -3,13 +3,14 @@
  * Modern, modular Monaco editor with Y-WebSocket collaboration
  */
 
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo } from "react";
 import PropTypes from "prop-types";
 import { Editor } from "@monaco-editor/react";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCodeCollaboration } from "@/hooks/code-editor/useCodeCollaboration";
 import { useFileContent } from "@/hooks/file-manager/useFileQueries";
+import { useEditorStore } from '@/stores';
 import { trackFileLoading } from "@/utils/performanceMonitor";
 import "../../styles/yjs-cursors.css";
 
@@ -23,8 +24,15 @@ export function MonacoEditor({
 }) {
   const editorRef = useRef(null);
   const bindingRef = useRef(null);
-  const [currentFilePath, setCurrentFilePath] = useState(null);
-  const [hasContentSet, setHasContentSet] = useState(false);
+  
+  // Zustand store for editor state
+  const { 
+    currentFilePath, 
+    hasContentSet, 
+    setCurrentFile, 
+    setContentSet,
+    resetEditor 
+  } = useEditorStore();
 
   // Memoize collaboration hook to prevent unnecessary re-initializations
   const collaborationParams = useMemo(() => ({ sessionId, filePath }), [sessionId, filePath]);
@@ -48,109 +56,71 @@ export function MonacoEditor({
     isSuccess: contentLoaded
   } = useFileContent(sessionId, filePath);
 
-  // Initialize content immediately when editor and data are ready - don't wait for collaboration
-  useEffect(() => {
-    console.log(`🔄 [MONACO EDITOR] Content initialization check for ${filePath}:`, {
-      hasEditor: !!editorRef.current,
-      contentLoaded,
-      hasContentSet,
-      filePathMatches: filePath !== currentFilePath,
-      hasFileContent: fileContent !== undefined,
-      timestamp: new Date().toISOString()
-    });
+  // REMOVED: Duplicate content initialization useEffect to prevent race conditions
+  // Content initialization is now handled ONLY in handleEditorMount to prevent duplication
+  // This eliminates the race condition where content could be set twice
 
-    // Skip if already handled in handleEditorMount or conditions not met
-    if (!editorRef.current || !contentLoaded || hasContentSet || !filePath || filePath === currentFilePath) {
-      return;
-    }
-
-    console.log(`🚀 [MONACO EDITOR] Starting content initialization for: ${filePath} (no collaboration wait)`);
-
-    // Initialize content immediately with file data - don't wait for collaboration
-    const editor = editorRef.current;
-    if (fileContent !== undefined) {
-      try {
-        console.log(`📝 [MONACO EDITOR] Setting initial content for: ${filePath} (Length: ${fileContent.length})`);
-        trackFileLoading.editorMount(filePath);
-        
-        const model = editor.getModel();
-        if (model) {
-          // Check if the model already has content to prevent duplication
-          const currentModelContent = model.getValue();
-          if (currentModelContent.length === 0 || currentModelContent !== fileContent) {
-            model.setValue(fileContent);
-            console.log(`✅ [MONACO EDITOR] Content set in Monaco Editor for: ${filePath}`);
-          } else {
-            console.log(`📄 [MONACO EDITOR] Content already set in Monaco Editor for: ${filePath}`);
-          }
-          setHasContentSet(true);
-          trackFileLoading.contentSet(filePath);
-        }
-      } catch (error) {
-        console.error(`❌ [MONACO EDITOR] Error setting editor content:`, error);
-      }
-    }
-  }, [contentLoaded, fileContent, filePath, currentFilePath, hasContentSet]);
-
-  // Create Monaco binding when editor is ready
+  // Create Monaco binding when editor is ready - SINGLE POINT OF CONTENT INITIALIZATION
   const handleEditorMount = useCallback((editor) => {
     console.log(`🎯 [MONACO EDITOR] Editor mounted for: ${filePath}`);
     editorRef.current = editor;
 
-    // Initialize content immediately if we have it - since editor remounts, we always need to set content
+    // CRITICAL FIX: Initialize content ONLY here to prevent duplication
+    // This is the SINGLE point of content initialization to eliminate race conditions
+    // Initialize content for collaboration
     if (fileContent !== undefined && contentLoaded && filePath) {
       try {
-        console.log(`📝 [MONACO EDITOR] Setting content on editor mount for: ${filePath} (Length: ${fileContent.length})`);
+        console.log(`📝 [MONACO EDITOR] SINGLE-POINT content initialization for: ${filePath} (Length: ${fileContent.length})`);
         trackFileLoading.editorMount(filePath);
         
-        const model = editor.getModel();
-        if (model) {
-          // Check if content is already set to prevent duplication
-          const currentModelContent = model.getValue();
-          if (currentModelContent.length === 0) {
-            model.setValue(fileContent);
-            console.log(`✅ [MONACO EDITOR] Content set on editor mount for: ${filePath}`);
+        // For collaboration: Only initialize YJS document, never set Monaco content directly
+        if (sessionId && filePath) {
+          console.log(`🔗 [MONACO EDITOR] Collaboration mode: delegating content to YJS for: ${filePath}`);
+          
+          // Always create binding and initialize content, regardless of connection state
+          // The binding will sync once connection is ready
+          bindingRef.current = createBinding(editor, onContentChange);
+          
+          // Initialize YJS content immediately (this will sync to Monaco via binding)
+          const initialized = initializeContent(fileContent);
+          
+          if (initialized) {
+            console.log(`✅ [MONACO EDITOR] YJS content initialized for: ${filePath}`);
           } else {
-            console.log(`📄 [MONACO EDITOR] Content already exists on editor mount for: ${filePath} (${currentModelContent.length} chars)`);
+            console.log(`📄 [MONACO EDITOR] YJS content already exists for: ${filePath}`);
+            // Check if content is already there and force sync if needed
+            const currentContent = getContent();
+            if (currentContent.length > 0) {
+              const modelContent = editor.getModel()?.getValue() || '';
+              if (modelContent.length === 0) {
+                console.log(`🔄 [MONACO EDITOR] Manually syncing YJS content to Monaco for: ${filePath}`);
+                editor.getModel()?.setValue(currentContent);
+              }
+            }
           }
-          setHasContentSet(true);
-          trackFileLoading.contentSet(filePath);
+          setContentSet(true);
+        } else {
+          // Non-collaboration mode: set Monaco content directly
+          const model = editor.getModel();
+          if (model) {
+            model.setValue(fileContent);
+            console.log(`✅ [MONACO EDITOR] Direct content set for: ${filePath}`);
+            setContentSet(true);
+          }
         }
+        
+        trackFileLoading.contentSet(filePath);
       } catch (error) {
         console.error(`❌ [MONACO EDITOR] Error setting content on mount:`, error);
       }
+    } else {
+      console.log(`⏳ [MONACO EDITOR] Content not ready yet for: ${filePath}`, {
+        hasFileContent: fileContent !== undefined,
+        contentLoaded,
+        hasFilePath: !!filePath
+      });
     }
-
-    // Set up collaboration binding immediately after editor mount if ready
-    if (sessionId && filePath && isConnected) {
-      try {
-        console.log(`🔗 [MONACO EDITOR] Setting up collaboration binding on mount for: ${filePath}`);
-        bindingRef.current = createBinding(editor, onContentChange);
-        
-        // Initialize YJS content if we have file content and Y.js document is empty
-        if (fileContent && fileContent.trim()) {
-          setTimeout(() => {
-            try {
-              const currentContent = getContent();
-              if (currentContent.length === 0) {
-                console.log('📝 Initializing YJS content on mount for:', filePath);
-                const initialized = initializeContent(fileContent);
-                if (!initialized) {
-                  console.log('⚠️  Content initialization skipped (document not empty or race condition):', filePath);
-                }
-              } else {
-                console.log(`📄 YJS document already has content (${currentContent.length} chars), skipping initialization:`, filePath);
-              }
-            } catch (error) {
-              console.warn('Error initializing YJS content on mount:', error);
-            }
-          }, 100);
-        }
-      } catch (error) {
-        console.error('Error creating collaboration binding on mount:', error);
-      }
-    }
-  }, [sessionId, filePath, fileContent, contentLoaded, isConnected, createBinding, onContentChange, getContent, initializeContent]);
+  }, [sessionId, filePath, fileContent, contentLoaded, createBinding, onContentChange, initializeContent, getContent, setContentSet]);
 
   // Setup collaboration binding as fallback if not set up during mount
   useEffect(() => {
@@ -204,16 +174,16 @@ export function MonacoEditor({
       console.log(`📁 [MONACO EDITOR] File path changed from ${currentFilePath} to ${filePath}`);
       
       // Reset content state immediately for new file
-      setHasContentSet(false);
+      setContentSet(false);
       
       // Note: bindingRef cleanup happens automatically due to editor remount
       bindingRef.current = null;
       
       // Update currentFilePath 
-      setCurrentFilePath(filePath);
+      setCurrentFile(filePath);
       console.log(`🔄 [MONACO EDITOR] State reset for new file: ${filePath}`);
     }
-  }, [filePath, currentFilePath]);
+  }, [filePath, currentFilePath, setContentSet, setCurrentFile]);
 
   // Get language from file extension
   const getLanguageFromFile = useCallback((filePath) => {
@@ -292,8 +262,8 @@ export function MonacoEditor({
           {!isCollaborationReady && <span className="text-yellow-300 text-xs ml-2">⏳ Preparing...</span>}
         </div>
         {userCount > 0 && (
-          <div className="text-xs text-gray-300">
-            {userCount} user{userCount !== 1 ? 's' : ''} online
+          <div className="text-xs text-gray-300" title={`${userCount} user${userCount !== 1 ? 's' : ''} viewing this file`}>
+            {userCount} editing
           </div>
         )}
       </div>

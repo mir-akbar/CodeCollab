@@ -40,7 +40,7 @@
  * - Safety confirmation with session name verification
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -63,6 +63,7 @@ import { toast } from 'sonner';
 import { useDeleteSession } from '@/hooks/sessions';
 import { logDebugInfo, formatSessionDate, getParticipantCount } from '../utils/sessionComponentUtils';
 import PropTypes from 'prop-types';
+import useDialogStore from '@/stores/dialogStore';
 
 export function DeleteSessionDialog({ 
   open = false, 
@@ -70,8 +71,13 @@ export function DeleteSessionDialog({
   session, 
   userEmail 
 }) {
-  const [confirmationText, setConfirmationText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
+  // Zustand state
+  const {
+    deleteSession: { confirmationText, isDeleting },
+    setDeleteConfirmationText,
+    setDeleteSessionDeleting,
+    resetDeleteSession
+  } = useDialogStore();
   
   const deleteSessionMutation = useDeleteSession();
 
@@ -89,9 +95,8 @@ export function DeleteSessionDialog({
    * @function resetForm
    */
   const resetForm = useCallback(() => {
-    setConfirmationText('');
-    setIsDeleting(false);
-  }, []);
+    resetDeleteSession();
+  }, [resetDeleteSession]);
 
   /**
    * Handles session deletion with comprehensive validation and error handling
@@ -117,7 +122,7 @@ export function DeleteSessionDialog({
       confirmationText
     });
 
-    setIsDeleting(true);
+    setDeleteSessionDeleting(true);
     
     try {
       await deleteSessionMutation.mutateAsync({
@@ -133,9 +138,9 @@ export function DeleteSessionDialog({
       console.error("Error deleting session:", error);
       toast.error(error.message || "Failed to delete session");
     } finally {
-      setIsDeleting(false);
+      setDeleteSessionDeleting(false);
     }
-  }, [session, userEmail, confirmationText, isConfirmationValid, deleteSessionMutation, onClose, resetForm]);
+  }, [session, userEmail, confirmationText, isConfirmationValid, deleteSessionMutation, onClose, resetForm, setDeleteSessionDeleting]);
 
   /**
    * Handles dialog close with form reset
@@ -252,7 +257,7 @@ export function DeleteSessionDialog({
             <Input
               id="confirmation"
               value={confirmationText}
-              onChange={(e) => setConfirmationText(e.target.value)}
+              onChange={(e) => setDeleteConfirmationText(e.target.value)}
               placeholder={session.name}
               disabled={isDeleting}
               aria-required="true"

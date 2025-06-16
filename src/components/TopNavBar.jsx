@@ -3,17 +3,18 @@ import { Button } from '@/components/ui/button';
 import { UserSection } from './UserSection';
 import { PathBreadCrumb } from './PathBreadCrumb';
 import { useNavigate } from "react-router-dom";
+import { useSidebar } from "@/components/ui/sidebar";
 import PropTypes from 'prop-types';
 
 export function TopNavBar({ 
-  toggleSidebar, 
-  open, 
   currentPath, 
   onRunCode, 
   isExecuting = false,
   extraActions = null 
 }) {
   const navigate = useNavigate();
+  const { toggleSidebar, open } = useSidebar();
+  
   const onShowSessions = () => {
     navigate("/sessions");
   };
@@ -56,12 +57,6 @@ export function TopNavBar({
         >
           Sessions
         </Button>
-        {/* <Button
-          onClick={() => navigate("/user-profile-test")}
-          className="bg-purple-600 hover:bg-purple-700 text-white"
-        >
-          User Profile
-        </Button> */}
         <UserSection />
       </div>
     </div>
@@ -69,8 +64,6 @@ export function TopNavBar({
 }
 
 TopNavBar.propTypes = {
-  toggleSidebar: PropTypes.func.isRequired,
-  open: PropTypes.bool.isRequired,
   currentPath: PropTypes.array.isRequired,
   onRunCode: PropTypes.func.isRequired,
   isExecuting: PropTypes.bool,

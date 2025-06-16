@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUser } from '@/contexts/UserContext';
 import { useSessionAwareness } from '@/hooks/useSessionAwareness';
 import { useSessionActions } from '@/hooks/sessions';
+import { useDialogStore } from '@/stores';
 import PropTypes from 'prop-types';
 import { 
   getUserRole, 
@@ -206,10 +207,14 @@ function CollaborationDialog({ sessionData, participants, activeParticipants, se
 }
 
 function CollaborationContent({ sessionData, participants, sessionId, onRefresh, onlineUserCount }) {
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('editor');
-  const [isInviting, setIsInviting] = useState(false);
-  const [acceptingInvitation, setAcceptingInvitation] = useState(null);
+  const { 
+    invitation: { email: inviteEmail, role: inviteRole, isSubmitting: isInviting },
+    setInvitationEmail,
+    setInvitationRole,
+    setInvitationSubmitting,
+    pendingInvitations: { processingInvitation: acceptingInvitation },
+    setProcessingInvitation
+  } = useDialogStore();
   const { userEmail } = useUser();
   const { joinSession } = useSessionActions();
 
@@ -234,7 +239,7 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh,
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !sessionData.sessionId) return;
 
-    setIsInviting(true);
+    setInvitationSubmitting(true);
     try {
       const response = await axios.post(`${API_URL}/api/sessions/${sessionData.sessionId}/invite`, {
         inviteeEmail: inviteEmail.trim(),
@@ -245,7 +250,7 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh,
       });
 
       if (response.data.success) {
-        setInviteEmail('');
+        setInvitationEmail('');
         
         // Show appropriate success message based on response
         if (response.data.alreadyParticipant) {
@@ -274,12 +279,12 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh,
       
       alert(errorMessage);
     } finally {
-      setIsInviting(false);
+      setInvitationSubmitting(false);
     }
   };
 
   const handleAcceptInvitation = async (participantSessionId) => {
-    setAcceptingInvitation(participantSessionId);
+    setProcessingInvitation(participantSessionId);
     try {
       const result = await joinSession(participantSessionId);
       if (result.success) {
@@ -292,7 +297,7 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh,
       console.error("Error accepting invitation:", error);
       alert('❌ Failed to accept invitation. Please try again.');
     } finally {
-      setAcceptingInvitation(null);
+      setProcessingInvitation(null);
     }
   };
 
@@ -487,10 +492,10 @@ function CollaborationContent({ sessionData, participants, sessionId, onRefresh,
                 type="email"
                 placeholder="Enter email address"
                 value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
+                onChange={(e) => setInvitationEmail(e.target.value)}
                 className="bg-[#2d2d2d] border-[#444] text-white placeholder-gray-400"
               />
-              <Select value={inviteRole} onValueChange={setInviteRole}>
+              <Select value={inviteRole} onValueChange={setInvitationRole}>
                 <SelectTrigger className="bg-[#2d2d2d] border-[#444] text-white">
                   <SelectValue />
                 </SelectTrigger>

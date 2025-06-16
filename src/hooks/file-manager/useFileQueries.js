@@ -145,7 +145,7 @@ export function useFileUpload(sessionId) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ file, userEmail, onProgress }) => {
+    mutationFn: async ({ file, userEmail }) => {
       console.log(`📤 [FRONTEND UPLOAD] Starting file upload:`, {
         fileName: file.name,
         fileSize: `${(file.size / 1024).toFixed(2)}KB`,
@@ -163,14 +163,7 @@ export function useFileUpload(sessionId) {
       console.log(`📤 [FRONTEND UPLOAD] Sending POST request to /api/files/upload`);
 
       const response = await apiClient.post('/api/files/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          if (onProgress) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log(`📤 [FRONTEND UPLOAD] Progress: ${percentCompleted}% (${progressEvent.loaded}/${progressEvent.total} bytes)`);
-            onProgress(percentCompleted);
-          }
-        },
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       console.log(`✅ [FRONTEND UPLOAD] Upload response received:`, {
@@ -279,7 +272,7 @@ export function useFileDelete(sessionId, userEmail = null) {
       return { previousSessionFiles, previousHierarchy, deletedFilePath: filePath };
     },
     
-    onSuccess: (data, variables, context) => {
+    onSuccess: (data) => {
       console.log('🎉 File deletion successful:', data.deletedFilePath);
       
       // Clean up file content cache
@@ -311,7 +304,7 @@ export function useFileDelete(sessionId, userEmail = null) {
       toast.error(error.message || 'Failed to delete file');
     },
     
-    onSettled: (data, error, variables, context) => {
+    onSettled: (data, error, variables) => {
       console.log('🏁 File deletion operation settled for:', variables.filePath);
       
       // Always refetch to ensure data consistency

@@ -64,6 +64,18 @@ class FileApiService {
   }
 
   /**
+   * Save file content
+   */
+  async saveFileContent(filePath, sessionId, content) {
+    const response = await apiClient.put('/api/files/content', {
+      path: filePath,
+      sessionId: sessionId,
+      content: content
+    });
+    return response.data;
+  }
+
+  /**
    * Delete a file
    */
   async deleteFile(filePath, sessionId, userEmail = null) {

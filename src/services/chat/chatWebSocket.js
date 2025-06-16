@@ -21,8 +21,8 @@ class ChatWebSocketService {
     const doc = new Y.Doc();
     const roomName = `chat-${sessionId}`;
     
-    // Create Y-WebSocket provider with session-specific chat URL
-    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket/chat-${sessionId}`;
+    // Create Y-WebSocket provider with base URL (let the room name handle session identification)
+    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket`;
     const provider = new WebsocketProvider(wsUrl, roomName, doc);
     
     const connection = {

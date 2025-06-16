@@ -57,6 +57,7 @@ const requireAuth = async (req, res, next) => {
       : req.cookies?.accessToken;
 
     if (!token) {
+      console.log('❌ Auth failed: No token provided');
       return res.status(401).json({
         error: 'Authentication required',
         code: 'NO_TOKEN'
@@ -65,6 +66,7 @@ const requireAuth = async (req, res, next) => {
 
     // Verify Cognito JWT token
     const decoded = await verifyCognitoToken(token);
+    console.log('✅ Token verified for user:', decoded.username || decoded.sub);
 
     // Debug: Log the decoded token to see what attributes we're getting
     // console.log('Decoded Cognito token:', JSON.stringify(decoded, null, 2));

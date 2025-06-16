@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Check, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +7,7 @@ import { usePendingInvitations, useSessionActions } from '@/hooks/sessions';
 import { toast } from 'sonner';
 import PropTypes from 'prop-types';
 import { PendingInvitationsSkeleton } from './PendingInvitationsSkeleton';
+import useDialogStore from '@/stores/dialogStore';
 
 /**
  * PendingInvitations Component
@@ -28,7 +28,13 @@ export function PendingInvitations({ userEmail: propUserEmail, showSkeleton = fa
   
   const { data: invitations, isLoading, isFetching, error, refetch } = query;
   const { joinSession, rejectInvitation } = useSessionActions();
-  const [processingInvitation, setProcessingInvitation] = useState(null);
+  
+  // Zustand state
+  const {
+    pendingInvitations: { processingInvitation },
+    setProcessingInvitation,
+    clearProcessingInvitation
+  } = useDialogStore();
 
   const handleAcceptInvitation = async (invitation) => {
     setProcessingInvitation(invitation.sessionId);
@@ -44,7 +50,7 @@ export function PendingInvitations({ userEmail: propUserEmail, showSkeleton = fa
       console.error("Error accepting invitation:", error);
       toast.error('Failed to accept invitation. Please try again.');
     } finally {
-      setProcessingInvitation(null);
+      clearProcessingInvitation();
     }
   };
 
@@ -62,7 +68,7 @@ export function PendingInvitations({ userEmail: propUserEmail, showSkeleton = fa
       console.error("Error rejecting invitation:", error);
       toast.error('Failed to decline invitation. Please try again.');
     } finally {
-      setProcessingInvitation(null);
+      clearProcessingInvitation();
     }
   };
 

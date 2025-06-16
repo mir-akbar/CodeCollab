@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Users } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { useChat } from "@/hooks/chat/useChat";
+import { useChatStore } from "@/stores";
 import { useLocation } from "react-router-dom";
 
 function ChatPanel() {
-  const [newMessage, setNewMessage] = useState("");
+  const { newMessage, setNewMessage, clearNewMessage } = useChatStore();
   const messagesEndRef = useRef(null);
   const { userEmail } = useUser();
   const location = useLocation();
@@ -31,13 +32,12 @@ function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
 
     try {
       await sendMessage(newMessage);
-      setNewMessage("");
+      clearNewMessage();
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -84,11 +84,10 @@ function ChatPanel() {
           <div className="flex items-center">
             <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
             {isConnected ? '🔗 Chat connected' : '⏳ Connecting to chat...'}
-          </div>
-          {userCount > 0 && (
-            <div className="flex items-center text-gray-400">
+          </div>          {userCount > 0 && (
+            <div className="flex items-center text-gray-400" title={`${userCount} user${userCount !== 1 ? 's' : ''} in session`}>
               <Users className="h-3 w-3 mr-1" />
-              {userCount}
+              {userCount} in session
             </div>
           )}
         </div>

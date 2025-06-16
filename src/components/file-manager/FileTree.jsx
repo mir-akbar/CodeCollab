@@ -3,7 +3,7 @@
  * Displays hierarchical file structure with interactive features
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
@@ -38,23 +38,21 @@ import { useFileManager, fileQueryKeys } from '@/hooks/file-manager/useFileQueri
 import { apiClient } from '@/services/apiClient';
 import { cn } from '@/lib/utils';
 import { trackFileLoading } from '@/utils/performanceMonitor';
+import useFileManagerStore from '@/stores/fileManagerStore';
 
 export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFilePath, userEmail, className }) {
   const { hierarchy, isLoading, deleteFile, isDeleting } = useFileManager(sessionId, userEmail);
   const queryClient = useQueryClient();
-  const [expandedFolders, setExpandedFolders] = useState(new Set());
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState(null);
-
-  const toggleFolder = (folderPath) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(folderPath)) {
-      newExpanded.delete(folderPath);
-    } else {
-      newExpanded.add(folderPath);
-    }
-    setExpandedFolders(newExpanded);
-  };
+  
+  // Zustand state
+  const {
+    expandedFolders,
+    deleteDialogOpen,
+    fileToDelete,
+    toggleFolder,
+    openDeleteDialog,
+    closeDeleteDialog
+  } = useFileManagerStore();
 
   // Prefetch file content on hover for instant loading
   const handleFileHover = async (file) => {
@@ -164,8 +162,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
   const handleDeleteClick = (file, e) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent any default behavior
-    setFileToDelete(file);
-    setDeleteDialogOpen(true);
+    openDeleteDialog(file);
   };
 
   const confirmDelete = async () => {
@@ -174,8 +171,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
       
       try {
         // First close the dialog and clear state
-        setDeleteDialogOpen(false);
-        setFileToDelete(null);
+        closeDeleteDialog();
         
         // Then perform the deletion
         await deleteFile({ filePath: filePathToDelete });
@@ -187,8 +183,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
       } catch (error) {
         console.error('Delete operation failed:', error);
         // Reset state on error
-        setDeleteDialogOpen(false);
-        setFileToDelete(null);
+        closeDeleteDialog();
       }
     }
   };
@@ -343,7 +338,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => open ? null : closeDeleteDialog()}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete File</AlertDialogTitle>

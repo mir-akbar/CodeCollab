@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Button } from "@/components/ui/button";
 import { Video, VideoOff, Mic, MicOff, Phone, PhoneCall, Users, Settings } from "lucide-react";
@@ -7,6 +7,7 @@ import { useVideoCall } from "@/hooks/video/useVideoCall";
 import { useUser } from "@/contexts/UserContext";
 import { toast } from "sonner";
 import { SingletonPermissionCheck } from "./video/PermissionCheck";
+import useMediaStore from "@/stores/mediaStore";
 
 // Video Components
 function LocalVideo({ stream, mediaState, onToggleVideo, onToggleAudio, height = 'h-32' }) {
@@ -260,9 +261,16 @@ function CallControls({ isInCall, isConnected, isLoading, onStartCall, onJoinCal
 export default function VideoPanel() {
   const location = useLocation();
   const { userEmail } = useUser();
-  const [showSettings, setShowSettings] = useState(false);
-  const [availableCameras, setAvailableCameras] = useState([]);
-  const [selectedCamera, setSelectedCamera] = useState('');
+  
+  // Zustand media state
+  const {
+    showSettings,
+    availableCameras,
+    selectedCamera,
+    setShowSettings,
+    setAvailableCameras,
+    setSelectedCamera
+  } = useMediaStore();
   
   // Get session ID from URL
   const searchParams = new URLSearchParams(location.search);
@@ -359,7 +367,7 @@ export default function VideoPanel() {
     };
 
     loadCameras();
-  }, [selectedCamera]);
+  }, [selectedCamera, setAvailableCameras, setSelectedCamera]);
 
   if (!sessionId) {
     return (
