@@ -180,11 +180,6 @@ class DocumentStateManager {
       return false;
     }
     
-    // Skip processing for video call rooms (if any)
-    if (room.includes('video-') || room.startsWith('video/')) {
-      return false;
-    }
-    
     // Skip processing for special system rooms
     if (room.includes('system-') || room.startsWith('system/')) {
       return false;

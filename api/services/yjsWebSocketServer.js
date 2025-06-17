@@ -5,7 +5,6 @@
  */
 
 const WebSocketServer = require('ws').WebSocketServer;
-const VideoCallManager = require('./websocket/managers/VideoCallManager');
 const ChatManager = require('./websocket/managers/ChatManager');
 const FileEventManager = require('./websocket/managers/FileEventManager');
 const UserPresenceManager = require('./websocket/managers/UserPresenceManager');
@@ -23,13 +22,12 @@ class YjsWebSocketServer {
     this.roomManagerInterface = new RoomManagerInterface(this);
     this.documentStateManager = new DocumentStateManager(this.roomManagerInterface);
     
-    // Initialize feature managers first
-    this.videoCallManager = new VideoCallManager(this.roomManagerInterface);
+    // Initialize feature managers
     this.chatManager = new ChatManager(this.roomManagerInterface);
     this.fileEventManager = new FileEventManager(this.roomManagerInterface);
     
-    // Initialize user presence manager with video call manager reference
-    this.userPresenceManager = new UserPresenceManager(this.roomManagerInterface, this.videoCallManager);
+    // Initialize user presence manager
+    this.userPresenceManager = new UserPresenceManager(this.roomManagerInterface);
   }
 
   /**
@@ -96,27 +94,6 @@ class YjsWebSocketServer {
       // Track this connection in room
       this.roomManager.addClientToRoom(docName, ws);
       console.log(`🏠 [WEBSOCKET-CONNECT] Added client to room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
-      
-      // Check if this is a video session and send call status
-      const isVideoSession = docName.startsWith('video-');
-      if (isVideoSession) {
-        // Extract sessionId from video room name formats:
-        // Format: "video-sessionId/video-sessionId" -> extract the sessionId part
-        let sessionId = docName;
-        
-        // Remove the "video-" prefix
-        sessionId = sessionId.replace(/^video-/, '');
-        
-        // If it contains a slash and duplicate video room name, extract just the sessionId
-        if (sessionId.includes('/video-')) {
-          sessionId = sessionId.split('/video-')[0];
-        }
-        
-        console.log(`📹 [WEBSOCKET-CONNECT] Video session detected for sessionId: ${sessionId}, roomName: ${docName}`);
-        setTimeout(() => {
-          this.videoCallManager.sendCallStatusToUser(ws, sessionId);
-        }, 100); // Small delay to ensure connection is fully established
-      }
       
       // PRODUCTION FIX: Send existing document state to new connections
       // DISABLED: This causes content duplication in production due to WebSocket connection instability
@@ -205,11 +182,6 @@ class YjsWebSocketServer {
    * Check if message type is one of our custom types
    */
   isCustomMessageType(type) {
-    // Check if it's a video message first
-    if (this.videoCallManager.isVideoMessage(type)) {
-      return true;
-    }
-    
     // Check if it's a chat message
     if (this.chatManager.isChatMessage(type)) {
       return true;
@@ -233,12 +205,6 @@ class YjsWebSocketServer {
    */
   handleCustomMessage(ws, data) {
     const { type } = data;
-    
-    // Delegate video messages to Video Call Manager
-    if (this.videoCallManager.isVideoMessage(type)) {
-      this.videoCallManager.handleVideoMessage(ws, data);
-      return;
-    }
     
     // Delegate chat messages to Chat Manager
     if (this.chatManager.isChatMessage(type)) {
@@ -288,7 +254,6 @@ class YjsWebSocketServer {
    */
   cleanup(ws) {
     // Notify managers about disconnection
-    this.videoCallManager.handleUserDisconnect(ws);
     this.chatManager.handleUserDisconnect(ws);
     this.fileEventManager.handleUserDisconnect(ws);
     this.userPresenceManager.handleUserDisconnect(ws);
@@ -332,7 +297,6 @@ class YjsWebSocketServer {
    */
   getStats() {
     const roomStats = this.roomManager.getRoomStats();
-    const videoCallStats = this.videoCallManager.getActiveCallsStats();
     const chatStats = this.chatManager.getChatStats();
     const fileEventStats = this.fileEventManager.getFileEventStats();
     const userPresenceStats = this.userPresenceManager.getUserPresenceStats();
@@ -340,7 +304,6 @@ class YjsWebSocketServer {
     
     return {
       ...roomStats,
-      videoCalls: videoCallStats,
       chat: chatStats,
       fileEvents: fileEventStats,
       userPresence: userPresenceStats,
@@ -373,7 +336,6 @@ class YjsWebSocketServer {
       this.roomManager.cleanup();
       this.documentStateManager.cleanup();
       this.userPresenceManager.cleanup();
-      this.videoCallManager.cleanup();
       this.chatManager.cleanup();
       this.fileEventManager.cleanup();
       

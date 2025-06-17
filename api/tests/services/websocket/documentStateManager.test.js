@@ -47,11 +47,6 @@ describe('DocumentStateManager', () => {
       expect(documentStateManager.shouldProcessYjsUpdate('chat/room1')).toBe(false);
     });
 
-    it('should return false for video rooms', () => {
-      expect(documentStateManager.shouldProcessYjsUpdate('video-call1')).toBe(false);
-      expect(documentStateManager.shouldProcessYjsUpdate('video/call1')).toBe(false);
-    });
-
     it('should return false for system rooms', () => {
       expect(documentStateManager.shouldProcessYjsUpdate('system-config')).toBe(false);
       expect(documentStateManager.shouldProcessYjsUpdate('system/config')).toBe(false);
