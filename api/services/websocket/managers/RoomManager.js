@@ -167,15 +167,17 @@ class RoomManager {
       return;
     }
     
-    // PRODUCTION FIX: Only process Y.js updates for document editing rooms
-    // Skip processing for chat rooms to prevent Y.js parsing errors
+    // Validate message before broadcasting
+    if (!message || (Buffer.isBuffer(message) && message.length === 0)) {
+      console.warn(`⚠️ Invalid or empty Y.js message for room ${room}`);
+      return;
+    }
+    
+    // Process Y.js updates only if requested (disabled for stability)
     if (shouldProcessUpdate) {
       try {
-        // Additional validation before processing Y.js updates
         if (Buffer.isBuffer(message) || message instanceof Uint8Array) {
-          // Validate that the message looks like valid Y.js binary data
           if (message.length > 0) {
-            // This is a Y.js binary update for document editing - process it to maintain server state
             processYjsUpdateCallback(room, message);
           } else {
             console.warn(`⚠️ Received empty Y.js message for room ${room}`);
@@ -192,23 +194,28 @@ class RoomManager {
     const clients = this.rooms.get(room);
     if (clients) {
       let broadcastCount = 0;
+      let errorCount = 0;
       console.log(`📡 Broadcasting Y.js message in room "${room}" to ${clients.size - 1} other clients`);
       
-      // Simply relay the message to other clients without server-side processing
-      // This avoids Y.js document corruption issues
+      // Relay the message to other clients with error handling
       clients.forEach(client => {
         if (client !== ws && client.readyState === client.OPEN) {
           try {
             client.send(message);
             broadcastCount++;
           } catch (error) {
-            console.error('Error broadcasting Y.js message:', error);
-            // Note: cleanup should be handled by the main server
+            console.error(`❌ Error broadcasting Y.js message to client:`, error.message);
+            errorCount++;
+            // Mark client for potential cleanup but don't crash
           }
         }
       });
       
-      console.log(`✅ Y.js message broadcasted to ${broadcastCount} clients in room "${room}"`);
+      if (errorCount > 0) {
+        console.log(`⚠️ Y.js message broadcasted to ${broadcastCount} clients with ${errorCount} errors in room "${room}"`);
+      } else {
+        console.log(`✅ Y.js message broadcasted to ${broadcastCount} clients in room "${room}"`);
+      }
     } else {
       console.warn(`⚠️ No clients found in room "${room}" for Y.js broadcast`);
     }

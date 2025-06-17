@@ -1,7 +1,7 @@
 /**
  * Y-WebSocket Server
- * Simple Y.js WebSocket server compatible with y-websocket client
- * Acts as a simple message relay without server-side document processing
+ * WebSocket server compatible with y-websocket client
+ * Acts as a message relay with custom feature support
  */
 
 const WebSocketServer = require('ws').WebSocketServer;
@@ -31,10 +31,10 @@ class YjsWebSocketServer {
   }
 
   /**
-   * Initialize WebSocket server with proper Y.js support
+   * Initialize WebSocket server with Y.js support
    */
   initialize() {
-    console.log('🔌 Setting up Y-WebSocket server...');
+    console.log('🔌 Setting up WebSocket server...');
     
     // Create WebSocket server that handles Y.js connections
     this.wss = new WebSocketServer({
@@ -95,21 +95,19 @@ class YjsWebSocketServer {
       this.roomManager.addClientToRoom(docName, ws);
       console.log(`🏠 [WEBSOCKET-CONNECT] Added client to room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
       
-      // PRODUCTION FIX: Send existing document state to new connections
-      // DISABLED: This causes content duplication in production due to WebSocket connection instability
-      // Let Y.js clients handle their own document synchronization through standard y-websocket protocol
-      setTimeout(() => {
-        // this.documentStateManager.sendExistingDocumentState(ws, docName); // DISABLED
-        console.log(`🔄 [WEBSOCKET-CONNECT] Y.js client will handle document synchronization for: ${docName}`);
-      }, 50);
+      // Let Y.js clients handle their own document synchronization
+      console.log(`🔄 [WEBSOCKET-CONNECT] Y.js client will handle document synchronization for: ${docName}`);
       
       // Set up additional initialization for new connections
       setTimeout(() => {
-        // Send recent chat history to new user (this is safe)
-        this.chatManager.sendChatHistoryToUser(ws, docName);
-        
-        // Send recent file event history to new user (this is safe)
-        this.fileEventManager.sendFileHistoryToUser(ws, docName);
+        // Only send history if connection is still alive
+        if (ws.readyState === ws.OPEN) {
+          // Send recent chat history to new user (this is safe)
+          this.chatManager.sendChatHistoryToUser(ws, docName);
+          
+          // Send recent file event history to new user (this is safe)
+          this.fileEventManager.sendFileHistoryToUser(ws, docName);
+        }
       }, 100); // Small delay to ensure client is ready
       
       // Set up heartbeat
@@ -118,64 +116,83 @@ class YjsWebSocketServer {
         ws.lastActivity = Date.now();
       });
 
-      // Handle messages - simple Y.js message forwarding
+      // Handle messages - Y.js message forwarding with proper validation
       ws.on('message', (message) => {
         try {
-          // PRODUCTION FIX: Properly detect JSON vs binary Y.js messages
+          // Update activity timestamp
+          ws.lastActivity = Date.now();
           
-          // Only try to parse as JSON if it's clearly a string message
+          // Handle different message formats more robustly
           if (typeof message === 'string') {
+            // String messages - likely JSON
             try {
               const data = JSON.parse(message);
               if (data.type && typeof data.type === 'string' && this.isCustomMessageType(data.type)) {
                 this.handleCustomMessage(ws, data);
-                return; // Don't pass to Y.js if it's our custom message
+                return;
               }
-            } catch {
-              // Not valid JSON, treat as Y.js binary
+            } catch (jsonError) {
+              // Not valid JSON, could be malformed - log and ignore
+              console.warn(`⚠️ Invalid JSON message from ${ws.clientIP}:`, jsonError.message);
+              return;
             }
-          } else if (Buffer.isBuffer(message) && message.length > 0) {
-            // Check if it's a JSON string in buffer format
+          } else if (Buffer.isBuffer(message)) {
+            // Buffer messages - could be Y.js binary or JSON in buffer
+            if (message.length === 0) {
+              console.warn(`⚠️ Empty buffer message from ${ws.clientIP}`);
+              return;
+            }
+            
+            // Try to detect if it's a JSON message in buffer format
             try {
               const messageString = message.toString('utf8');
               if (messageString.startsWith('{') && messageString.endsWith('}')) {
                 const data = JSON.parse(messageString);
                 if (data.type && typeof data.type === 'string' && this.isCustomMessageType(data.type)) {
                   this.handleCustomMessage(ws, data);
-                  return; // Don't pass to Y.js if it's our custom message
+                  return;
                 }
               }
             } catch {
-              // Not JSON, treat as Y.js binary - this is the most common case
+              // Not JSON in buffer format, treat as Y.js binary
             }
+            
+            // Validate Y.js binary message
+            if (!this.isValidYjsMessage(message)) {
+              console.warn(`⚠️ Invalid Y.js message from ${ws.clientIP}, length: ${message.length}`);
+              return;
+            }
+          } else {
+            console.warn(`⚠️ Unknown message type from ${ws.clientIP}:`, typeof message);
+            return;
           }
           
-          // Forward Y.js binary messages to other clients
+          // Forward validated Y.js messages to other clients
           this.broadcastYjsMessage(ws, message);
           
         } catch (error) {
-          console.error('Error handling WebSocket message:', error);
+          console.error(`❌ Error handling WebSocket message from ${ws.clientIP}:`, error);
         }
       });
 
       ws.on('close', () => {
-        console.log(`🔌 Y-WebSocket connection closed for document: ${docName}`);
+        console.log(`🔌 Connection closed for document: ${docName}`);
         this.cleanup(ws);
       });
 
       ws.on('error', (error) => {
-        console.error('❌ Y-WebSocket error:', error);
+        console.error('❌ WebSocket error:', error);
         this.cleanup(ws);
       });
       
-      // Note: We don't send sync messages since we're acting as a simple relay
-      // Each client will handle their own Y.js document state
+      // Note: Acting as a simple relay for Y.js protocol
+      // Each client handles their own document state
     });
 
     // Start heartbeat
     this.roomManager.startHeartbeat(this.wss);
 
-    console.log('✅ Y-WebSocket server initialized with proper Y.js support');
+    console.log('✅ WebSocket server initialized with Y.js support');
   }
 
   /**
@@ -265,24 +282,22 @@ class YjsWebSocketServer {
   }
 
   /**
-   * Broadcast Y.js binary message to other clients in the same room
-   * Enhanced with production-safe document state preservation
+   * Broadcast Y.js message to other clients in the same room
    */
   broadcastYjsMessage(ws, message) {
-    // PRODUCTION FIX: Disable server-side Y.js processing to prevent content duplication
-    // The server-side Y.js processing was causing corruption and content duplication errors
-    // in production environments. It's safer to use Y.js as a simple message relay.
-    
-    const shouldProcessUpdate = false; // Always false for production safety
-    
-    console.log(`🔄 Broadcasting Y.js message as simple relay (no server-side processing)`);
-    
-    this.roomManager.broadcastYjsMessage(
-      ws, 
-      message, 
-      shouldProcessUpdate, // Always false
-      null // No callback needed
-    );
+    try {
+      console.log(`🔄 Broadcasting Y.js message as relay`);
+      
+      this.roomManager.broadcastYjsMessage(
+        ws, 
+        message, 
+        false, // No server-side processing
+        null // No callback needed
+      );
+    } catch (error) {
+      console.error(`❌ Error broadcasting Y.js message:`, error);
+      // Don't crash the server, just log the error
+    }
   }
 
   /**
@@ -330,7 +345,7 @@ class YjsWebSocketServer {
    */
   shutdown() {
     if (this.wss) {
-      console.log('🛑 Shutting down Y-WebSocket server...');
+      console.log('🛑 Shutting down WebSocket server...');
       
       // Cleanup managers
       this.roomManager.cleanup();
@@ -347,7 +362,42 @@ class YjsWebSocketServer {
       // Clear WebSocket server
       this.wss.close();
       
-      console.log('✅ Y-WebSocket server shutdown complete');
+      console.log('✅ WebSocket server shutdown complete');
+    }
+  }
+  
+  /**
+   * Validate Y.js binary message format
+   */
+  isValidYjsMessage(message) {
+    if (!Buffer.isBuffer(message) || message.length === 0) {
+      return false;
+    }
+    
+    try {
+      // Basic Y.js message validation
+      // Y.js messages typically start with specific byte patterns
+      const firstByte = message[0];
+      
+      // Y.js sync messages start with messageType (0, 1, 2)
+      // 0 = sync step 1, 1 = sync step 2, 2 = update
+      if (firstByte >= 0 && firstByte <= 2) {
+        // For sync messages, check minimum length
+        if (message.length < 2) {
+          return false;
+        }
+        return true;
+      }
+      
+      // Allow other message types but with basic length check
+      if (message.length >= 1 && message.length <= 1024 * 1024) { // Max 1MB
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.warn(`⚠️ Error validating Y.js message:`, error.message);
+      return false;
     }
   }
 }

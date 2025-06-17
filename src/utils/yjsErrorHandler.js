@@ -4,6 +4,7 @@
  */
 
 let errorThrottle = new Map(); // Track recent errors to prevent spam
+let errorCount = 0; // Track total error count for monitoring
 
 /**
  * Throttle error logging to prevent spam
@@ -34,13 +35,15 @@ export function setupGlobalYjsErrorHandler() {
       const errorKey = `${event.reason.message}-${event.reason.stack?.substring(0, 50)}`;
       
       if (shouldLogError(errorKey)) {
+        errorCount++;
         console.error('🚨 Caught YJS error to prevent app crash:', event.reason);
         
         // Log additional context
         console.error('YJS Error Context:', {
           message: event.reason.message,
           stack: event.reason.stack,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          totalErrorCount: errorCount
         });
         
         console.warn('⚠️ Document synchronization encountered an error but was recovered');
@@ -63,6 +66,7 @@ export function setupGlobalYjsErrorHandler() {
       const errorKey = `${event.error.message}-${event.filename}-${event.lineno}`;
       
       if (shouldLogError(errorKey)) {
+        errorCount++;
         console.error('🚨 Caught YJS error to prevent app crash:', event.error);
         
         // Log additional context
@@ -72,7 +76,8 @@ export function setupGlobalYjsErrorHandler() {
           lineno: event.lineno,
           colno: event.colno,
           stack: event.error.stack,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          totalErrorCount: errorCount
         });
         
         console.warn('⚠️ Document synchronization encountered an error but was recovered');
