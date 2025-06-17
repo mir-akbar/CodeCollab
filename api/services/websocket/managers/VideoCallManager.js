@@ -19,6 +19,7 @@ class VideoCallManager {
       'video-call-start',
       'video-call-join', 
       'video-call-leave',
+      'video-call-end',
       'video-offer',
       'video-answer',
       'video-ice-candidate',
@@ -43,6 +44,9 @@ class VideoCallManager {
         break;
       case 'video-call-leave':
         this.handleVideoCallLeave(ws, data);
+        break;
+      case 'video-call-end':
+        this.handleVideoCallEnd(ws, data);
         break;
       case 'video-offer':
         this.handleVideoOffer(ws, data);
@@ -167,11 +171,16 @@ class VideoCallManager {
       this.callParticipants.get(sessionId).delete(ws.userId);
       console.log(`🚪 [VIDEO-CALL-LEAVE] Removed ${ws.userEmail} from participants (was present: ${hadParticipant}). Remaining: ${this.callParticipants.get(sessionId).size}`);
       
-      // Clean up empty calls
-      if (this.callParticipants.get(sessionId).size === 0) {
+      // CRITICAL FIX: Only clean up calls when explicitly requested, not on disconnect
+      // Check if this is an explicit leave (user clicked leave) vs disconnect
+      const isExplicitLeave = data.explicit === true;
+      
+      if (this.callParticipants.get(sessionId).size === 0 && isExplicitLeave) {
         this.callParticipants.delete(sessionId);
         this.activeVideoCalls.delete(sessionId);
-        console.log(`� [VIDEO-CALL-LEAVE] Call ended in session: ${sessionId} (no participants left)`);
+        console.log(`� [VIDEO-CALL-LEAVE] Call ended in session: ${sessionId} (explicitly ended by last participant)`);
+      } else if (this.callParticipants.get(sessionId).size === 0) {
+        console.log(`⏸️ [VIDEO-CALL-LEAVE] Call paused in session: ${sessionId} (all participants disconnected but call remains active)`);
       }
     } else {
       console.log(`⚠️ [VIDEO-CALL-LEAVE] No participant list found for session ${sessionId}`);
@@ -482,6 +491,39 @@ class VideoCallManager {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Handle explicit video call ending (not just disconnection)
+   */
+  handleVideoCallEnd(ws, data) {
+    const { sessionId } = data;
+    console.log(`🛑 [VIDEO-CALL-END] User ${ws.userEmail} (${ws.userId}) ending call in session: ${sessionId}`);
+    
+    // Remove participant and clean up call completely
+    if (this.callParticipants.has(sessionId)) {
+      this.callParticipants.get(sessionId).delete(ws.userId);
+      console.log(`🛑 [VIDEO-CALL-END] Removed ${ws.userEmail} from participants. Remaining: ${this.callParticipants.get(sessionId).size}`);
+    }
+    
+    // Always clean up call when explicitly ended
+    this.callParticipants.delete(sessionId);
+    this.activeVideoCalls.delete(sessionId);
+    console.log(`🛑 [VIDEO-CALL-END] Call completely ended in session: ${sessionId}`);
+    
+    // Broadcast call ended event
+    this.roomManager.broadcastToRoom(sessionId, {
+      type: 'video-call-ended',
+      sessionId,
+      endedBy: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`✅ [VIDEO-CALL-END] Successfully ended call for ${ws.userEmail} in session ${sessionId}`);
   }
 
   /**

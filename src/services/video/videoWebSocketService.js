@@ -153,29 +153,41 @@ class VideoWebSocketService {
   }
 
   /**
-   * Leave video call
+   * Leave video call (temporary - call remains active)
    */
-  leaveCall(sessionId) {
-    console.log(`🚪 [VIDEO-LEAVE] Leaving call in session ${sessionId}`);
+  leaveCall(sessionId, endCall = false) {
+    const action = endCall ? 'ending' : 'leaving';
+    console.log(`🚪 [VIDEO-LEAVE] ${action} call in session ${sessionId}`);
     
     const connection = this.connections.get(sessionId);
     if (!connection || !connection.isConnected) {
-      console.log(`⚠️ [VIDEO-LEAVE] Connection not available for session ${sessionId}, cannot send leave signal`);
+      console.log(`⚠️ [VIDEO-LEAVE] Connection not available for session ${sessionId}, cannot send ${action} signal`);
       return;
     }
 
     console.log(`🚪 [VIDEO-LEAVE] Connection status - Connected: ${connection.isConnected}, Session: ${connection.sessionId}`);
 
-    // Send leave call signal
-    const leaveMessage = {
-      type: 'video-call-leave',
+    // Send appropriate signal based on whether this is ending or just leaving
+    const message = endCall ? {
+      type: 'video-call-end',
       sessionId
+    } : {
+      type: 'video-call-leave',
+      sessionId,
+      explicit: true // Mark as explicit leave, not just disconnect
     };
     
-    console.log(`🚪 [VIDEO-LEAVE] Sending leave signal:`, leaveMessage);
-    this.sendSignal(sessionId, leaveMessage);
+    console.log(`🚪 [VIDEO-LEAVE] Sending ${action} signal:`, message);
+    this.sendSignal(sessionId, message);
 
-    console.log(`✅ [VIDEO-LEAVE] Successfully left video call in session: ${sessionId}`);
+    console.log(`✅ [VIDEO-LEAVE] Successfully ${endCall ? 'ended' : 'left'} video call in session: ${sessionId}`);
+  }
+
+  /**
+   * End video call completely (removes call for everyone)
+   */
+  endCall(sessionId) {
+    return this.leaveCall(sessionId, true);
   }
 
   /**

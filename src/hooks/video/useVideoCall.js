@@ -278,16 +278,31 @@ export function useVideoCall(sessionId) {
         }
       };
 
+      const handleCallEnded = (data) => {
+        console.log(`🛑 [CALL-ENDED] Call ended by ${data.endedBy?.email}:`, data);
+        setHasActiveCall(false);
+        setIsInCall(false);
+        setParticipants([]);
+        setRemoteStreams(new Map());
+        
+        // Clean up WebRTC connections
+        webRTCService.cleanup();
+        
+        console.log(`✅ [CALL-ENDED] Call state cleared after explicit end`);
+      };
+
       // Subscribe to video events
       videoWebSocketService.on(sessionId, 'connected', handleConnection);
       videoWebSocketService.on(sessionId, 'video-call-started', handleCallStarted);
       videoWebSocketService.on(sessionId, 'video-call-status', handleCallStatus);
       videoWebSocketService.on(sessionId, 'video-call-user-joined', handleUserJoined);
       videoWebSocketService.on(sessionId, 'video-call-user-left', handleUserLeft);
+      videoWebSocketService.on(sessionId, 'video-call-ended', handleCallEnded);
       videoWebSocketService.on(sessionId, 'video-offer', handleVideoOffer);
       videoWebSocketService.on(sessionId, 'video-answer', handleVideoAnswer);
       videoWebSocketService.on(sessionId, 'video-ice-candidate', handleIceCandidate);
       videoWebSocketService.on(sessionId, 'video-media-state-changed', handleMediaStateChanged);
+      videoWebSocketService.on(sessionId, 'video-call-ended', handleCallEnded);
 
       // Check if already connected
       if (videoWebSocketService.isConnected(sessionId)) {
@@ -305,6 +320,7 @@ export function useVideoCall(sessionId) {
         videoWebSocketService.off(sessionId, 'video-answer', handleVideoAnswer);
         videoWebSocketService.off(sessionId, 'video-ice-candidate', handleIceCandidate);
         videoWebSocketService.off(sessionId, 'video-media-state-changed', handleMediaStateChanged);
+        videoWebSocketService.off(sessionId, 'video-call-ended', handleCallEnded);
       };
     } catch (err) {
       console.error('Error initializing video call:', err);
@@ -434,18 +450,18 @@ export function useVideoCall(sessionId) {
     if (!sessionId) return;
 
     try {
-      // Leave the call
-      videoWebSocketService.leaveCall(sessionId);
+      // Leave the call (but don't end it for others)
+      videoWebSocketService.leaveCall(sessionId, false); // false = don't end call
 
       // Cleanup WebRTC
       webRTCService.cleanup();
 
-      // Reset state
+      // Reset local state but keep call active for others
       setIsInCall(false);
       setLocalStream(null);
       setRemoteStreams(new Map());
       setParticipants([]);
-      setHasActiveCall(false); // Reset active call state
+      // DON'T reset hasActiveCall - call might still be active for others
       
       console.log('📹 Left video call');
     } catch (error) {
