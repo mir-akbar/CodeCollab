@@ -199,7 +199,8 @@ class RoomManager {
       
       // Relay the message to other clients with error handling
       clients.forEach(client => {
-        if (client !== ws && client.readyState === client.OPEN) {
+        // Skip the sender and video signaling clients (they shouldn't receive Y.js binary messages)
+        if (client !== ws && client.readyState === client.OPEN && !client.isVideoSignalingClient) {
           try {
             client.send(message);
             broadcastCount++;

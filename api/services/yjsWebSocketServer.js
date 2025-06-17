@@ -91,6 +91,9 @@ class YjsWebSocketServer {
           docName = sessionIdPart; // For video, docName = sessionId
           console.log(`🎥 [WEBSOCKET-CONNECT] Video signaling for session: ${sessionIdPart}`);
         }
+        
+        // Mark this as a video signaling client
+        ws.isVideoSignalingClient = true;
       }
       
       // If no room name found, try extracting from query parameters

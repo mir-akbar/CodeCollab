@@ -1,5 +1,6 @@
 import { Bell } from 'lucide-react';
 import ChatPanel from './ChatPanel';
+import VideoCallPanel from './video/VideoCallPanel';
 import PropTypes from 'prop-types';
 import { useUIStore } from '@/stores';
 
@@ -50,30 +51,10 @@ function CollaborationContent({ activeTab, sessionId }) {
     case 'chat':
       return <ChatPanel sessionId={sessionId} />;
     case 'video':
-      return <VideoPlaceholder />;
+      return <VideoCallPanel sessionId={sessionId} />;
     default:
       return null;
   }
-}
-
-function VideoPlaceholder() {
-  return (
-    <div className="flex-1 flex items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <div className="w-16 h-16 mx-auto bg-[#333] rounded-full flex items-center justify-center">
-          <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
-          </svg>
-        </div>
-        <div>
-          <h3 className="text-lg font-medium text-gray-300 mb-2">Video Chat Coming Soon</h3>
-          <p className="text-gray-500 text-sm max-w-md">
-            Video calling functionality will be implemented here. Stay tuned for real-time video collaboration!
-          </p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // PropTypes for components

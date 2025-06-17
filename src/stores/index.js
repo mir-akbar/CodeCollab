@@ -14,3 +14,4 @@ export { default as useChatStore } from './chatStore';
 export { useCollaborationStore } from './collaborationStore';
 export { useNotificationStore } from './notificationStore';
 export { useFileOperationsStore } from './fileOperationsStore';
+export { default as useVideoStore } from './videoStore';

@@ -18,6 +18,9 @@ class VideoSignalingManager {
    */
   isVideoSignalingMessage(type) {
     const videoMessageTypes = [
+      // User management
+      'user-info',
+      
       // Core WebRTC signaling
       'offer',
       'answer', 
@@ -38,13 +41,19 @@ class VideoSignalingManager {
     
     console.log(`🎥 [VIDEO-SIGNALING] Handling ${type} from ${ws.userEmail || 'unknown'} in session ${data.sessionId || 'unknown'}`);
     
-    // Validate required fields
+    // Handle user-info message first (doesn't require existing user info)
+    if (type === 'user-info') {
+      this.handleUserInfo(ws, data);
+      return;
+    }
+    
+    // Validate required fields for other message types
     if (!data.sessionId) {
       console.warn(`⚠️ Missing sessionId in video signaling message type: ${type}`);
       return;
     }
     
-    // Ensure user info is available
+    // Ensure user info is available for other message types
     if (!ws.userId || !ws.userEmail) {
       console.warn(`⚠️ Missing user info for video signaling from ${ws.clientIP}`);
       return;
@@ -69,6 +78,25 @@ class VideoSignalingManager {
       default:
         console.warn(`⚠️ Unknown video signaling message type: ${type}`);
     }
+  }
+
+  /**
+   * Handle user info message - set user information on WebSocket connection
+   */
+  handleUserInfo(ws, data) {
+    const { userId, userEmail, sessionId } = data;
+    
+    if (!userId || !userEmail) {
+      console.warn(`⚠️ Invalid user-info message: missing userId or userEmail`);
+      return;
+    }
+    
+    // Set user information on the WebSocket connection
+    ws.userId = userId;
+    ws.userEmail = userEmail;
+    ws.sessionId = sessionId; // Update sessionId if provided
+    
+    console.log(`🎥 [VIDEO-SIGNALING] User info set: ${userEmail} (${userId}) in session ${sessionId}`);
   }
 
   /**
