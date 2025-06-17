@@ -63,6 +63,17 @@ class RoomManager {
   }
 
   /**
+   * Get connection count for a room
+   */
+  getConnectionCount(room) {
+    const clients = this.rooms.get(room);
+    if (!clients) return 0;
+    
+    // Count only open connections
+    return Array.from(clients).filter(ws => ws.readyState === ws.OPEN).length;
+  }
+
+  /**
    * Get all clients in a room
    */
   getRoomClients(room) {
