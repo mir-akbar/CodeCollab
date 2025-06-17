@@ -51,12 +51,12 @@ export class YjsConnectionManager {
   async _createNewConnection(sessionId, filePath, user) {
     // Create room name and WebSocket URL
     const roomName = `${sessionId}/${filePath.replace(/[/\\:]/g, '-')}`;
-    // Temporarily hardcode the WebSocket URL to debug connection issues
-    const wsUrl = 'ws://localhost:3001/yjs-websocket';
+    // Use the proper WebSocket URL from environment configuration
+    const wsUrl = `${WEB_SOCKET_API_URL}/yjs-websocket`;
     
     console.log('🔍 Debug WebSocket connection:');
     console.log('  - WEB_SOCKET_API_URL:', WEB_SOCKET_API_URL);
-    console.log('  - wsUrl (hardcoded):', wsUrl);
+    console.log('  - wsUrl (constructed):', wsUrl);
     console.log('  - roomName:', roomName);
     console.log('  - sessionId:', sessionId);
     console.log('  - filePath:', filePath);
