@@ -16,8 +16,15 @@ function LocalVideo({ stream, mediaState, onToggleVideo, onToggleAudio, height =
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      console.log(`📺 [LOCAL-VIDEO] Set local stream to video element - Stream ID: ${stream.id}`);
     }
   }, [stream]);
+
+  // Log media state changes
+  useEffect(() => {
+    console.log(`📺 [LOCAL-VIDEO] Media state changed - Video: ${mediaState.hasVideo}, Audio: ${mediaState.hasAudio}`);
+  }, [mediaState]);
+
   // Adjust icon size based on video height
   const getIconSize = (height) => {
     if (height.includes('h-56') || height.includes('h-64')) return 'h-12 w-12';
@@ -196,7 +203,7 @@ function VideoGrid({ localStream, remoteStreams, participants, mediaState, onTog
   );
 }
 
-function CallControls({ isInCall, isConnected, isLoading, onStartCall, onJoinCall, onLeaveCall, participantCount }) {
+function CallControls({ isInCall, isConnected, isLoading, onStartCall, onJoinCall, onLeaveCall, participantCount, hasActiveCall, canJoinCall }) {
   if (!isConnected) {
     return (
       <div className="text-center text-gray-400 text-sm">
@@ -207,19 +214,28 @@ function CallControls({ isInCall, isConnected, isLoading, onStartCall, onJoinCal
 
   if (!isInCall) {
     return (
-      <div className="space-y-3">
-        <Button
-          onClick={onStartCall}
-          disabled={isLoading}
-          className="w-full bg-green-600 hover:bg-green-700"
-        >
-          <PhoneCall className="h-4 w-4 mr-2" />
-          {isLoading ? 'Starting...' : 'Start Video Call'}
-        </Button>
-        
-        {participantCount > 0 && (
+      <div className="space-y-3">        {/* Show Start Call button only if there's no active call */}
+        {!hasActiveCall && (
           <Button
-            onClick={onJoinCall}
+            onClick={() => {
+              console.log(`🎬 [UI] User clicked Start Call button - hasActiveCall: ${hasActiveCall}, isInCall: ${isInCall}, isConnected: ${isConnected}`);
+              onStartCall();
+            }}
+            disabled={isLoading}
+            className="w-full bg-green-600 hover:bg-green-700"
+          >
+            <PhoneCall className="h-4 w-4 mr-2" />
+            {isLoading ? 'Starting...' : 'Start Video Call'}
+          </Button>
+        )}
+        
+        {/* Show Join Call button if there's an active call we can join */}
+        {canJoinCall && (
+          <Button
+            onClick={() => {
+              console.log(`🚪 [UI] User clicked Join Call button - hasActiveCall: ${hasActiveCall}, canJoinCall: ${canJoinCall}, participantCount: ${participantCount}`);
+              onJoinCall();
+            }}
             disabled={isLoading}
             variant="outline"
             className="w-full"
@@ -227,6 +243,16 @@ function CallControls({ isInCall, isConnected, isLoading, onStartCall, onJoinCal
             <Users className="h-4 w-4 mr-2" />
             {isLoading ? 'Joining...' : `Join Call (${participantCount} users)`}
           </Button>
+        )}
+        
+        {/* Show info if there's an active call but we can't join yet */}
+        {hasActiveCall && !canJoinCall && (
+          <div className="text-center text-blue-400 text-sm p-3 bg-blue-500/20 rounded-lg">
+            <p>Video call is active</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Setting up connection...
+            </p>
+          </div>
         )}
       </div>
     );
@@ -275,6 +301,9 @@ export default function VideoPanel() {
   // Get session ID from URL
   const searchParams = new URLSearchParams(location.search);
   const sessionId = searchParams.get("session");
+  
+  console.log(`📺 [VIDEO-PANEL] Rendering VideoPanel - sessionId: ${sessionId}, userEmail: ${userEmail}`);
+
   // Use video call hook
   const {
     isInCall,
@@ -285,6 +314,8 @@ export default function VideoPanel() {
     localStream,
     remoteStreams,
     mediaState,
+    hasActiveCall,
+    canJoinCall,
     startCall,
     joinCall,
     leaveCall,
@@ -295,49 +326,64 @@ export default function VideoPanel() {
     getDebugInfo
   } = useVideoCall(sessionId);
 
+  // Log key state changes
+  useEffect(() => {
+    console.log(`📺 [VIDEO-PANEL] State changed - isInCall: ${isInCall}, hasActiveCall: ${hasActiveCall}, canJoinCall: ${canJoinCall}, isConnected: ${isConnected}, participantCount: ${participantCount}`);
+  }, [isInCall, hasActiveCall, canJoinCall, isConnected, participantCount]);
+
   // Handle call actions with error handling
   const handleStartCall = async () => {
+    console.log(`🎬 [VIDEO-PANEL] handleStartCall triggered`);
     try {
       await startCall();
       toast.success("Video call started!");
+      console.log(`✅ [VIDEO-PANEL] Start call completed successfully`);
     } catch (error) {
-      console.error('Error starting call:', error);
+      console.error(`❌ [VIDEO-PANEL] Start call failed:`, error);
       toast.error(error.message || "Failed to start video call");
     }
   };
 
   const handleJoinCall = async () => {
+    console.log(`🎬 [VIDEO-PANEL] handleJoinCall triggered`);
     try {
       await joinCall();
       toast.success("Joined video call!");
+      console.log(`✅ [VIDEO-PANEL] Join call completed successfully`);
     } catch (error) {
-      console.error('Error joining call:', error);
+      console.error(`❌ [VIDEO-PANEL] Join call failed:`, error);
       toast.error(error.message || "Failed to join video call");
     }
   };
 
   const handleLeaveCall = () => {
+    console.log(`📞 [VIDEO-PANEL] handleLeaveCall triggered`);
     try {
       leaveCall();
       toast.info("Left video call");
+      console.log(`✅ [VIDEO-PANEL] Leave call completed successfully`);
     } catch (error) {
-      console.error('Error leaving call:', error);
+      console.error(`❌ [VIDEO-PANEL] Leave call failed:`, error);
       toast.error("Failed to leave call properly");
     }
   };
   const handleToggleVideo = async () => {
+    console.log(`📹 [VIDEO-PANEL] handleToggleVideo triggered`);
     try {
       const newState = await toggleVideo();
       toast.info(newState ? "Camera turned on" : "Camera turned off");
+      console.log(`✅ [VIDEO-PANEL] Toggle video completed successfully - New State: ${newState}`);
     } catch (error) {
-      console.error('Error toggling video:', error);
+      console.error(`❌ [VIDEO-PANEL] Toggle video failed:`, error);
       toast.error("Failed to toggle camera");
     }
   };
 
   const handleToggleAudio = () => {
+    console.log(`🎤 [VIDEO-PANEL] handleToggleAudio triggered`);
     const newState = toggleAudio();
     toast.info(newState ? "Microphone unmuted" : "Microphone muted");
+    console.log(`✅ [VIDEO-PANEL] Toggle audio completed successfully - New State: ${newState}`);
   };
   // Clear error on mount
   useEffect(() => {
@@ -459,8 +505,7 @@ export default function VideoPanel() {
           )}
         </div>
 
-        {/* Controls - always at bottom of content area */}
-        <div className="p-3 border-t border-[#444]">
+        {/* Controls - always at bottom of content area */}        <div className="p-3 border-t border-[#444]">
           <CallControls
             isInCall={isInCall}
             isConnected={isConnected}
@@ -469,6 +514,8 @@ export default function VideoPanel() {
             onJoinCall={handleJoinCall}
             onLeaveCall={handleLeaveCall}
             participantCount={participantCount}
+            hasActiveCall={hasActiveCall}
+            canJoinCall={canJoinCall}
           />
         </div>
       </div>      {/* Settings panel (if shown) */}
@@ -586,5 +633,7 @@ CallControls.propTypes = {
   onStartCall: PropTypes.func.isRequired,
   onJoinCall: PropTypes.func.isRequired,
   onLeaveCall: PropTypes.func.isRequired,
-  participantCount: PropTypes.number.isRequired
+  participantCount: PropTypes.number.isRequired,
+  hasActiveCall: PropTypes.bool.isRequired,
+  canJoinCall: PropTypes.bool.isRequired
 };

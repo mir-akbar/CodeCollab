@@ -195,7 +195,10 @@ class WebRTCService {
    * Create peer connection for a user
    */
   createPeerConnection(userId, onIceCandidate, onRemoteStream) {
+    console.log(`🔗 [PEER-CONNECTION] Creating peer connection for user: ${userId}`);
+    
     if (this.peerConnections.has(userId)) {
+      console.log(`🔗 [PEER-CONNECTION] Closing existing connection for user: ${userId}`);
       this.closePeerConnection(userId);
     }
 
@@ -204,36 +207,54 @@ class WebRTCService {
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('📡 ICE candidate generated for:', userId);
+        console.log(`📡 [PEER-CONNECTION] ICE candidate generated for: ${userId}`);
+        console.log(`📡 [PEER-CONNECTION] Candidate type: ${event.candidate.candidate.split(' ')[7] || 'unknown'}`);
         onIceCandidate(userId, event.candidate);
+      } else {
+        console.log(`📡 [PEER-CONNECTION] ICE gathering complete for: ${userId}`);
       }
     };
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
-      console.log('📹 Remote stream received from:', userId);
+      console.log(`📹 [PEER-CONNECTION] Remote stream received from: ${userId}`);
       const remoteStream = event.streams[0];
+      console.log(`📹 [PEER-CONNECTION] Remote stream details - ID: ${remoteStream.id}, Video tracks: ${remoteStream.getVideoTracks().length}, Audio tracks: ${remoteStream.getAudioTracks().length}`);
       onRemoteStream(userId, remoteStream);
     };
 
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
-      console.log(`🔗 Connection state with ${userId}:`, peerConnection.connectionState);
+      console.log(`🔗 [PEER-CONNECTION] Connection state with ${userId}: ${peerConnection.connectionState}`);
       
-      if (peerConnection.connectionState === 'failed') {
-        console.warn('Connection failed, attempting to restart ICE');
+      if (peerConnection.connectionState === 'connected') {
+        console.log(`✅ [PEER-CONNECTION] Successfully connected to ${userId}`);
+      } else if (peerConnection.connectionState === 'disconnected') {
+        console.log(`⚠️ [PEER-CONNECTION] Disconnected from ${userId}`);
+      } else if (peerConnection.connectionState === 'failed') {
+        console.warn(`❌ [PEER-CONNECTION] Connection failed with ${userId}, attempting to restart ICE`);
         peerConnection.restartIce();
       }
     };
 
+    // Handle ICE connection state changes
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log(`🧊 [PEER-CONNECTION] ICE connection state with ${userId}: ${peerConnection.iceConnectionState}`);
+    };
+
     // Add local stream if available
     if (this.localStream) {
+      console.log(`🔗 [PEER-CONNECTION] Adding local stream tracks to connection for ${userId}`);
       this.localStream.getTracks().forEach(track => {
+        console.log(`🔗 [PEER-CONNECTION] Adding ${track.kind} track to ${userId}`);
         peerConnection.addTrack(track, this.localStream);
       });
+    } else {
+      console.log(`⚠️ [PEER-CONNECTION] No local stream available when creating connection for ${userId}`);
     }
 
     this.peerConnections.set(userId, peerConnection);
+    console.log(`✅ [PEER-CONNECTION] Successfully created peer connection for ${userId}`);
     return peerConnection;
   }
 

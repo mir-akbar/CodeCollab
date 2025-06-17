@@ -3,8 +3,8 @@
  * Tests that video call functionality has been properly extracted
  */
 
-const VideoCallManager = require('../managers/VideoCallManager');
-const RoomManagerInterface = require('../managers/RoomManagerInterface');
+const VideoCallManager = require('../../../services/websocket/managers/VideoCallManager');
+const RoomManagerInterface = require('../../../services/websocket/managers/RoomManagerInterface');
 
 describe('Video Call Manager Phase 1 Integration', () => {
   let mockServer;
@@ -156,6 +156,54 @@ describe('Video Call Manager Phase 1 Integration', () => {
       expect(stats.calls[0]).toHaveProperty('sessionId');
       expect(stats.calls[0]).toHaveProperty('participantCount');
       expect(stats.calls[0]).toHaveProperty('startedAt');
+    });
+  });
+
+  describe('Call Status Broadcasting', () => {
+    test('should send call status to a newly connected user when there is an active call', () => {
+      // Start a call
+      videoCallManager.handleVideoMessage(mockWs, { type: 'video-call-start', sessionId: 'session123' });
+      
+      // A new user connects and requests call status
+      const newUser = {
+        userId: 'newUser456',
+        userEmail: 'newuser@example.com',
+        userName: 'New User',
+        docName: 'video-session123',
+        readyState: 1
+      };
+      
+      videoCallManager.sendCallStatusToUser(newUser, 'session123');
+      
+      expect(mockServer.sendToUser).toHaveBeenCalledWith(
+        'session123',
+        'newUser456',
+        expect.objectContaining({
+          type: 'video-call-status',
+          sessionId: 'session123',
+          hasActiveCall: true,
+          participantCount: 1,
+          initiator: expect.objectContaining({
+            userId: 'user123',
+            email: 'test@example.com'
+          })
+        })
+      );
+    });
+
+    test('should not send call status when there is no active call', () => {
+      const newUser = {
+        userId: 'newUser456',
+        userEmail: 'newuser@example.com',
+        userName: 'New User',
+        docName: 'video-session123',
+        readyState: 1
+      };
+      
+      // No active call, so sendCallStatusToUser should not send anything
+      videoCallManager.sendCallStatusToUser(newUser, 'session123');
+      
+      expect(mockServer.sendToUser).not.toHaveBeenCalled();
     });
   });
 });

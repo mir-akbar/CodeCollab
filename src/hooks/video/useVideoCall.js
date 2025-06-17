@@ -20,6 +20,7 @@ export function useVideoCall(sessionId) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [mediaState, setMediaState] = useState({ hasVideo: true, hasAudio: true });
+  const [hasActiveCall, setHasActiveCall] = useState(false); // Track if there's an active call in session
 
   // Refs
   const connectionRef = useRef(null);
@@ -153,50 +154,134 @@ export function useVideoCall(sessionId) {
       };
 
       const handleCallStarted = (data) => {
-        console.log('📹 Call started by:', data.initiator.email);
+        console.log(`📹 [CALL-STARTED] Call started by: ${data.initiator.email} (${data.initiator.userId})`);
+        console.log(`📹 [CALL-STARTED] Event data:`, data);
+        
+        setHasActiveCall(true); // Mark that there's an active call in the session
+        console.log(`📹 [CALL-STARTED] Set hasActiveCall to true`);
+        
         if (data.initiator.email !== userEmail) {
           // Someone else started the call, show join option
+          console.log(`📹 [CALL-STARTED] User ${userEmail} can join call started by ${data.initiator.email}`);
           setError(null);
+        } else {
+          // We started the call
+          console.log(`📹 [CALL-STARTED] User ${userEmail} is the call initiator, setting isInCall to true`);
+          setIsInCall(true);
         }
       };
 
       const handleUserJoined = (data) => {
-        console.log('📹 User joined call:', data.user.email);
+        console.log(`📹 [USER-JOINED] User joined call: ${data.user.email} (${data.user.userId})`);
+        console.log(`📹 [USER-JOINED] Current user: ${userEmail}, Participant count: ${data.participantCount}`);
+        console.log(`📹 [USER-JOINED] Event data:`, data);
+        
         if (data.user.email !== userEmail) {
+          console.log(`📹 [USER-JOINED] Handling remote user join for ${data.user.email}`);
           handleRemoteUserJoined(data.user);
+        } else {
+          console.log(`📹 [USER-JOINED] Ignoring own join event`);
         }
       };
 
       const handleUserLeft = (data) => {
-        console.log('📹 User left call:', data.user.email);
+        console.log(`📹 [USER-LEFT] User left call: ${data.user.email} (${data.user.userId})`);
+        console.log(`📹 [USER-LEFT] Current user: ${userEmail}, Remaining count: ${data.participantCount}`);
+        console.log(`📹 [USER-LEFT] Event data:`, data);
+        
         if (data.user.email !== userEmail) {
+          console.log(`📹 [USER-LEFT] Handling remote user leave for ${data.user.email}`);
           handleRemoteUserLeft(data.user);
+        } else {
+          console.log(`📹 [USER-LEFT] Ignoring own leave event`);
         }
       };
 
       const handleVideoOffer = async (data) => {
-        console.log('📹 Received offer from:', data.from.email);
-        await handleRemoteOffer(data.from, data.offer);
+        console.log(`🤝 [OFFER-RECEIVED] Received offer from: ${data.from.email} (${data.from.userId})`);
+        console.log(`🤝 [OFFER-RECEIVED] Offer type: ${data.offer?.type}, SDP length: ${data.offer?.sdp?.length || 0}`);
+        
+        try {
+          await handleRemoteOffer(data.from, data.offer);
+          console.log(`✅ [OFFER-RECEIVED] Successfully processed offer from ${data.from.email}`);
+        } catch (error) {
+          console.error(`❌ [OFFER-RECEIVED] Error processing offer from ${data.from.email}:`, error);
+        }
       };
 
       const handleVideoAnswer = async (data) => {
-        console.log('📹 Received answer from:', data.from.email);
-        await handleRemoteAnswer(data.from, data.answer);
+        console.log(`🤝 [ANSWER-RECEIVED] Received answer from: ${data.from.email} (${data.from.userId})`);
+        console.log(`🤝 [ANSWER-RECEIVED] Answer type: ${data.answer?.type}, SDP length: ${data.answer?.sdp?.length || 0}`);
+        
+        try {
+          await handleRemoteAnswer(data.from, data.answer);
+          console.log(`✅ [ANSWER-RECEIVED] Successfully processed answer from ${data.from.email}`);
+        } catch (error) {
+          console.error(`❌ [ANSWER-RECEIVED] Error processing answer from ${data.from.email}:`, error);
+        }
       };
 
       const handleIceCandidate = async (data) => {
-        console.log('📹 Received ICE candidate from:', data.from.email);
-        await handleRemoteIceCandidate(data.from, data.candidate);
+        console.log(`🧊 [ICE-RECEIVED] Received ICE candidate from: ${data.from.email} (${data.from.userId})`);
+        console.log(`🧊 [ICE-RECEIVED] Candidate type: ${data.candidate?.candidate?.split(' ')[7] || 'unknown'}, component: ${data.candidate?.component || 'unknown'}`);
+        
+        try {
+          await handleRemoteIceCandidate(data.from, data.candidate);
+          console.log(`✅ [ICE-RECEIVED] Successfully processed ICE candidate from ${data.from.email}`);
+        } catch (error) {
+          console.error(`❌ [ICE-RECEIVED] Error processing ICE candidate from ${data.from.email}:`, error);
+        }
       };
 
       const handleMediaStateChanged = (data) => {
-        console.log('📹 Media state changed:', data.user.email, data);
+        console.log(`🎤 [MEDIA-CHANGED] Media state changed: ${data.user.email} (${data.user.userId})`);
+        console.log(`🎤 [MEDIA-CHANGED] New state - Video: ${data.hasVideo}, Audio: ${data.hasAudio}`);
+        console.log(`🎤 [MEDIA-CHANGED] Event data:`, data);
+        
         updateParticipantMediaState(data.user, { hasVideo: data.hasVideo, hasAudio: data.hasAudio });
+        console.log(`✅ [MEDIA-CHANGED] Updated participant media state for ${data.user.email}`);
+      };
+
+      const handleCallStatus = (data) => {
+        console.log(`� [CALL-STATUS] Received call status event:`, data);
+        console.log(`📊 [CALL-STATUS] Current user: ${userEmail}, Has active call: ${data.hasActiveCall}, Initiator: ${data.initiator?.email}`);
+        
+        if (data.hasActiveCall && data.initiator?.email !== userEmail) {
+          console.log(`📊 [CALL-STATUS] Setting hasActiveCall to true - can join existing call with ${data.participantCount} participants`);
+          setHasActiveCall(true);
+          
+          // Set participant count based on existing call
+          if (data.participantCount > 0) {
+            console.log(`📊 [CALL-STATUS] Creating placeholder participants for ${data.participantCount} existing users`);
+            setParticipants(() => {
+              // Create a placeholder for existing participants if we don't have them yet
+              const participantList = [];
+              for (let i = 0; i < data.participantCount; i++) {
+                participantList.push({
+                  userId: `participant-${i}`,
+                  email: i === 0 ? data.initiator.email : `user-${i}@unknown.com`,
+                  name: i === 0 ? data.initiator.name : `User ${i}`,
+                  hasVideo: true,
+                  hasAudio: true
+                });
+              }
+              console.log(`📊 [CALL-STATUS] Created participant list:`, participantList);
+              return participantList;
+            });
+          }
+        } else if (data.hasActiveCall && data.initiator?.email === userEmail) {
+          console.log(`📊 [CALL-STATUS] User ${userEmail} is the call initiator - setting isInCall and hasActiveCall to true`);
+          setHasActiveCall(true);
+          setIsInCall(true);
+        } else {
+          console.log(`📊 [CALL-STATUS] No active call or user is not in call - hasActiveCall: ${data.hasActiveCall}`);
+        }
       };
 
       // Subscribe to video events
       videoWebSocketService.on(sessionId, 'connected', handleConnection);
       videoWebSocketService.on(sessionId, 'video-call-started', handleCallStarted);
+      videoWebSocketService.on(sessionId, 'video-call-status', handleCallStatus);
       videoWebSocketService.on(sessionId, 'video-call-user-joined', handleUserJoined);
       videoWebSocketService.on(sessionId, 'video-call-user-left', handleUserLeft);
       videoWebSocketService.on(sessionId, 'video-offer', handleVideoOffer);
@@ -213,6 +298,7 @@ export function useVideoCall(sessionId) {
         console.log('🧹 Cleaning up video call connection');
         videoWebSocketService.off(sessionId, 'connected', handleConnection);
         videoWebSocketService.off(sessionId, 'video-call-started', handleCallStarted);
+        videoWebSocketService.off(sessionId, 'video-call-status', handleCallStatus);
         videoWebSocketService.off(sessionId, 'video-call-user-joined', handleUserJoined);
         videoWebSocketService.off(sessionId, 'video-call-user-left', handleUserLeft);
         videoWebSocketService.off(sessionId, 'video-offer', handleVideoOffer);
@@ -231,34 +317,42 @@ export function useVideoCall(sessionId) {
 
   // Start video call
   const startCall = useCallback(async () => {
+    console.log(`🎬 [START-CALL] Starting call in session ${sessionId} for user ${userEmail}`);
+    console.log(`🎬 [START-CALL] Prerequisites - sessionId: ${!!sessionId}, userEmail: ${!!userEmail}, isConnected: ${isConnected}`);
+    
     if (!sessionId || !userEmail || !isConnected) {
-      throw new Error('Video connection not ready');
+      const error = 'Video connection not ready';
+      console.log(`❌ [START-CALL] ${error}`);
+      throw new Error(error);
     }
 
     try {
       setIsLoading(true);
       setError(null);
       
-      console.log('🎬 Starting video call - requesting media permissions...');
+      console.log(`🎬 [START-CALL] Requesting media permissions...`);
       
       // Check current permissions status
       const permissions = await webRTCService.checkPermissions();
-      console.log('📋 Current permissions:', permissions);
+      console.log(`📋 [START-CALL] Current permissions:`, permissions);
       
       // Initialize local media with permission handling
+      console.log(`🎬 [START-CALL] Initializing media with state:`, mediaState);
       const stream = await webRTCService.initializeMedia(mediaState);
       setLocalStream(stream);
+      console.log(`🎬 [START-CALL] Media initialized successfully, stream ID: ${stream.id}`);
 
       // Start the call
+      console.log(`🎬 [START-CALL] Sending start call signal to server`);
       videoWebSocketService.startCall(sessionId, {
         email: userEmail,
         name: user?.name || userEmail.split('@')[0]
       });
 
       setIsInCall(true);
-      console.log('📹 Started video call successfully');
+      console.log(`✅ [START-CALL] Successfully started video call - isInCall set to true`);
     } catch (error) {
-      console.error('Error starting call:', error);
+      console.error(`❌ [START-CALL] Error starting call:`, error);
       setError(error.message || 'Failed to start video call');
       throw error;
     } finally {
@@ -268,40 +362,49 @@ export function useVideoCall(sessionId) {
 
   // Join existing call
   const joinCall = useCallback(async () => {
+    console.log(`🚪 [JOIN-CALL] Joining call in session ${sessionId} for user ${userEmail}`);
+    console.log(`🚪 [JOIN-CALL] Prerequisites - sessionId: ${!!sessionId}, userEmail: ${!!userEmail}, isConnected: ${isConnected}`);
+    console.log(`🚪 [JOIN-CALL] Current state - hasActiveCall: ${hasActiveCall}, isInCall: ${isInCall}`);
+    
     if (!sessionId || !userEmail || !isConnected) {
-      throw new Error('Video connection not ready');
+      const error = 'Video connection not ready';
+      console.log(`❌ [JOIN-CALL] ${error}`);
+      throw new Error(error);
     }
 
     try {
       setIsLoading(true);
       setError(null);
 
-      console.log('🚪 Joining video call - requesting media permissions...');
+      console.log(`🚪 [JOIN-CALL] Requesting media permissions...`);
       
       // Check current permissions status
       const permissions = await webRTCService.checkPermissions();
-      console.log('📋 Current permissions:', permissions);
+      console.log(`📋 [JOIN-CALL] Current permissions:`, permissions);
 
       // Initialize local media with permission handling
+      console.log(`🚪 [JOIN-CALL] Initializing media with state:`, mediaState);
       const stream = await webRTCService.initializeMedia(mediaState);
       setLocalStream(stream);
+      console.log(`🚪 [JOIN-CALL] Media initialized successfully, stream ID: ${stream.id}`);
 
       // Join the call
+      console.log(`🚪 [JOIN-CALL] Sending join call signal to server`);
       videoWebSocketService.joinCall(sessionId, {
         email: userEmail,
         name: user?.name || userEmail.split('@')[0]
       });
 
       setIsInCall(true);
-      console.log('📹 Joined video call successfully');
+      console.log(`✅ [JOIN-CALL] Successfully joined video call - isInCall set to true`);
     } catch (error) {
-      console.error('Error joining call:', error);
+      console.error(`❌ [JOIN-CALL] Error joining call:`, error);
       setError(error.message || 'Failed to join video call');
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, userEmail, user, isConnected, mediaState]);
+  }, [sessionId, userEmail, user, isConnected, mediaState, hasActiveCall, isInCall]);
 
   // Check media permissions without requesting access
   const checkMediaPermissions = useCallback(async () => {
@@ -342,6 +445,7 @@ export function useVideoCall(sessionId) {
       setLocalStream(null);
       setRemoteStreams(new Map());
       setParticipants([]);
+      setHasActiveCall(false); // Reset active call state
       
       console.log('📹 Left video call');
     } catch (error) {
@@ -451,6 +555,7 @@ export function useVideoCall(sessionId) {
     localStream,
     remoteStreams,
     mediaState,
+    hasActiveCall,
     
     // Actions
     startCall,
@@ -464,7 +569,7 @@ export function useVideoCall(sessionId) {
     
     // Computed
     participantCount: participants.length,
-    hasActiveCall: isInCall && participants.length > 0
+    canJoinCall: hasActiveCall && !isInCall // Can join if there's an active call but we're not in it
   };
 }
 

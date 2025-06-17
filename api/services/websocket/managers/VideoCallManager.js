@@ -69,7 +69,8 @@ class VideoCallManager {
    */
   handleVideoCallStart(ws, data) {
     const { sessionId } = data;
-    console.log(`📹 Video call started in session: ${sessionId} by ${ws.userEmail}`);
+    console.log(`🎬 [VIDEO-CALL] Call started in session: ${sessionId} by ${ws.userEmail}`);
+    console.log(`🎬 [VIDEO-CALL] User details: userId=${ws.userId}, name=${ws.userName}`);
     
     // Track the active video call
     this.activeVideoCalls.set(sessionId, {
@@ -84,6 +85,9 @@ class VideoCallManager {
     
     this.callParticipants.set(sessionId, new Set([ws.userId]));
     
+    console.log(`🎬 [VIDEO-CALL] Active calls after start: ${this.activeVideoCalls.size}`);
+    console.log(`🎬 [VIDEO-CALL] Participants in ${sessionId}: ${this.callParticipants.get(sessionId)?.size || 0}`);
+    
     this.roomManager.broadcastToRoom(sessionId, {
       type: 'video-call-started',
       sessionId,
@@ -94,6 +98,8 @@ class VideoCallManager {
       },
       timestamp: new Date().toISOString()
     }, ws);
+    
+    console.log(`🎬 [VIDEO-CALL] Broadcasted call-started event to room: ${sessionId}`);
   }
 
   /**
@@ -101,19 +107,37 @@ class VideoCallManager {
    */
   handleVideoCallJoin(ws, data) {
     const { sessionId } = data;
-    console.log(`📹 User ${ws.userEmail} joining video call in session: ${sessionId}`);
+    console.log(`� [VIDEO-CALL-JOIN] User ${ws.userEmail} (${ws.userId}) joining call in session: ${sessionId}`);
+    
+    // Check if there's an active call to join
+    if (!this.hasActiveCall(sessionId)) {
+      console.log(`❌ [VIDEO-CALL-JOIN] No active call in session ${sessionId} for ${ws.userEmail} to join`);
+      this.roomManager.sendToUser(sessionId, ws.userId, {
+        type: 'video-call-error',
+        sessionId,
+        error: 'No active call to join',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
     
     // Add participant to call tracking
     if (this.callParticipants.has(sessionId)) {
       this.callParticipants.get(sessionId).add(ws.userId);
+      console.log(`🚪 [VIDEO-CALL-JOIN] Added ${ws.userEmail} to existing participant list. New count: ${this.callParticipants.get(sessionId).size}`);
     } else {
       this.callParticipants.set(sessionId, new Set([ws.userId]));
+      console.log(`🚪 [VIDEO-CALL-JOIN] Created new participant list for ${sessionId} with ${ws.userEmail}`);
     }
     
     // Update active call info
     if (this.activeVideoCalls.has(sessionId)) {
       this.activeVideoCalls.get(sessionId).participants.add(ws.userId);
+      console.log(`🚪 [VIDEO-CALL-JOIN] Updated active call participants for ${sessionId}`);
     }
+    
+    const participantCount = this.callParticipants.get(sessionId)?.size || 1;
+    console.log(`🚪 [VIDEO-CALL-JOIN] Broadcasting user-joined event to room ${sessionId}, participant count: ${participantCount}`);
     
     this.roomManager.broadcastToRoom(sessionId, {
       type: 'video-call-user-joined',
@@ -123,9 +147,11 @@ class VideoCallManager {
         email: ws.userEmail,
         name: ws.userName
       },
-      participantCount: this.callParticipants.get(sessionId)?.size || 1,
+      participantCount,
       timestamp: new Date().toISOString()
     }, ws);
+    
+    console.log(`✅ [VIDEO-CALL-JOIN] Successfully processed join for ${ws.userEmail} in session ${sessionId}`);
   }
 
   /**
@@ -133,24 +159,32 @@ class VideoCallManager {
    */
   handleVideoCallLeave(ws, data) {
     const { sessionId } = data;
-    console.log(`📹 User ${ws.userEmail} leaving video call in session: ${sessionId}`);
+    console.log(`� [VIDEO-CALL-LEAVE] User ${ws.userEmail} (${ws.userId}) leaving call in session: ${sessionId}`);
     
     // Remove participant from call tracking
     if (this.callParticipants.has(sessionId)) {
+      const hadParticipant = this.callParticipants.get(sessionId).has(ws.userId);
       this.callParticipants.get(sessionId).delete(ws.userId);
+      console.log(`🚪 [VIDEO-CALL-LEAVE] Removed ${ws.userEmail} from participants (was present: ${hadParticipant}). Remaining: ${this.callParticipants.get(sessionId).size}`);
       
       // Clean up empty calls
       if (this.callParticipants.get(sessionId).size === 0) {
         this.callParticipants.delete(sessionId);
         this.activeVideoCalls.delete(sessionId);
-        console.log(`📹 Video call ended in session: ${sessionId} (no participants left)`);
+        console.log(`� [VIDEO-CALL-LEAVE] Call ended in session: ${sessionId} (no participants left)`);
       }
+    } else {
+      console.log(`⚠️ [VIDEO-CALL-LEAVE] No participant list found for session ${sessionId}`);
     }
     
     // Update active call info
     if (this.activeVideoCalls.has(sessionId)) {
       this.activeVideoCalls.get(sessionId).participants.delete(ws.userId);
+      console.log(`🚪 [VIDEO-CALL-LEAVE] Updated active call participants for ${sessionId}`);
     }
+    
+    const remainingCount = this.callParticipants.get(sessionId)?.size || 0;
+    console.log(`🚪 [VIDEO-CALL-LEAVE] Broadcasting user-left event to room ${sessionId}, remaining count: ${remainingCount}`);
     
     this.roomManager.broadcastToRoom(sessionId, {
       type: 'video-call-user-left',
@@ -160,9 +194,11 @@ class VideoCallManager {
         email: ws.userEmail,
         name: ws.userName
       },
-      participantCount: this.callParticipants.get(sessionId)?.size || 0,
+      participantCount: remainingCount,
       timestamp: new Date().toISOString()
     }, ws);
+    
+    console.log(`✅ [VIDEO-CALL-LEAVE] Successfully processed leave for ${ws.userEmail} in session ${sessionId}`);
   }
 
   /**
@@ -170,7 +206,19 @@ class VideoCallManager {
    */
   handleVideoOffer(ws, data) {
     const { sessionId, targetUserId, offer } = data;
-    console.log(`📹 WebRTC offer from ${ws.userEmail} to ${targetUserId}`);
+    console.log(`🤝 [VIDEO-OFFER] From ${ws.userEmail} (${ws.userId}) to ${targetUserId} in session ${sessionId}`);
+    console.log(`🤝 [VIDEO-OFFER] Offer type: ${offer?.type}, SDP length: ${offer?.sdp?.length || 0}`);
+    
+    // Verify both users are in the call
+    const isOfferrerInCall = this.callParticipants.get(sessionId)?.has(ws.userId);
+    const isTargetInCall = this.callParticipants.get(sessionId)?.has(targetUserId);
+    
+    console.log(`🤝 [VIDEO-OFFER] Offerrer in call: ${isOfferrerInCall}, Target in call: ${isTargetInCall}`);
+    
+    if (!isOfferrerInCall || !isTargetInCall) {
+      console.log(`❌ [VIDEO-OFFER] Rejecting offer - one or both users not in call`);
+      return;
+    }
     
     this.roomManager.sendToUser(sessionId, targetUserId, {
       type: 'video-offer',
@@ -183,6 +231,8 @@ class VideoCallManager {
       },
       timestamp: new Date().toISOString()
     });
+    
+    console.log(`✅ [VIDEO-OFFER] Successfully forwarded offer from ${ws.userEmail} to ${targetUserId}`);
   }
 
   /**
@@ -190,7 +240,19 @@ class VideoCallManager {
    */
   handleVideoAnswer(ws, data) {
     const { sessionId, targetUserId, answer } = data;
-    console.log(`📹 WebRTC answer from ${ws.userEmail} to ${targetUserId}`);
+    console.log(`🤝 [VIDEO-ANSWER] From ${ws.userEmail} (${ws.userId}) to ${targetUserId} in session ${sessionId}`);
+    console.log(`🤝 [VIDEO-ANSWER] Answer type: ${answer?.type}, SDP length: ${answer?.sdp?.length || 0}`);
+    
+    // Verify both users are in the call
+    const isAnswererInCall = this.callParticipants.get(sessionId)?.has(ws.userId);
+    const isTargetInCall = this.callParticipants.get(sessionId)?.has(targetUserId);
+    
+    console.log(`🤝 [VIDEO-ANSWER] Answerer in call: ${isAnswererInCall}, Target in call: ${isTargetInCall}`);
+    
+    if (!isAnswererInCall || !isTargetInCall) {
+      console.log(`❌ [VIDEO-ANSWER] Rejecting answer - one or both users not in call`);
+      return;
+    }
     
     this.roomManager.sendToUser(sessionId, targetUserId, {
       type: 'video-answer',
@@ -203,6 +265,8 @@ class VideoCallManager {
       },
       timestamp: new Date().toISOString()
     });
+    
+    console.log(`✅ [VIDEO-ANSWER] Successfully forwarded answer from ${ws.userEmail} to ${targetUserId}`);
   }
 
   /**
@@ -210,7 +274,19 @@ class VideoCallManager {
    */
   handleVideoIceCandidate(ws, data) {
     const { sessionId, targetUserId, candidate } = data;
-    console.log(`📹 ICE candidate from ${ws.userEmail} to ${targetUserId}`);
+    console.log(`🧊 [VIDEO-ICE] From ${ws.userEmail} (${ws.userId}) to ${targetUserId} in session ${sessionId}`);
+    console.log(`🧊 [VIDEO-ICE] Candidate type: ${candidate?.candidate?.split(' ')[7] || 'unknown'}, component: ${candidate?.component || 'unknown'}`);
+    
+    // Verify both users are in the call
+    const isSenderInCall = this.callParticipants.get(sessionId)?.has(ws.userId);
+    const isTargetInCall = this.callParticipants.get(sessionId)?.has(targetUserId);
+    
+    console.log(`🧊 [VIDEO-ICE] Sender in call: ${isSenderInCall}, Target in call: ${isTargetInCall}`);
+    
+    if (!isSenderInCall || !isTargetInCall) {
+      console.log(`❌ [VIDEO-ICE] Rejecting ICE candidate - one or both users not in call`);
+      return;
+    }
     
     this.roomManager.sendToUser(sessionId, targetUserId, {
       type: 'video-ice-candidate',
@@ -223,6 +299,8 @@ class VideoCallManager {
       },
       timestamp: new Date().toISOString()
     });
+    
+    console.log(`✅ [VIDEO-ICE] Successfully forwarded ICE candidate from ${ws.userEmail} to ${targetUserId}`);
   }
 
   /**
@@ -230,7 +308,17 @@ class VideoCallManager {
    */
   handleVideoMediaState(ws, data) {
     const { sessionId, hasVideo, hasAudio } = data;
-    console.log(`📹 Media state change from ${ws.userEmail}: video=${hasVideo}, audio=${hasAudio}`);
+    console.log(`🎤 [VIDEO-MEDIA] State change from ${ws.userEmail} (${ws.userId}) in session ${sessionId}`);
+    console.log(`🎤 [VIDEO-MEDIA] New state - Video: ${hasVideo}, Audio: ${hasAudio}`);
+    
+    // Verify user is in the call
+    const isUserInCall = this.callParticipants.get(sessionId)?.has(ws.userId);
+    console.log(`🎤 [VIDEO-MEDIA] User in call: ${isUserInCall}`);
+    
+    if (!isUserInCall) {
+      console.log(`❌ [VIDEO-MEDIA] Rejecting media state change - user not in call`);
+      return;
+    }
     
     this.roomManager.broadcastToRoom(sessionId, {
       type: 'video-media-state-changed',
@@ -244,6 +332,8 @@ class VideoCallManager {
       hasAudio,
       timestamp: new Date().toISOString()
     }, ws);
+    
+    console.log(`✅ [VIDEO-MEDIA] Successfully broadcasted media state change from ${ws.userEmail}`);
   }
 
   /**
@@ -306,6 +396,38 @@ class VideoCallManager {
     // Update active call info
     if (this.activeVideoCalls.has(sessionId)) {
       this.activeVideoCalls.get(sessionId).participants.delete(userId);
+    }
+  }
+
+  /**
+   * Send current call status to a user (for when they connect)
+   */
+  sendCallStatusToUser(ws, sessionId) {
+    console.log(`📊 [VIDEO-STATUS] Checking call status for ${ws.userEmail} (${ws.userId}) in session ${sessionId}`);
+    
+    if (this.hasActiveCall(sessionId)) {
+      const callInfo = this.activeVideoCalls.get(sessionId);
+      const participantCount = this.callParticipants.get(sessionId)?.size || 0;
+      
+      console.log(`📊 [VIDEO-STATUS] Found active call in ${sessionId}:`);
+      console.log(`📊 [VIDEO-STATUS] - Participant count: ${participantCount}`);
+      console.log(`📊 [VIDEO-STATUS] - Initiator: ${callInfo.initiator.email} (${callInfo.initiator.userId})`);
+      console.log(`📊 [VIDEO-STATUS] - Started at: ${callInfo.startedAt}`);
+      
+      // Send call status to the newly connected user
+      this.roomManager.sendToUser(sessionId, ws.userId, {
+        type: 'video-call-status',
+        sessionId,
+        hasActiveCall: true,
+        participantCount,
+        initiator: callInfo.initiator,
+        startedAt: callInfo.startedAt,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`✅ [VIDEO-STATUS] Sent active call status to ${ws.userEmail}: ${participantCount} participants`);
+    } else {
+      console.log(`📊 [VIDEO-STATUS] No active call in session ${sessionId} for ${ws.userEmail}`);
     }
   }
 

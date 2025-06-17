@@ -96,96 +96,140 @@ class VideoWebSocketService {
    * Start a video call
    */
   startCall(sessionId, userInfo) {
+    console.log(`🎬 [VIDEO-START] Starting call in session ${sessionId}`);
+    console.log(`🎬 [VIDEO-START] User info:`, userInfo);
+    
     const connection = this.connections.get(sessionId);
     if (!connection || !connection.isConnected) {
+      console.log(`❌ [VIDEO-START] Connection not ready for session ${sessionId}`);
       throw new Error('Video connection not ready');
     }
+
+    console.log(`🎬 [VIDEO-START] Connection status - Connected: ${connection.isConnected}, Session: ${connection.sessionId}`);
 
     // Set user presence for video
     this.setUserPresence(sessionId, userInfo);
 
     // Send start call signal
-    this.sendSignal(sessionId, {
+    const startMessage = {
       type: 'video-call-start',
       sessionId
-    });
+    };
+    
+    console.log(`🎬 [VIDEO-START] Sending start signal:`, startMessage);
+    this.sendSignal(sessionId, startMessage);
 
-    console.log('📹 Started video call in session:', sessionId);
+    console.log(`✅ [VIDEO-START] Successfully started video call in session: ${sessionId}`);
   }
 
   /**
    * Join an existing video call
    */
   joinCall(sessionId, userInfo) {
+    console.log(`🚪 [VIDEO-JOIN] Joining call in session ${sessionId}`);
+    console.log(`🚪 [VIDEO-JOIN] User info:`, userInfo);
+    
     const connection = this.connections.get(sessionId);
     if (!connection || !connection.isConnected) {
+      console.log(`❌ [VIDEO-JOIN] Connection not ready for session ${sessionId}`);
       throw new Error('Video connection not ready');
     }
+
+    console.log(`🚪 [VIDEO-JOIN] Connection status - Connected: ${connection.isConnected}, Session: ${connection.sessionId}`);
 
     // Set user presence for video
     this.setUserPresence(sessionId, userInfo);
 
     // Send join call signal
-    this.sendSignal(sessionId, {
+    const joinMessage = {
       type: 'video-call-join',
       sessionId
-    });
+    };
+    
+    console.log(`🚪 [VIDEO-JOIN] Sending join signal:`, joinMessage);
+    this.sendSignal(sessionId, joinMessage);
 
-    console.log('📹 Joined video call in session:', sessionId);
+    console.log(`✅ [VIDEO-JOIN] Successfully joined video call in session: ${sessionId}`);
   }
 
   /**
    * Leave video call
    */
   leaveCall(sessionId) {
+    console.log(`🚪 [VIDEO-LEAVE] Leaving call in session ${sessionId}`);
+    
     const connection = this.connections.get(sessionId);
     if (!connection || !connection.isConnected) {
+      console.log(`⚠️ [VIDEO-LEAVE] Connection not available for session ${sessionId}, cannot send leave signal`);
       return;
     }
 
+    console.log(`🚪 [VIDEO-LEAVE] Connection status - Connected: ${connection.isConnected}, Session: ${connection.sessionId}`);
+
     // Send leave call signal
-    this.sendSignal(sessionId, {
+    const leaveMessage = {
       type: 'video-call-leave',
       sessionId
-    });
+    };
+    
+    console.log(`🚪 [VIDEO-LEAVE] Sending leave signal:`, leaveMessage);
+    this.sendSignal(sessionId, leaveMessage);
 
-    console.log('📹 Left video call in session:', sessionId);
+    console.log(`✅ [VIDEO-LEAVE] Successfully left video call in session: ${sessionId}`);
   }
 
   /**
    * Send WebRTC offer
    */
   sendOffer(sessionId, targetUserId, offer) {
-    this.sendSignal(sessionId, {
+    console.log(`🤝 [VIDEO-OFFER-SEND] Sending offer to ${targetUserId} in session ${sessionId}`);
+    console.log(`🤝 [VIDEO-OFFER-SEND] Offer type: ${offer?.type}, SDP length: ${offer?.sdp?.length || 0}`);
+    
+    const offerMessage = {
       type: 'video-offer',
       sessionId,
       targetUserId,
       offer
-    });
+    };
+    
+    this.sendSignal(sessionId, offerMessage);
+    console.log(`✅ [VIDEO-OFFER-SEND] Successfully sent offer to ${targetUserId}`);
   }
 
   /**
    * Send WebRTC answer
    */
   sendAnswer(sessionId, targetUserId, answer) {
-    this.sendSignal(sessionId, {
+    console.log(`🤝 [VIDEO-ANSWER-SEND] Sending answer to ${targetUserId} in session ${sessionId}`);
+    console.log(`🤝 [VIDEO-ANSWER-SEND] Answer type: ${answer?.type}, SDP length: ${answer?.sdp?.length || 0}`);
+    
+    const answerMessage = {
       type: 'video-answer',
       sessionId,
       targetUserId,
       answer
-    });
+    };
+    
+    this.sendSignal(sessionId, answerMessage);
+    console.log(`✅ [VIDEO-ANSWER-SEND] Successfully sent answer to ${targetUserId}`);
   }
 
   /**
    * Send ICE candidate
    */
   sendIceCandidate(sessionId, targetUserId, candidate) {
-    this.sendSignal(sessionId, {
+    console.log(`🧊 [VIDEO-ICE-SEND] Sending ICE candidate to ${targetUserId} in session ${sessionId}`);
+    console.log(`🧊 [VIDEO-ICE-SEND] Candidate type: ${candidate?.candidate?.split(' ')[7] || 'unknown'}, component: ${candidate?.component || 'unknown'}`);
+    
+    const iceMessage = {
       type: 'video-ice-candidate',
       sessionId,
       targetUserId,
       candidate
-    });
+    };
+    
+    this.sendSignal(sessionId, iceMessage);
+    console.log(`✅ [VIDEO-ICE-SEND] Successfully sent ICE candidate to ${targetUserId}`);
   }
 
   /**

@@ -22,12 +22,14 @@ class YjsWebSocketServer {
     this.roomManager = new RoomManager();
     this.roomManagerInterface = new RoomManagerInterface(this);
     this.documentStateManager = new DocumentStateManager(this.roomManagerInterface);
-    this.userPresenceManager = new UserPresenceManager(this.roomManagerInterface);
     
-    // Initialize feature managers
+    // Initialize feature managers first
     this.videoCallManager = new VideoCallManager(this.roomManagerInterface);
     this.chatManager = new ChatManager(this.roomManagerInterface);
     this.fileEventManager = new FileEventManager(this.roomManagerInterface);
+    
+    // Initialize user presence manager with video call manager reference
+    this.userPresenceManager = new UserPresenceManager(this.roomManagerInterface, this.videoCallManager);
   }
 
   /**
@@ -49,9 +51,10 @@ class YjsWebSocketServer {
     this.wss.on('connection', (ws, req) => {
       // Extract document name from URL - Y-WebSocket sends room name in the URL path
       const urlPath = req.url;
+      const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
       let docName = 'default';
       
-      console.log(`🔍 Parsing WebSocket URL: ${urlPath}`);
+      console.log(`🔍 [WEBSOCKET-CONNECT] New connection from ${clientIP}, URL: ${urlPath}`);
       
       // Y-WebSocket client sends room name as the second path segment
       // Example: /yjs-websocket/session123%2Fsrc-main-js or /yjs-websocket/session123/file.js
@@ -59,17 +62,19 @@ class YjsWebSocketServer {
         const pathParts = urlPath.split('?')[0]; // Remove query parameters first
         const pathSegments = pathParts.split('/');
         
+        console.log(`🔍 [WEBSOCKET-CONNECT] Path segments:`, pathSegments);
+        
         if (pathSegments.length >= 4) {
           // Full path: /yjs-websocket/sessionId/fileName -> extract sessionId/fileName  
           const sessionId = decodeURIComponent(pathSegments[2]);
           const fileName = decodeURIComponent(pathSegments[3]);
           docName = `${sessionId}/${fileName}`;
-          console.log(`📁 Extracted full room name: ${docName}`);
+          console.log(`📁 [WEBSOCKET-CONNECT] Extracted full room name: ${docName} (sessionId: ${sessionId}, fileName: ${fileName})`);
         } else if (pathSegments.length >= 3) {
           // Fallback: decode the single segment (might be URL-encoded full path)
           const encodedRoom = pathSegments[2];
           docName = decodeURIComponent(encodedRoom);
-          console.log(`📁 Extracted room name from encoded segment: ${docName}`);
+          console.log(`📁 [WEBSOCKET-CONNECT] Extracted room name from encoded segment: ${docName}`);
         }
       }
       
@@ -77,26 +82,41 @@ class YjsWebSocketServer {
       if (docName === 'default' && urlPath.includes('?')) {
         const params = new URLSearchParams(urlPath.split('?')[1]);
         docName = params.get('room') || params.get('doc') || 'default';
-        console.log(`📁 Room name from params: ${docName}`);
+        console.log(`📁 [WEBSOCKET-CONNECT] Room name from params: ${docName}`);
       }
       
-      console.log(`🔗 New Y-WebSocket connection for document: ${docName}`);
+      console.log(`🔗 [WEBSOCKET-CONNECT] Established connection for document: ${docName} from ${clientIP}`);
       
       // Store document name for our custom handling
       ws.docName = docName;
       ws.isAlive = true;
       ws.lastActivity = Date.now();
+      ws.clientIP = clientIP;
       
       // Track this connection in room
       this.roomManager.addClientToRoom(docName, ws);
+      console.log(`🏠 [WEBSOCKET-CONNECT] Added client to room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
+      
+      // Check if this is a video session and send call status
+      const isVideoSession = docName.includes('video-');
+      if (isVideoSession) {
+        const sessionId = docName.replace('video-', '');
+        console.log(`📹 [WEBSOCKET-CONNECT] Video session detected: ${sessionId}`);
+        setTimeout(() => {
+          this.videoCallManager.sendCallStatusToUser(ws, sessionId);
+        }, 100); // Small delay to ensure connection is fully established
+      }
       
       // PRODUCTION FIX: Send existing document state to new connections
       // DISABLED: This causes content duplication in production due to WebSocket connection instability
       // Let Y.js clients handle their own document synchronization through standard y-websocket protocol
       setTimeout(() => {
         // this.documentStateManager.sendExistingDocumentState(ws, docName); // DISABLED
-        console.log(`🔄 Y.js client will handle document synchronization for: ${docName}`);
-        
+        console.log(`🔄 [WEBSOCKET-CONNECT] Y.js client will handle document synchronization for: ${docName}`);
+      }, 50);
+      
+      // Set up additional initialization for new connections
+      setTimeout(() => {
         // Send recent chat history to new user (this is safe)
         this.chatManager.sendChatHistoryToUser(ws, docName);
         

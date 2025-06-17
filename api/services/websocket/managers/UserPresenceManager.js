@@ -4,8 +4,9 @@
  */
 
 class UserPresenceManager {
-  constructor(roomManagerInterface) {
+  constructor(roomManagerInterface, videoCallManager = null) {
     this.roomManagerInterface = roomManagerInterface;
+    this.videoCallManager = videoCallManager;
     this.connectionsByUser = new Map(); // Track connections by user
   }
 
@@ -65,6 +66,15 @@ class UserPresenceManager {
     }
     
     console.log(`👤 Updated user info for ${docName}: ${oldEmail || 'unknown'} → ${ws.userEmail}`);
+    
+    // Check if this is a video session and send call status
+    if (docName && docName.startsWith('video-')) {
+      const sessionId = docName.replace('video-', '');
+      // Get the video call manager from the server and send call status
+      if (this.videoCallManager) {
+        this.videoCallManager.sendCallStatusToUser(ws, sessionId);
+      }
+    }
     
     // Notify other users in room about updated user info
     this.roomManagerInterface.broadcastToRoom(docName, {
