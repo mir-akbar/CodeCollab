@@ -48,7 +48,12 @@ const config = {
   
   // CORS Configuration
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
-  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  
+  // WebRTC Configuration for Video Chat
+  STUN_SERVER_URL: process.env.STUN_SERVER_URL || 'stun:stun.l.google.com:19302',
+  TURN_SERVER_URL: process.env.TURN_SERVER_URL,
+  TURN_USERNAME: process.env.TURN_USERNAME,
+  TURN_PASSWORD: process.env.TURN_PASSWORD,
   
   // AWS Cognito Configuration (CodeCollab-enhanced)
   COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID,

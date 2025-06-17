@@ -11,6 +11,7 @@ const UserPresenceManager = require('./websocket/managers/UserPresenceManager');
 const DocumentStateManager = require('./websocket/managers/DocumentStateManager');
 const RoomManager = require('./websocket/managers/RoomManager');
 const RoomManagerInterface = require('./websocket/managers/RoomManagerInterface');
+const VideoSignalingManager = require('./websocket/managers/VideoSignalingManager');
 
 class YjsWebSocketServer {
   constructor(server) {
@@ -28,6 +29,9 @@ class YjsWebSocketServer {
     
     // Initialize user presence manager
     this.userPresenceManager = new UserPresenceManager(this.roomManagerInterface);
+    
+    // Initialize video signaling manager
+    this.videoSignalingManager = new VideoSignalingManager(this.roomManagerInterface);
   }
 
   /**
@@ -36,12 +40,12 @@ class YjsWebSocketServer {
   initialize() {
     console.log('🔌 Setting up WebSocket server...');
     
-    // Create WebSocket server that handles Y.js connections
+    // Create WebSocket server that handles Y.js and video connections
     this.wss = new WebSocketServer({
       server: this.server,
       verifyClient: (info) => {
         const pathname = info.req.url;
-        return pathname.startsWith('/yjs-websocket');
+        return pathname.startsWith('/yjs-websocket') || pathname.startsWith('/video-signaling');
       }
     });
 
@@ -56,23 +60,36 @@ class YjsWebSocketServer {
       
       // Y-WebSocket client sends room name as the second path segment
       // Example: /yjs-websocket/session123%2Fsrc-main-js or /yjs-websocket/session123/file.js
+      // Video clients send: /video-signaling/session123
       if (urlPath.startsWith('/yjs-websocket/')) {
         const pathParts = urlPath.split('?')[0]; // Remove query parameters first
         const pathSegments = pathParts.split('/');
         
-        console.log(`🔍 [WEBSOCKET-CONNECT] Path segments:`, pathSegments);
+        console.log(`🔍 [WEBSOCKET-CONNECT] Y.js path segments:`, pathSegments);
         
         if (pathSegments.length >= 4) {
           // Full path: /yjs-websocket/sessionId/fileName -> extract sessionId/fileName  
-          const sessionId = decodeURIComponent(pathSegments[2]);
+          const sessionIdPart = decodeURIComponent(pathSegments[2]);
           const fileName = decodeURIComponent(pathSegments[3]);
-          docName = `${sessionId}/${fileName}`;
-          console.log(`📁 [WEBSOCKET-CONNECT] Extracted full room name: ${docName} (sessionId: ${sessionId}, fileName: ${fileName})`);
+          docName = `${sessionIdPart}/${fileName}`;
+          console.log(`📁 [WEBSOCKET-CONNECT] Extracted full room name: ${docName} (sessionId: ${sessionIdPart}, fileName: ${fileName})`);
         } else if (pathSegments.length >= 3) {
           // Fallback: decode the single segment (might be URL-encoded full path)
           const encodedRoom = pathSegments[2];
           docName = decodeURIComponent(encodedRoom);
           console.log(`📁 [WEBSOCKET-CONNECT] Extracted room name from encoded segment: ${docName}`);
+        }
+      } else if (urlPath.startsWith('/video-signaling/')) {
+        const pathParts = urlPath.split('?')[0]; // Remove query parameters first
+        const pathSegments = pathParts.split('/');
+        
+        console.log(`🔍 [WEBSOCKET-CONNECT] Video signaling path segments:`, pathSegments);
+        
+        if (pathSegments.length >= 3) {
+          // Video signaling path: /video-signaling/sessionId
+          const sessionIdPart = decodeURIComponent(pathSegments[2]);
+          docName = sessionIdPart; // For video, docName = sessionId
+          console.log(`🎥 [WEBSOCKET-CONNECT] Video signaling for session: ${sessionIdPart}`);
         }
       }
       
@@ -85,15 +102,32 @@ class YjsWebSocketServer {
       
       console.log(`🔗 [WEBSOCKET-CONNECT] Established connection for document: ${docName} from ${clientIP}`);
       
-      // Store document name for our custom handling
-      ws.docName = docName;
+      // Extract sessionId from docName for dual room support
+      let sessionId = 'default';
+      if (docName && docName.includes('/')) {
+        sessionId = docName.split('/')[0]; // Extract sessionId from "sessionId/fileName"
+      } else if (docName && docName !== 'default') {
+        sessionId = docName; // If no slash, treat entire docName as sessionId
+      }
+      
+      // Store both document and session context for dual room support
+      ws.docName = docName;           // For Y.js document sync, chat, file events
+      ws.sessionId = sessionId;       // For video chat, session-wide features
       ws.isAlive = true;
       ws.lastActivity = Date.now();
       ws.clientIP = clientIP;
       
-      // Track this connection in room
+      console.log(`🏠 [WEBSOCKET-CONNECT] Room context - Document: ${docName}, Session: ${sessionId}`);
+      
+      // Add to document room (existing functionality)
       this.roomManager.addClientToRoom(docName, ws);
-      console.log(`🏠 [WEBSOCKET-CONNECT] Added client to room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
+      console.log(`📄 [WEBSOCKET-CONNECT] Added to document room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
+      
+      // Add to session room (new functionality for video chat)
+      if (sessionId !== docName) { // Avoid duplicate if docName = sessionId
+        this.roomManager.addClientToRoom(sessionId, ws);
+        console.log(`🎥 [WEBSOCKET-CONNECT] Added to session room ${sessionId}, total connections: ${this.roomManager.getConnectionCount(sessionId)}`);
+      }
       
       // Let Y.js clients handle their own document synchronization
       console.log(`🔄 [WEBSOCKET-CONNECT] Y.js client will handle document synchronization for: ${docName}`);
@@ -214,6 +248,11 @@ class YjsWebSocketServer {
       return true;
     }
     
+    // Check if it's a video signaling message
+    if (this.videoSignalingManager.isVideoSignalingMessage(type)) {
+      return true;
+    }
+    
     return false;
   }
 
@@ -238,6 +277,12 @@ class YjsWebSocketServer {
     // Delegate user presence messages to User Presence Manager
     if (this.userPresenceManager.isUserPresenceMessage(type)) {
       this.userPresenceManager.handleUserPresenceMessage(ws, data);
+      return;
+    }
+    
+    // Delegate video signaling messages to Video Signaling Manager
+    if (this.videoSignalingManager.isVideoSignalingMessage(type)) {
+      this.videoSignalingManager.handleVideoSignalingMessage(ws, data);
       return;
     }
     
