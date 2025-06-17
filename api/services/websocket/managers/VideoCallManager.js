@@ -73,8 +73,17 @@ class VideoCallManager {
    */
   handleVideoCallStart(ws, data) {
     const { sessionId } = data;
-    console.log(`🎬 [VIDEO-CALL] Call started in session: ${sessionId} by ${ws.userEmail}`);
+    console.log(`🎬 [VIDEO-CALL] Call start requested in session: ${sessionId} by ${ws.userEmail}`);
     console.log(`🎬 [VIDEO-CALL] User details: userId=${ws.userId}, name=${ws.userName}`);
+    
+    // CHECK: If call already exists, join it instead of starting new one
+    if (this.hasActiveCall(sessionId)) {
+      console.log(`⚠️ [VIDEO-CALL] Call already exists in session ${sessionId}, converting to join request`);
+      this.handleVideoCallJoin(ws, data);
+      return;
+    }
+    
+    console.log(`🎬 [VIDEO-CALL] Creating new call in session: ${sessionId}`);
     
     // Track the active video call
     this.activeVideoCalls.set(sessionId, {
@@ -92,6 +101,7 @@ class VideoCallManager {
     console.log(`🎬 [VIDEO-CALL] Active calls after start: ${this.activeVideoCalls.size}`);
     console.log(`🎬 [VIDEO-CALL] Participants in ${sessionId}: ${this.callParticipants.get(sessionId)?.size || 0}`);
     
+    // Broadcast to main session room
     this.roomManager.broadcastToRoom(sessionId, {
       type: 'video-call-started',
       sessionId,
@@ -103,7 +113,21 @@ class VideoCallManager {
       timestamp: new Date().toISOString()
     }, ws);
     
-    console.log(`🎬 [VIDEO-CALL] Broadcasted call-started event to room: ${sessionId}`);
+    // CRITICAL FIX: Also broadcast to video room for users who are only on video tab
+    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    this.roomManager.broadcastToRoom(videoRoomName, {
+      type: 'video-call-started',
+      sessionId,
+      initiator: {
+        userId: ws.userId,
+        email: ws.userEmail,
+        name: ws.userName
+      },
+      timestamp: new Date().toISOString()
+    }, ws);
+    
+    console.log(`🎬 [VIDEO-CALL] Broadcasted call-started event to session room: ${sessionId}`);
+    console.log(`🎬 [VIDEO-CALL] Broadcasted call-started event to video room: ${videoRoomName}`);
   }
 
   /**
@@ -143,7 +167,7 @@ class VideoCallManager {
     const participantCount = this.callParticipants.get(sessionId)?.size || 1;
     console.log(`🚪 [VIDEO-CALL-JOIN] Broadcasting user-joined event to room ${sessionId}, participant count: ${participantCount}`);
     
-    this.roomManager.broadcastToRoom(sessionId, {
+    const userJoinedMessage = {
       type: 'video-call-user-joined',
       sessionId,
       user: {
@@ -153,7 +177,13 @@ class VideoCallManager {
       },
       participantCount,
       timestamp: new Date().toISOString()
-    }, ws);
+    };
+    
+    // Broadcast to both session room and video room
+    this.roomManager.broadcastToRoom(sessionId, userJoinedMessage, ws);
+    
+    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    this.roomManager.broadcastToRoom(videoRoomName, userJoinedMessage, ws);
     
     console.log(`✅ [VIDEO-CALL-JOIN] Successfully processed join for ${ws.userEmail} in session ${sessionId}`);
   }
@@ -195,7 +225,7 @@ class VideoCallManager {
     const remainingCount = this.callParticipants.get(sessionId)?.size || 0;
     console.log(`🚪 [VIDEO-CALL-LEAVE] Broadcasting user-left event to room ${sessionId}, remaining count: ${remainingCount}`);
     
-    this.roomManager.broadcastToRoom(sessionId, {
+    const userLeftMessage = {
       type: 'video-call-user-left',
       sessionId,
       user: {
@@ -205,7 +235,13 @@ class VideoCallManager {
       },
       participantCount: remainingCount,
       timestamp: new Date().toISOString()
-    }, ws);
+    };
+    
+    // Broadcast to both session room and video room
+    this.roomManager.broadcastToRoom(sessionId, userLeftMessage, ws);
+    
+    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    this.roomManager.broadcastToRoom(videoRoomName, userLeftMessage, ws);
     
     console.log(`✅ [VIDEO-CALL-LEAVE] Successfully processed leave for ${ws.userEmail} in session ${sessionId}`);
   }
@@ -478,12 +514,17 @@ class VideoCallManager {
     if (this.activeVideoCalls.has(sessionId)) {
       console.log(`📹 Force ending video call in session: ${sessionId} (reason: ${reason})`);
       
-      this.roomManager.broadcastToRoom(sessionId, {
+      const endedMessage = {
         type: 'video-call-ended',
         sessionId,
         reason,
         timestamp: new Date().toISOString()
-      });
+      };
+      
+      this.roomManager.broadcastToRoom(sessionId, endedMessage);
+      
+      const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+      this.roomManager.broadcastToRoom(videoRoomName, endedMessage);
       
       this.callParticipants.delete(sessionId);
       this.activeVideoCalls.delete(sessionId);
@@ -511,8 +552,8 @@ class VideoCallManager {
     this.activeVideoCalls.delete(sessionId);
     console.log(`🛑 [VIDEO-CALL-END] Call completely ended in session: ${sessionId}`);
     
-    // Broadcast call ended event
-    this.roomManager.broadcastToRoom(sessionId, {
+    // Broadcast call ended event to both rooms
+    const endedMessage = {
       type: 'video-call-ended',
       sessionId,
       endedBy: {
@@ -521,7 +562,12 @@ class VideoCallManager {
         name: ws.userName
       },
       timestamp: new Date().toISOString()
-    });
+    };
+    
+    this.roomManager.broadcastToRoom(sessionId, endedMessage);
+    
+    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    this.roomManager.broadcastToRoom(videoRoomName, endedMessage);
     
     console.log(`✅ [VIDEO-CALL-END] Successfully ended call for ${ws.userEmail} in session ${sessionId}`);
   }
