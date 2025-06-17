@@ -100,14 +100,14 @@ class CodeCollaborationService {
   /**
    * Initialize content in YJS document
    */
-  initializeContent(sessionId, filePath, content) {
+  async initializeContent(sessionId, filePath, content) {
     const connection = this.connectionManager.getConnection(sessionId, filePath);
     if (!connection) {
       console.warn('No connection found for content initialization:', `${sessionId}-${filePath}`);
       return false;
     }
 
-    return this.bindingManager.initializeContent(connection, content);
+    return await this.bindingManager.initializeContent(connection, content);
   }
 
   /**

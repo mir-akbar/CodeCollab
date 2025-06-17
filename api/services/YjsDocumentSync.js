@@ -8,6 +8,7 @@ class YjsDocumentSync {
     this.fileStorageCore = fileStorageCore;
     this.yjsServer = yjsServer;
     this.docs = new Map(); // Store Y.js documents to prevent duplication
+    this.initializationAttempts = new Map(); // Track initialization attempts to prevent duplication
   }
 
   /**
@@ -74,6 +75,24 @@ class YjsDocumentSync {
       
       const roomId = `${sessionId}-${filePath}`;
       
+      // PRODUCTION FIX: Check if initialization is already in progress
+      if (this.initializationAttempts.has(roomId)) {
+        const attempt = this.initializationAttempts.get(roomId);
+        if (Date.now() - attempt.startTime < 10000) { // 10 second timeout
+          console.log(`🚫 CONCURRENT INITIALIZATION BLOCKED: Room ${roomId} is already being initialized`);
+          // Wait a bit and try to get the document again
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if (this.docs.has(roomId)) {
+            const existingDoc = this.docs.get(roomId);
+            const Y = require('yjs');
+            return Y.encodeStateAsUpdate(existingDoc);
+          }
+        }
+      }
+      
+      // Mark this room as being initialized
+      this.initializationAttempts.set(roomId, { startTime: Date.now() });
+      
       // PRODUCTION FIX: Check Y.js WebSocket server for existing documents first
       // This prevents duplication when Railway restarts connections
       if (this.yjsServer.docs && this.yjsServer.docs.has(roomId)) {
@@ -82,8 +101,11 @@ class YjsDocumentSync {
         
         if (existingContent.length > 0) {
           console.log(`♻️  Y-WebSocket: Found existing document in server (${existingContent.length} chars) for room ${roomId}`);
+          console.log(`🔍 DUPLICATION CHECK: Using cached document to prevent re-initialization`);
           // Also store in our local docs for consistency
           this.docs.set(roomId, existingDoc);
+          // Clear initialization attempt
+          this.initializationAttempts.delete(roomId);
           const Y = require('yjs');
           return Y.encodeStateAsUpdate(existingDoc);
         }
@@ -96,6 +118,7 @@ class YjsDocumentSync {
         
         if (existingContent.length > 0) {
           console.log(`♻️  Y-WebSocket: Reusing local document content (${existingContent.length} chars) for room ${roomId}`);
+          console.log(`🔍 DUPLICATION CHECK: Local cache hit, preventing MongoDB re-read`);
           // Also store in server docs for other connections
           if (this.yjsServer.docs) {
             this.yjsServer.docs.set(roomId, existingDoc);
@@ -127,10 +150,23 @@ class YjsDocumentSync {
       const doc = new Y.Doc();
       const ytext = doc.getText('monaco');
       
+      // PRODUCTION SAFETY: Double-check if document was created by another process while we were reading file
+      if (this.docs.has(roomId)) {
+        const existingDoc = this.docs.get(roomId);
+        const existingContent = existingDoc.getText('monaco').toString();
+        if (existingContent.length > 0) {
+          console.log(`🚫 RACE CONDITION PREVENTED: Another process created document for ${roomId} while reading file`);
+          return Y.encodeStateAsUpdate(existingDoc);
+        }
+      }
+      
       // Initialize content only if we have content and this is the first time
       if (content.length > 0) {
         ytext.insert(0, content);
-        console.log(`📝 Y-WebSocket: Initialized document with ${content.length} characters`);
+        console.log(`📝 Y-WebSocket: Initialized NEW document with ${content.length} characters for ${roomId}`);
+        console.log(`🔍 DUPLICATION CHECK: This is the FIRST initialization for this room`);
+      } else {
+        console.log(`📝 Y-WebSocket: Created empty document for ${roomId} (file was empty or not found)`);
       }
       
       // Store the document in BOTH locations to ensure persistence across connections

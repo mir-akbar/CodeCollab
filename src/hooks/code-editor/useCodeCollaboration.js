@@ -156,10 +156,10 @@ export function useCodeCollaboration(sessionId, filePath) {
   }, [sessionId, filePath]);
 
   // Initialize content
-  const initializeContent = useCallback((content) => {
+  const initializeContent = useCallback(async (content) => {
     if (!sessionId || !filePath) return false;
     
-    return codeCollaborationService.initializeContent(sessionId, filePath, content);
+    return await codeCollaborationService.initializeContent(sessionId, filePath, content);
   }, [sessionId, filePath]);
 
   // Get current content

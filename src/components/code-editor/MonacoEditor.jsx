@@ -82,22 +82,26 @@ export function MonacoEditor({
           bindingRef.current = createBinding(editor, onContentChange);
           
           // Initialize YJS content immediately (this will sync to Monaco via binding)
-          const initialized = initializeContent(fileContent);
-          
-          if (initialized) {
-            console.log(`✅ [MONACO EDITOR] YJS content initialized for: ${filePath}`);
-          } else {
-            console.log(`📄 [MONACO EDITOR] YJS content already exists for: ${filePath}`);
-            // Check if content is already there and force sync if needed
-            const currentContent = getContent();
-            if (currentContent.length > 0) {
-              const modelContent = editor.getModel()?.getValue() || '';
-              if (modelContent.length === 0) {
-                console.log(`🔄 [MONACO EDITOR] Manually syncing YJS content to Monaco for: ${filePath}`);
-                editor.getModel()?.setValue(currentContent);
+          const initializeContentAsync = async () => {
+            const initialized = await initializeContent(fileContent);
+            
+            if (initialized) {
+              console.log(`✅ [MONACO EDITOR] YJS content initialized for: ${filePath}`);
+            } else {
+              console.log(`📄 [MONACO EDITOR] YJS content already exists for: ${filePath}`);
+              // Check if content is already there and force sync if needed
+              const currentContent = getContent();
+              if (currentContent.length > 0) {
+                const modelContent = editor.getModel()?.getValue() || '';
+                if (modelContent.length === 0) {
+                  console.log(`🔄 [MONACO EDITOR] Manually syncing YJS content to Monaco for: ${filePath}`);
+                  editor.getModel()?.setValue(currentContent);
+                }
               }
             }
-          }
+          };
+          
+          initializeContentAsync();
           setContentSet(true);
         } else {
           // Non-collaboration mode: set Monaco content directly
@@ -131,12 +135,12 @@ export function MonacoEditor({
         
         // Initialize YJS content if needed
         if (fileContent && fileContent.trim()) {
-          setTimeout(() => {
+          setTimeout(async () => {
             try {
               const currentContent = getContent();
               if (currentContent.length === 0) {
                 console.log('📝 Initializing YJS content (fallback) for:', filePath);
-                const initialized = initializeContent(fileContent);
+                const initialized = await initializeContent(fileContent);
                 if (!initialized) {
                   console.log('⚠️  Content initialization skipped (document not empty or race condition):', filePath);
                 }

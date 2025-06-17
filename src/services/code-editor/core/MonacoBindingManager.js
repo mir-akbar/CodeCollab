@@ -122,7 +122,7 @@ export class MonacoBindingManager {
   /**
    * Initialize content in Y.js document (production-safe)
    */
-  initializeContent(connection, content) {
+  async initializeContent(connection, content) {
     if (!connection || !content?.trim()) {
       console.log('No content to initialize for:', connection?.filePath);
       return false;
@@ -140,12 +140,24 @@ export class MonacoBindingManager {
     // Check if document has any content at all
     if (currentContent.length > 0) {
       console.log(`🚫 PRODUCTION FIX: Document already has content (${currentContent.length} chars), preventing duplication for: ${connection.filePath}`);
+      // Additional check: if the current content length is roughly double the expected content, 
+      // this indicates duplication has already occurred
+      if (currentContent.length >= content.length * 1.5) {
+        console.warn(`⚠️ DUPLICATION DETECTED: Current content (${currentContent.length}) is significantly larger than expected (${content.length}). This suggests content duplication.`);
+      }
       return false;
     }
 
-    // Prevent race conditions
+    // Prevent race conditions with enhanced timing checks
     if (connection._initializing) {
       console.log('Content initialization already in progress for:', connection.filePath);
+      return false;
+    }
+    
+    // Check if another client has recently initialized this document
+    const now = Date.now();
+    if (connection._lastInitialization && (now - connection._lastInitialization) < 5000) {
+      console.log(`🕒 Recent initialization detected for ${connection.filePath}, waiting for sync`);
       return false;
     }
     
@@ -156,13 +168,20 @@ export class MonacoBindingManager {
     
     connection._initializing = true;
     connection._initializationAttempts = (connection._initializationAttempts || 0) + 1;
+    connection._lastInitialization = Date.now();
     
     try {
       console.log(`📝 [PRODUCTION] Initializing document content for: ${connection.filePath} (${content.length} chars) - Attempt ${connection._initializationAttempts}`);
       
-      // Triple-check that document is still empty safely
+      // Add a small delay to allow WebSocket sync and other clients to populate the document
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Final check after delay - in production this prevents race conditions
       const finalCheck = safeGetYjsContent(connection.ytext, '');
+      console.log(`🔍 Final content check after delay: ${finalCheck.length} chars for ${connection.filePath}`);
+      
       if (finalCheck.length === 0) {
+        // Document is still empty, safe to initialize
         const success = safeSetYjsContent(connection.ytext, content, 'insert');
         if (success) {
           console.log(`✅ [PRODUCTION] Successfully initialized content for: ${connection.filePath}`);
@@ -171,8 +190,19 @@ export class MonacoBindingManager {
           console.error(`❌ [PRODUCTION] Failed to set YJS content for: ${connection.filePath}`);
           return false;
         }
+      } else if (finalCheck.length === content.length && finalCheck === content) {
+        // Document has identical content, which is fine
+        console.log(`✅ [PRODUCTION] Document already has identical content for: ${connection.filePath}`);
+        return true;
       } else {
-        console.log(`⚠️  [PRODUCTION] Document was populated by another process while initializing: ${connection.filePath} (${finalCheck.length} chars)`);
+        // Document has different or additional content - another client initialized it
+        console.log(`⚠️  [PRODUCTION] Document was populated by another client: ${connection.filePath} (${finalCheck.length} chars)`);
+        
+        // Check for potential duplication
+        if (finalCheck.length > content.length * 1.5) {
+          console.warn(`🚨 POTENTIAL DUPLICATION: Document content (${finalCheck.length}) is much larger than expected (${content.length})`);
+        }
+        
         return false;
       }
     } catch (error) {
