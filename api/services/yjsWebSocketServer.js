@@ -319,10 +319,16 @@ class YjsWebSocketServer {
     this.chatManager.handleUserDisconnect(ws);
     this.fileEventManager.handleUserDisconnect(ws);
     this.userPresenceManager.handleUserDisconnect(ws);
+    this.videoSignalingManager.handleUserDisconnect(ws);
     
-    // Remove from room
+    // Remove from document room
     if (ws.docName) {
       this.roomManager.removeClientFromRoom(ws.docName, ws);
+    }
+    
+    // Remove from session room (if different)
+    if (ws.sessionId && ws.sessionId !== ws.docName) {
+      this.roomManager.removeClientFromRoom(ws.sessionId, ws);
     }
   }
 
@@ -398,6 +404,7 @@ class YjsWebSocketServer {
       this.userPresenceManager.cleanup();
       this.chatManager.cleanup();
       this.fileEventManager.cleanup();
+      this.videoSignalingManager.cleanup();
       
       // Close all connections
       this.wss.clients.forEach(ws => {

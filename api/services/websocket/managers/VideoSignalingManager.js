@@ -1,13 +1,16 @@
 /**
  * Video Signaling Manager
- * Handles WebRTC signaling for video chat functionality
- * Manages offer/answer/ICE candidate exchange between peers
+ * Handles WebRTC signaling for simple mesh network video chat
+ * Supports 3-5 users in peer-to-peer video sessions
  */
 
 class VideoSignalingManager {
   constructor(roomManagerInterface) {
     this.roomManagerInterface = roomManagerInterface;
-    this.activeVideoCalls = new Map(); // Track active video calls per session
+    
+    // Track active video participants per session
+    // Format: { sessionId: Set([userId1, userId2, ...]) }
+    this.activeVideoSessions = new Map();
   }
 
   /**
@@ -15,15 +18,14 @@ class VideoSignalingManager {
    */
   isVideoSignalingMessage(type) {
     const videoMessageTypes = [
-      'video-offer',
-      'video-answer', 
-      'video-ice-candidate',
-      'video-call-start',
-      'video-call-end',
-      'video-call-join',
-      'video-call-leave',
-      'video-mute-toggle',
-      'video-camera-toggle'
+      // Core WebRTC signaling
+      'offer',
+      'answer', 
+      'ice-candidate',
+      
+      // Simple call management
+      'join-video-call',
+      'leave-video-call'
     ];
     return videoMessageTypes.includes(type);
   }
@@ -34,35 +36,35 @@ class VideoSignalingManager {
   handleVideoSignalingMessage(ws, data) {
     const { type } = data;
     
-    console.log(`🎥 [VIDEO-SIGNALING] Handling ${type} from ${ws.userEmail || 'unknown'}`);
+    console.log(`🎥 [VIDEO-SIGNALING] Handling ${type} from ${ws.userEmail || 'unknown'} in session ${data.sessionId || 'unknown'}`);
+    
+    // Validate required fields
+    if (!data.sessionId) {
+      console.warn(`⚠️ Missing sessionId in video signaling message type: ${type}`);
+      return;
+    }
+    
+    // Ensure user info is available
+    if (!ws.userId || !ws.userEmail) {
+      console.warn(`⚠️ Missing user info for video signaling from ${ws.clientIP}`);
+      return;
+    }
     
     switch (type) {
-      case 'video-offer':
-        this.handleVideoOffer(ws, data);
+      case 'offer':
+        this.handleOffer(ws, data);
         break;
-      case 'video-answer':
-        this.handleVideoAnswer(ws, data);
+      case 'answer':
+        this.handleAnswer(ws, data);
         break;
-      case 'video-ice-candidate':
+      case 'ice-candidate':
         this.handleIceCandidate(ws, data);
         break;
-      case 'video-call-start':
-        this.handleCallStart(ws, data);
+      case 'join-video-call':
+        this.handleJoinVideoCall(ws, data);
         break;
-      case 'video-call-end':
-        this.handleCallEnd(ws, data);
-        break;
-      case 'video-call-join':
-        this.handleCallJoin(ws, data);
-        break;
-      case 'video-call-leave':
-        this.handleCallLeave(ws, data);
-        break;
-      case 'video-mute-toggle':
-        this.handleMuteToggle(ws, data);
-        break;
-      case 'video-camera-toggle':
-        this.handleCameraToggle(ws, data);
+      case 'leave-video-call':
+        this.handleLeaveVideoCall(ws, data);
         break;
       default:
         console.warn(`⚠️ Unknown video signaling message type: ${type}`);
@@ -70,16 +72,21 @@ class VideoSignalingManager {
   }
 
   /**
-   * Handle WebRTC offer
+   * Handle WebRTC offer - forward to target user
    */
-  handleVideoOffer(ws, data) {
+  handleOffer(ws, data) {
     const { sessionId, targetUserId, offer } = data;
     
-    console.log(`🎥 [VIDEO-OFFER] From ${ws.userEmail} to ${targetUserId} in session ${sessionId}`);
+    if (!targetUserId || !offer) {
+      console.warn(`⚠️ Invalid offer message: missing targetUserId or offer`);
+      return;
+    }
+    
+    console.log(`🎥 [OFFER] From ${ws.userEmail} to user ${targetUserId} in session ${sessionId}`);
     
     // Forward offer to target user
     this.roomManagerInterface.sendToUser(sessionId, targetUserId, {
-      type: 'video-offer',
+      type: 'offer',
       fromUserId: ws.userId,
       fromUserEmail: ws.userEmail,
       offer: offer,
@@ -88,16 +95,21 @@ class VideoSignalingManager {
   }
 
   /**
-   * Handle WebRTC answer
+   * Handle WebRTC answer - forward to target user
    */
-  handleVideoAnswer(ws, data) {
+  handleAnswer(ws, data) {
     const { sessionId, targetUserId, answer } = data;
     
-    console.log(`🎥 [VIDEO-ANSWER] From ${ws.userEmail} to ${targetUserId} in session ${sessionId}`);
+    if (!targetUserId || !answer) {
+      console.warn(`⚠️ Invalid answer message: missing targetUserId or answer`);
+      return;
+    }
+    
+    console.log(`🎥 [ANSWER] From ${ws.userEmail} to user ${targetUserId} in session ${sessionId}`);
     
     // Forward answer to target user
     this.roomManagerInterface.sendToUser(sessionId, targetUserId, {
-      type: 'video-answer',
+      type: 'answer',
       fromUserId: ws.userId,
       fromUserEmail: ws.userEmail,
       answer: answer,
@@ -106,16 +118,21 @@ class VideoSignalingManager {
   }
 
   /**
-   * Handle ICE candidate
+   * Handle ICE candidate - forward to target user
    */
   handleIceCandidate(ws, data) {
     const { sessionId, targetUserId, candidate } = data;
     
-    console.log(`🎥 [ICE-CANDIDATE] From ${ws.userEmail} to ${targetUserId}`);
+    if (!targetUserId || !candidate) {
+      console.warn(`⚠️ Invalid ICE candidate message: missing targetUserId or candidate`);
+      return;
+    }
+    
+    console.log(`🎥 [ICE-CANDIDATE] From ${ws.userEmail} to user ${targetUserId} in session ${sessionId}`);
     
     // Forward ICE candidate to target user
     this.roomManagerInterface.sendToUser(sessionId, targetUserId, {
-      type: 'video-ice-candidate',
+      type: 'ice-candidate',
       fromUserId: ws.userId,
       fromUserEmail: ws.userEmail,
       candidate: candidate,
@@ -124,131 +141,110 @@ class VideoSignalingManager {
   }
 
   /**
-   * Handle call start
+   * Handle user joining video call - mesh network approach
    */
-  handleCallStart(ws, data) {
+  handleJoinVideoCall(ws, data) {
     const { sessionId } = data;
+    const userId = ws.userId;
+    const userEmail = ws.userEmail;
     
-    console.log(`🎥 [CALL-START] ${ws.userEmail} starting call in session ${sessionId}`);
+    console.log(`🎥 [JOIN-VIDEO-CALL] ${userEmail} joining video call in session ${sessionId}`);
     
-    // Notify all users in session about call start
-    this.roomManagerInterface.broadcastToRoom(sessionId, {
-      type: 'video-call-started',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
-      sessionId: sessionId,
-      timestamp: new Date().toISOString()
-    }, ws);
-  }
-
-  /**
-   * Handle call end
-   */
-  handleCallEnd(ws, data) {
-    const { sessionId } = data;
+    // Get or create participant set for this session
+    if (!this.activeVideoSessions.has(sessionId)) {
+      this.activeVideoSessions.set(sessionId, new Set());
+    }
     
-    console.log(`🎥 [CALL-END] ${ws.userEmail} ending call in session ${sessionId}`);
+    const participants = this.activeVideoSessions.get(sessionId);
     
-    // Notify all users in session about call end
-    this.roomManagerInterface.broadcastToRoom(sessionId, {
-      type: 'video-call-ended',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
-      sessionId: sessionId,
-      timestamp: new Date().toISOString()
-    }, ws);
-  }
-
-  /**
-   * Handle call join
-   */
-  handleCallJoin(ws, data) {
-    const { sessionId } = data;
+    // Get current participants (before adding new user)
+    const currentParticipants = Array.from(participants).map(participantId => {
+      // Find user info - we'll need to enhance this later
+      return { userId: participantId };
+    });
     
-    console.log(`🎥 [CALL-JOIN] ${ws.userEmail} joining call in session ${sessionId}`);
+    // Add user to participants
+    participants.add(userId);
     
-    // Notify all users in session about user joining
+    console.log(`🎥 [JOIN-VIDEO-CALL] Session ${sessionId} now has ${participants.size} participants`);
+    
+    // Send current participants list to the joining user
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'video-call-participants',
+        participants: currentParticipants,
+        sessionId: sessionId
+      }));
+    }
+    
+    // Notify existing participants about new user
     this.roomManagerInterface.broadcastToRoom(sessionId, {
       type: 'video-call-user-joined',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
+      userId: userId,
+      userEmail: userEmail,
       sessionId: sessionId,
-      timestamp: new Date().toISOString()
+      totalParticipants: participants.size
     }, ws);
   }
 
   /**
-   * Handle call leave
+   * Handle user leaving video call
    */
-  handleCallLeave(ws, data) {
+  handleLeaveVideoCall(ws, data) {
     const { sessionId } = data;
+    const userId = ws.userId;
+    const userEmail = ws.userEmail;
     
-    console.log(`🎥 [CALL-LEAVE] ${ws.userEmail} leaving call in session ${sessionId}`);
+    console.log(`🎥 [LEAVE-VIDEO-CALL] ${userEmail} leaving video call in session ${sessionId}`);
     
-    // Notify all users in session about user leaving
-    this.roomManagerInterface.broadcastToRoom(sessionId, {
-      type: 'video-call-user-left',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
-      sessionId: sessionId,
-      timestamp: new Date().toISOString()
-    }, ws);
+    // Remove user from participants
+    if (this.activeVideoSessions.has(sessionId)) {
+      const participants = this.activeVideoSessions.get(sessionId);
+      participants.delete(userId);
+      
+      console.log(`🎥 [LEAVE-VIDEO-CALL] Session ${sessionId} now has ${participants.size} participants`);
+      
+      // Clean up empty sessions
+      if (participants.size === 0) {
+        this.activeVideoSessions.delete(sessionId);
+        console.log(`🎥 [LEAVE-VIDEO-CALL] Cleaned up empty video session ${sessionId}`);
+      }
+      
+      // Notify remaining participants
+      this.roomManagerInterface.broadcastToRoom(sessionId, {
+        type: 'video-call-user-left',
+        userId: userId,
+        userEmail: userEmail,
+        sessionId: sessionId,
+        totalParticipants: participants.size
+      }, ws);
+    }
   }
 
   /**
-   * Handle mute toggle
-   */
-  handleMuteToggle(ws, data) {
-    const { sessionId, isMuted } = data;
-    
-    console.log(`🎥 [MUTE-TOGGLE] ${ws.userEmail} ${isMuted ? 'muted' : 'unmuted'} in session ${sessionId}`);
-    
-    // Notify all users in session about mute status change
-    this.roomManagerInterface.broadcastToRoom(sessionId, {
-      type: 'video-user-mute-changed',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
-      isMuted: isMuted,
-      sessionId: sessionId,
-      timestamp: new Date().toISOString()
-    }, ws);
-  }
-
-  /**
-   * Handle camera toggle
-   */
-  handleCameraToggle(ws, data) {
-    const { sessionId, cameraEnabled } = data;
-    
-    console.log(`🎥 [CAMERA-TOGGLE] ${ws.userEmail} ${cameraEnabled ? 'enabled' : 'disabled'} camera in session ${sessionId}`);
-    
-    // Notify all users in session about camera status change
-    this.roomManagerInterface.broadcastToRoom(sessionId, {
-      type: 'video-user-camera-changed',
-      userId: ws.userId,
-      userEmail: ws.userEmail,
-      cameraEnabled: cameraEnabled,
-      sessionId: sessionId,
-      timestamp: new Date().toISOString()
-    }, ws);
-  }
-
-  /**
-   * Handle user disconnect
+   * Handle user disconnect - automatic cleanup
    */
   handleUserDisconnect(ws) {
     if (ws.sessionId && ws.userId) {
       console.log(`🎥 [USER-DISCONNECT] ${ws.userEmail} disconnected, cleaning up video call state`);
       
-      // Notify session about user leaving any active calls
-      this.roomManagerInterface.broadcastToRoom(ws.sessionId, {
-        type: 'video-call-user-disconnected',
-        userId: ws.userId,
-        userEmail: ws.userEmail,
-        sessionId: ws.sessionId,
-        timestamp: new Date().toISOString()
-      }, ws);
+      // Auto-leave any video calls
+      this.handleLeaveVideoCall(ws, { sessionId: ws.sessionId });
     }
+  }
+
+  /**
+   * Get active video sessions
+   */
+  getActiveVideoSessions() {
+    const sessions = {};
+    this.activeVideoSessions.forEach((participants, sessionId) => {
+      sessions[sessionId] = {
+        participantCount: participants.size,
+        participants: Array.from(participants)
+      };
+    });
+    return sessions;
   }
 
   /**
@@ -256,8 +252,10 @@ class VideoSignalingManager {
    */
   getVideoCallStats() {
     return {
-      activeCallsCount: this.activeVideoCalls.size,
-      activeCalls: Array.from(this.activeVideoCalls.keys())
+      activeSessionsCount: this.activeVideoSessions.size,
+      totalParticipants: Array.from(this.activeVideoSessions.values())
+        .reduce((total, participants) => total + participants.size, 0),
+      sessions: this.getActiveVideoSessions()
     };
   }
 
@@ -265,7 +263,7 @@ class VideoSignalingManager {
    * Cleanup manager resources
    */
   cleanup() {
-    this.activeVideoCalls.clear();
+    this.activeVideoSessions.clear();
     console.log('🎥 Video Signaling Manager cleaned up');
   }
 }

@@ -109,7 +109,8 @@ class CodeLabServer {
           uptime: Math.round(process.uptime()),
           version: '2.0.0',
           environment: process.env.NODE_ENV || 'development',
-          port: this.port
+          port: this.port,
+          videoSignaling: this.yjsServer ? this.yjsServer.getVideoSignalingStats() : null
         };
         
         // If database is disconnected, return 503
