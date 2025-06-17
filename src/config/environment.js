@@ -14,12 +14,6 @@ export const env = {
   API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001',
   WEBSOCKET_URL: import.meta.env.VITE_WS_URL || import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:3001',
   
-  // TURN Server Configuration (Optional - for video calling)
-  TURN_SERVER_URL: import.meta.env.VITE_TURN_SERVER_URL,
-  TURN_SERVER_URL_BACKUP: import.meta.env.VITE_TURN_SERVER_URL_BACKUP,
-  TURN_USERNAME: import.meta.env.VITE_TURN_USERNAME,
-  TURN_PASSWORD: import.meta.env.VITE_TURN_PASSWORD,
-  
   // Environment
   NODE_ENV: import.meta.env.VITE_NODE_ENV || import.meta.env.MODE || 'development',
   

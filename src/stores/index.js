@@ -8,7 +8,6 @@ export { default as useEditorStore } from './editorStore';
 export { useSessionStore } from './sessionStore';
 export { default as useFileManagerStore } from './fileManagerStore';
 export { default as useDialogStore } from './dialogStore';
-export { default as useMediaStore } from './mediaStore';
 export { default as useChatStore } from './chatStore';
 
 // New enhanced stores

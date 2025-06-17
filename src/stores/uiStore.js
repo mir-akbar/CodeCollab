@@ -15,7 +15,7 @@ const useUIStore = create()(
 
         // Active tabs across the application  
         activeSessionTab: 'all', // all, shared, favorites
-        activeCollaborationTab: 'chat', // chat, video, settings
+        activeCollaborationTab: 'chat', // chat, video
         activeFileManagerTab: 'files', // files, upload
 
         // Selected items
