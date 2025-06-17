@@ -64,14 +64,29 @@ class CodeLabServer {
     console.log('🔧 Setting up middleware...');
 
     // CORS configuration
+    const allowedOrigins = [
+      config.FRONTEND_URL,
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:3000"
+    ];
+
+    // Add production frontend URL if different from FRONTEND_URL
+    if (process.env.NODE_ENV === 'production') {
+      allowedOrigins.push(
+        "https://codecollab-frontend-production.up.railway.app",
+        process.env.CORS_ORIGIN
+      );
+    }
+
+    // Debug CORS origins in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔍 CORS allowed origins:', allowedOrigins.filter(Boolean));
+    }
+
     this.app.use(cors({
-      origin: [
-        config.FRONTEND_URL || "http://localhost:5173",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000"
-      ],
+      origin: allowedOrigins.filter(Boolean), // Remove any undefined values
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token']

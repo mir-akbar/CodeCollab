@@ -48,6 +48,7 @@ const config = {
   
   // CORS Configuration
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   
   // WebRTC Configuration for Video Chat
   STUN_SERVER_URL: process.env.STUN_SERVER_URL || 'stun:stun.l.google.com:19302',
