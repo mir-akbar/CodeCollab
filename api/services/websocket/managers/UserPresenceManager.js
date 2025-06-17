@@ -69,7 +69,17 @@ class UserPresenceManager {
     
     // Check if this is a video session and send call status
     if (docName && docName.startsWith('video-')) {
-      const sessionId = docName.replace('video-', '');
+      // Extract sessionId from video room name formats:
+      // Format: "video-sessionId/video-sessionId" -> extract the sessionId part
+      let sessionId = docName.replace(/^video-/, '');
+      
+      // If it contains a slash and duplicate video room name, extract just the sessionId
+      if (sessionId.includes('/video-')) {
+        sessionId = sessionId.split('/video-')[0];
+      }
+      
+      console.log(`📹 [USER-PRESENCE] Video session detected for user ${ws.userEmail}, sessionId: ${sessionId}, roomName: ${docName}`);
+      
       // Get the video call manager from the server and send call status
       if (this.videoCallManager) {
         this.videoCallManager.sendCallStatusToUser(ws, sessionId);

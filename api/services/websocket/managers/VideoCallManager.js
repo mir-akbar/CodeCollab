@@ -449,6 +449,9 @@ class VideoCallManager {
    */
   sendCallStatusToUser(ws, sessionId) {
     console.log(`📊 [VIDEO-STATUS] Checking call status for ${ws.userEmail} (${ws.userId}) in session ${sessionId}`);
+    console.log(`📊 [VIDEO-STATUS] Active calls: ${this.activeVideoCalls.size}, Call participants: ${this.callParticipants.size}`);
+    console.log(`📊 [VIDEO-STATUS] Active call keys:`, Array.from(this.activeVideoCalls.keys()));
+    console.log(`📊 [VIDEO-STATUS] Call participant keys:`, Array.from(this.callParticipants.keys()));
     
     if (this.hasActiveCall(sessionId)) {
       const callInfo = this.activeVideoCalls.get(sessionId);
@@ -478,6 +481,10 @@ class VideoCallManager {
       }
     } else {
       console.log(`📊 [VIDEO-STATUS] No active call in session ${sessionId} for ${ws.userEmail}`);
+      console.log(`📊 [VIDEO-STATUS] hasActiveCall check details:`);
+      console.log(`📊 [VIDEO-STATUS] - activeVideoCalls.has(${sessionId}): ${this.activeVideoCalls.has(sessionId)}`);
+      console.log(`📊 [VIDEO-STATUS] - callParticipants.has(${sessionId}): ${this.callParticipants.has(sessionId)}`);
+      console.log(`📊 [VIDEO-STATUS] - participantCount: ${this.callParticipants.get(sessionId)?.size || 0}`);
       
       // Send "no active call" status to clear any stale state
       const statusMessage = {

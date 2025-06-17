@@ -576,12 +576,19 @@ export default function VideoPanel() {
             </div>
           </div>
         </div>
-      )}{/* Permission check component - conditional wrapper */}      
-      <SingletonPermissionCheck 
+      )}{/* Permission check component - conditional wrapper */}        <SingletonPermissionCheck 
         onPermissionGranted={() => {
-          // Re-attempt to join the call if permissions are granted
+          // Choose appropriate action based on call state
           if (!isInCall) {
-            handleJoinCall();
+            if (canJoinCall) {
+              console.log(`🎬 [PERMISSION-GRANTED] Joining existing call`);
+              handleJoinCall();
+            } else if (!hasActiveCall) {
+              console.log(`🎬 [PERMISSION-GRANTED] Starting new call`);
+              handleStartCall();
+            } else {
+              console.log(`🎬 [PERMISSION-GRANTED] Waiting for call to become joinable`);
+            }
           }
         }}
         isLoading={isLoading}

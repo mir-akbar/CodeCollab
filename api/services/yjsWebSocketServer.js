@@ -100,8 +100,18 @@ class YjsWebSocketServer {
       // Check if this is a video session and send call status
       const isVideoSession = docName.startsWith('video-');
       if (isVideoSession) {
-        // Extract sessionId from video room name: "video-sessionId" -> "sessionId"
-        const sessionId = docName.replace(/^video-/, '');
+        // Extract sessionId from video room name formats:
+        // Format: "video-sessionId/video-sessionId" -> extract the sessionId part
+        let sessionId = docName;
+        
+        // Remove the "video-" prefix
+        sessionId = sessionId.replace(/^video-/, '');
+        
+        // If it contains a slash and duplicate video room name, extract just the sessionId
+        if (sessionId.includes('/video-')) {
+          sessionId = sessionId.split('/video-')[0];
+        }
+        
         console.log(`📹 [WEBSOCKET-CONNECT] Video session detected for sessionId: ${sessionId}, roomName: ${docName}`);
         setTimeout(() => {
           this.videoCallManager.sendCallStatusToUser(ws, sessionId);
