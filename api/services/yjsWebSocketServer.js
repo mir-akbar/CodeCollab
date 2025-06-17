@@ -98,10 +98,11 @@ class YjsWebSocketServer {
       console.log(`🏠 [WEBSOCKET-CONNECT] Added client to room ${docName}, total connections: ${this.roomManager.getConnectionCount(docName)}`);
       
       // Check if this is a video session and send call status
-      const isVideoSession = docName.includes('video-');
+      const isVideoSession = docName.startsWith('video-');
       if (isVideoSession) {
-        const sessionId = docName.replace('video-', '');
-        console.log(`📹 [WEBSOCKET-CONNECT] Video session detected: ${sessionId}`);
+        // Extract sessionId from video room name: "video-sessionId" -> "sessionId"
+        const sessionId = docName.replace(/^video-/, '');
+        console.log(`📹 [WEBSOCKET-CONNECT] Video session detected for sessionId: ${sessionId}, roomName: ${docName}`);
         setTimeout(() => {
           this.videoCallManager.sendCallStatusToUser(ws, sessionId);
         }, 100); // Small delay to ensure connection is fully established

@@ -114,7 +114,7 @@ class VideoCallManager {
     }, ws);
     
     // CRITICAL FIX: Also broadcast to video room for users who are only on video tab
-    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    const videoRoomName = `video-${sessionId}`;
     this.roomManager.broadcastToRoom(videoRoomName, {
       type: 'video-call-started',
       sessionId,
@@ -182,7 +182,7 @@ class VideoCallManager {
     // Broadcast to both session room and video room
     this.roomManager.broadcastToRoom(sessionId, userJoinedMessage, ws);
     
-    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    const videoRoomName = `video-${sessionId}`;
     this.roomManager.broadcastToRoom(videoRoomName, userJoinedMessage, ws);
     
     console.log(`✅ [VIDEO-CALL-JOIN] Successfully processed join for ${ws.userEmail} in session ${sessionId}`);
@@ -240,7 +240,7 @@ class VideoCallManager {
     // Broadcast to both session room and video room
     this.roomManager.broadcastToRoom(sessionId, userLeftMessage, ws);
     
-    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    const videoRoomName = `video-${sessionId}`;
     this.roomManager.broadcastToRoom(videoRoomName, userLeftMessage, ws);
     
     console.log(`✅ [VIDEO-CALL-LEAVE] Successfully processed leave for ${ws.userEmail} in session ${sessionId}`);
@@ -459,8 +459,8 @@ class VideoCallManager {
       console.log(`📊 [VIDEO-STATUS] - Initiator: ${callInfo.initiator.email} (${callInfo.initiator.userId})`);
       console.log(`📊 [VIDEO-STATUS] - Started at: ${callInfo.startedAt}`);
       
-      // Send call status to the newly connected user
-      this.roomManager.sendToUser(sessionId, ws.userId, {
+      // Send call status directly to the WebSocket connection
+      const statusMessage = {
         type: 'video-call-status',
         sessionId,
         hasActiveCall: true,
@@ -468,11 +468,30 @@ class VideoCallManager {
         initiator: callInfo.initiator,
         startedAt: callInfo.startedAt,
         timestamp: new Date().toISOString()
-      });
+      };
       
-      console.log(`✅ [VIDEO-STATUS] Sent active call status to ${ws.userEmail}: ${participantCount} participants`);
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(statusMessage));
+        console.log(`✅ [VIDEO-STATUS] Sent active call status directly to ${ws.userEmail}: ${participantCount} participants`);
+      } else {
+        console.log(`⚠️ [VIDEO-STATUS] WebSocket not open for ${ws.userEmail}, cannot send status`);
+      }
     } else {
       console.log(`📊 [VIDEO-STATUS] No active call in session ${sessionId} for ${ws.userEmail}`);
+      
+      // Send "no active call" status to clear any stale state
+      const statusMessage = {
+        type: 'video-call-status',
+        sessionId,
+        hasActiveCall: false,
+        participantCount: 0,
+        timestamp: new Date().toISOString()
+      };
+      
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(statusMessage));
+        console.log(`✅ [VIDEO-STATUS] Sent 'no active call' status to ${ws.userEmail}`);
+      }
     }
   }
 
@@ -523,7 +542,7 @@ class VideoCallManager {
       
       this.roomManager.broadcastToRoom(sessionId, endedMessage);
       
-      const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+      const videoRoomName = `video-${sessionId}`;
       this.roomManager.broadcastToRoom(videoRoomName, endedMessage);
       
       this.callParticipants.delete(sessionId);
@@ -566,7 +585,7 @@ class VideoCallManager {
     
     this.roomManager.broadcastToRoom(sessionId, endedMessage);
     
-    const videoRoomName = `video-${sessionId}/video-${sessionId}`;
+    const videoRoomName = `video-${sessionId}`;
     this.roomManager.broadcastToRoom(videoRoomName, endedMessage);
     
     console.log(`✅ [VIDEO-CALL-END] Successfully ended call for ${ws.userEmail} in session ${sessionId}`);
