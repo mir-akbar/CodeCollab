@@ -30,8 +30,9 @@ class VideoSignalingClient {
     }
 
     this.sessionId = sessionId;
+    this.user = user; // Store user for reconnection
     
-    // Create WebSocket URL for video signaling
+    // Create WebSocket URL for video signaling - use the same Y.js WebSocket path
     const wsUrl = `${WEB_SOCKET_API_URL}/video-signaling/${sessionId}`;
     
     console.log(`🎥 [VIDEO-SIGNALING] Connecting to: ${wsUrl}`);
@@ -240,10 +241,9 @@ class VideoSignalingClient {
     console.log(`🎥 [VIDEO-SIGNALING] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
     
     setTimeout(() => {
-      if (!this.isConnected && this.sessionId) {
-        // We need user info to reconnect, this will need to be provided by the caller
+      if (!this.isConnected && this.sessionId && this.user) {
         console.log('🎥 [VIDEO-SIGNALING] Attempting reconnection...');
-        // Note: Reconnection will need user context from the VideoService
+        this.connect(this.sessionId, this.user);
       }
     }, delay);
   }
@@ -269,6 +269,7 @@ class VideoSignalingClient {
     }
     
     this.sessionId = null;
+    this.user = null;
     this.reconnectAttempts = 0;
   }
 

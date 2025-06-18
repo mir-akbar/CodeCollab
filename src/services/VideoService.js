@@ -10,6 +10,7 @@ class VideoService {
   constructor() {
     this.signalingClient = new VideoSignalingClient();
     this.peerConnections = new Map(); // Map<userId, RTCPeerConnection>
+    this.pendingIceCandidates = new Map(); // Map<userId, Array<RTCIceCandidate>>
     this.localStream = null;
     this.user = null;
     this.sessionId = null;
@@ -17,19 +18,30 @@ class VideoService {
     // WebRTC configuration with environment-based STUN/TURN servers
     this.pcConfig = {
       iceServers: [
+        // Google STUN servers (reliable and fast)
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' }
       ]
     };
     
-    // Add TURN server if available for Railway/production
+    // Add more STUN servers for better reliability in production
     if (env.IS_PRODUCTION) {
-      // In production, add more robust STUN servers and TURN if needed
+      // Add additional reliable STUN servers for redundancy
       this.pcConfig.iceServers.push(
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' }
+        { urls: 'stun:stun4.l.google.com:19302' },
+        // Mozilla's STUN server as backup
+        { urls: 'stun:stun.services.mozilla.com' },
+        // Additional reliable STUN servers
+        { urls: 'stun:stun.ekiga.net' },
+        { urls: 'stun:stun.freeswitch.org' }
       );
     }
+    
+    // Note: For enterprise/production deployments behind strict firewalls,
+    // you may need to add TURN servers for relay traffic:
+    // { urls: 'turn:your-turn-server.com:3478', username: 'user', credential: 'pass' }
     
     this.setupSignalingHandlers();
   }
@@ -215,16 +227,30 @@ class VideoService {
       pc = this.createPeerConnection(fromUserId);
     }
     
-    // Set remote description
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    
-    // Create and send answer
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    
-    this.signalingClient.sendAnswer(fromUserId, answer);
-    
-    console.log(`🎥 [VIDEO-SERVICE] Sent answer to: ${fromUserId}`);
+    // Check peer connection state before setting remote description
+    if (pc.signalingState === 'stable' || pc.signalingState === 'have-remote-offer') {
+      try {
+        // Set remote description
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Create and send answer
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        
+        this.signalingClient.sendAnswer(fromUserId, answer);
+        
+        console.log(`🎥 [VIDEO-SERVICE] Sent answer to: ${fromUserId}`);
+        
+        // Process any pending ICE candidates now that remote description is set
+        await this.processPendingIceCandidates(fromUserId);
+        
+      } catch (error) {
+        console.error(`🎥 [VIDEO-SERVICE] Failed to handle offer from ${fromUserId}:`, error);
+        console.log(`🎥 [VIDEO-SERVICE] Peer connection state for ${fromUserId}: ${pc.signalingState}`);
+      }
+    } else {
+      console.warn(`🎥 [VIDEO-SERVICE] Ignoring offer from ${fromUserId} - wrong state: ${pc.signalingState}`);
+    }
   }
 
   /**
@@ -237,8 +263,23 @@ class VideoService {
     
     const pc = this.peerConnections.get(fromUserId);
     if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log(`🎥 [VIDEO-SERVICE] Set remote description for: ${fromUserId}`);
+      // Check peer connection state before setting remote description
+      if (pc.signalingState === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log(`🎥 [VIDEO-SERVICE] Set remote description for: ${fromUserId}`);
+          
+          // Process any pending ICE candidates now that remote description is set
+          await this.processPendingIceCandidates(fromUserId);
+          
+        } catch (error) {
+          console.error(`🎥 [VIDEO-SERVICE] Failed to set remote answer for ${fromUserId}:`, error);
+          // Log the current state for debugging
+          console.log(`🎥 [VIDEO-SERVICE] Peer connection state for ${fromUserId}: ${pc.signalingState}`);
+        }
+      } else {
+        console.warn(`🎥 [VIDEO-SERVICE] Ignoring answer from ${fromUserId} - wrong state: ${pc.signalingState}`);
+      }
     } else {
       console.error(`🎥 [VIDEO-SERVICE] No peer connection found for: ${fromUserId}`);
     }
@@ -254,9 +295,48 @@ class VideoService {
     
     const pc = this.peerConnections.get(fromUserId);
     if (pc) {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      // Check if remote description is set before adding ICE candidate
+      if (pc.remoteDescription) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log(`🎥 [VIDEO-SERVICE] Added ICE candidate from: ${fromUserId}`);
+        } catch (error) {
+          console.error(`🎥 [VIDEO-SERVICE] Failed to add ICE candidate from ${fromUserId}:`, error);
+        }
+      } else {
+        console.log(`🎥 [VIDEO-SERVICE] Queueing ICE candidate from ${fromUserId} - no remote description yet`);
+        // Queue ICE candidate for later processing
+        if (!this.pendingIceCandidates.has(fromUserId)) {
+          this.pendingIceCandidates.set(fromUserId, []);
+        }
+        this.pendingIceCandidates.get(fromUserId).push(candidate);
+      }
     } else {
       console.error(`🎥 [VIDEO-SERVICE] No peer connection found for: ${fromUserId}`);
+    }
+  }
+
+  /**
+   * Process pending ICE candidates for a user
+   */
+  async processPendingIceCandidates(userId) {
+    const pendingCandidates = this.pendingIceCandidates.get(userId);
+    if (pendingCandidates && pendingCandidates.length > 0) {
+      console.log(`🎥 [VIDEO-SERVICE] Processing ${pendingCandidates.length} pending ICE candidates for: ${userId}`);
+      
+      const pc = this.peerConnections.get(userId);
+      if (pc && pc.remoteDescription) {
+        for (const candidate of pendingCandidates) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (error) {
+            console.error(`🎥 [VIDEO-SERVICE] Failed to add pending ICE candidate for ${userId}:`, error);
+          }
+        }
+        
+        // Clear processed candidates
+        this.pendingIceCandidates.delete(userId);
+      }
     }
   }
 
@@ -344,6 +424,9 @@ class VideoService {
       pc.close();
       this.peerConnections.delete(userId);
     }
+    
+    // Clear pending ICE candidates
+    this.pendingIceCandidates.delete(userId);
     
     // Remove from store
     const store = useVideoStore.getState();
@@ -464,6 +547,9 @@ class VideoService {
       pc.close();
     });
     this.peerConnections.clear();
+    
+    // Clear pending ICE candidates
+    this.pendingIceCandidates.clear();
     
     // Cleanup store
     const store = useVideoStore.getState();

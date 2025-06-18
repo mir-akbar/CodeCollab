@@ -11,6 +11,10 @@ class VideoSignalingManager {
     // Track active video participants per session
     // Format: { sessionId: Set([userId1, userId2, ...]) }
     this.activeVideoSessions = new Map();
+    
+    // Track user info for video participants
+    // Format: { sessionId: Map(userId -> {userEmail, userId}) }
+    this.videoParticipantInfo = new Map();
   }
 
   /**
@@ -183,16 +187,26 @@ class VideoSignalingManager {
       this.activeVideoSessions.set(sessionId, new Set());
     }
     
-    const participants = this.activeVideoSessions.get(sessionId);
+    // Get or create participant info map for this session
+    if (!this.videoParticipantInfo.has(sessionId)) {
+      this.videoParticipantInfo.set(sessionId, new Map());
+    }
     
-    // Get current participants (before adding new user)
+    const participants = this.activeVideoSessions.get(sessionId);
+    const participantInfo = this.videoParticipantInfo.get(sessionId);
+    
+    // Get current participants WITH user info (before adding new user)
     const currentParticipants = Array.from(participants).map(participantId => {
-      // Find user info - we'll need to enhance this later
-      return { userId: participantId };
+      const info = participantInfo.get(participantId);
+      return {
+        userId: participantId,
+        userEmail: info ? info.userEmail : 'Unknown User'
+      };
     });
     
-    // Add user to participants
+    // Add user to participants and store user info
     participants.add(userId);
+    participantInfo.set(userId, { userId, userEmail });
     
     console.log(`🎥 [JOIN-VIDEO-CALL] Session ${sessionId} now has ${participants.size} participants`);
     
@@ -230,11 +244,17 @@ class VideoSignalingManager {
       const participants = this.activeVideoSessions.get(sessionId);
       participants.delete(userId);
       
+      // Remove user info
+      if (this.videoParticipantInfo.has(sessionId)) {
+        this.videoParticipantInfo.get(sessionId).delete(userId);
+      }
+      
       console.log(`🎥 [LEAVE-VIDEO-CALL] Session ${sessionId} now has ${participants.size} participants`);
       
       // Clean up empty sessions
       if (participants.size === 0) {
         this.activeVideoSessions.delete(sessionId);
+        this.videoParticipantInfo.delete(sessionId);
         console.log(`🎥 [LEAVE-VIDEO-CALL] Cleaned up empty video session ${sessionId}`);
       }
       
@@ -292,6 +312,7 @@ class VideoSignalingManager {
    */
   cleanup() {
     this.activeVideoSessions.clear();
+    this.videoParticipantInfo.clear();
     console.log('🎥 Video Signaling Manager cleaned up');
   }
 }
