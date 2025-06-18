@@ -178,10 +178,24 @@ class VideoService {
     pc.onconnectionstatechange = () => {
       console.log(`🎥 [VIDEO-SERVICE] Connection state for ${userId}: ${pc.connectionState}`);
       
-      if (pc.connectionState === 'failed') {
-        console.error(`🎥 [VIDEO-SERVICE] Connection failed for user: ${userId}`);
+      if (pc.connectionState === 'connected') {
+        console.log(`✅ [VIDEO-SERVICE] WebRTC connection established with ${userId}`);
+      } else if (pc.connectionState === 'failed') {
+        console.error(`❌ [VIDEO-SERVICE] Connection failed for user: ${userId}`);
         // Could attempt ICE restart here
+      } else if (pc.connectionState === 'disconnected') {
+        console.warn(`⚠️ [VIDEO-SERVICE] Connection disconnected for user: ${userId}`);
       }
+    };
+    
+    // Handle signaling state changes
+    pc.onsignalingstatechange = () => {
+      console.log(`🎥 [VIDEO-SERVICE] Signaling state for ${userId}: ${pc.signalingState}`);
+    };
+    
+    // Handle ICE connection state changes
+    pc.oniceconnectionstatechange = () => {
+      console.log(`🎥 [VIDEO-SERVICE] ICE connection state for ${userId}: ${pc.iceConnectionState}`);
     };
     
     this.peerConnections.set(userId, pc);
@@ -214,7 +228,7 @@ class VideoService {
   }
 
   /**
-   * Handle incoming offer
+   * Handle incoming offer with collision resolution
    */
   async handleOffer(message) {
     const { fromUserId, offer } = message;
@@ -225,6 +239,22 @@ class VideoService {
     let pc = this.peerConnections.get(fromUserId);
     if (!pc) {
       pc = this.createPeerConnection(fromUserId);
+    }
+    
+    // Handle offer collision - if we're already in "have-local-offer" state,
+    // use deterministic rule: user with lexicographically smaller ID becomes answerer
+    if (pc.signalingState === 'have-local-offer') {
+      const shouldAnswer = this.user.id < fromUserId;
+      
+      if (shouldAnswer) {
+        console.log(`🎥 [VIDEO-SERVICE] Resolving offer collision with ${fromUserId} - we become answerer`);
+        
+        // Cancel our local offer and accept the remote offer
+        await pc.setLocalDescription({type: 'rollback'});
+      } else {
+        console.log(`🎥 [VIDEO-SERVICE] Resolving offer collision with ${fromUserId} - ignoring their offer, we remain offerer`);
+        return; // Ignore their offer, we should remain the offerer
+      }
     }
     
     // Check peer connection state before setting remote description
@@ -406,7 +436,7 @@ class VideoService {
       peerConnection: null
     });
     
-    // Create offer to new user
+    // Create offer to new user (with collision avoidance built-in)
     await this.createOfferToUser(userId);
   }
 
@@ -434,9 +464,18 @@ class VideoService {
   }
 
   /**
-   * Create offer to a specific user
+   * Create offer to a specific user with collision avoidance
    */
   async createOfferToUser(userId) {
+    // Use deterministic rule to avoid offer collisions:
+    // Only the user with lexicographically larger ID creates offers
+    const shouldCreateOffer = this.user.id > userId;
+    
+    if (!shouldCreateOffer) {
+      console.log(`🎥 [VIDEO-SERVICE] Skipping offer creation to ${userId} - collision avoidance (waiting for their offer)`);
+      return;
+    }
+    
     console.log(`🎥 [VIDEO-SERVICE] Creating offer to user: ${userId}`);
     
     try {
@@ -444,6 +483,12 @@ class VideoService {
       let pc = this.peerConnections.get(userId);
       if (!pc) {
         pc = this.createPeerConnection(userId);
+      }
+      
+      // Only create offer if in stable state
+      if (pc.signalingState !== 'stable') {
+        console.log(`🎥 [VIDEO-SERVICE] Skipping offer to ${userId} - peer connection not in stable state: ${pc.signalingState}`);
+        return;
       }
       
       // Create and send offer
