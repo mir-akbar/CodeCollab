@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { SessionTabs, SessionFilters } from '../SessionNavigation';
 import { SessionList, SessionCardSkeleton } from '../SessionDisplay';
 import { SessionFooter } from '../SessionUI';
-import { CreateSessionDialog, InvitationDialog, DeleteSessionDialog } from '../dialogs';
+import { CreateSessionDialog, InvitationDialog, DeleteSessionDialog, UserManagementDialog } from '../dialogs';
 import { PendingInvitations } from '../../PendingInvitations';
 import { 
   Plus, 
@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSessionStore, useUIStore } from '@/stores';
+import useDialogStore from '@/stores/dialogStore';
 import { 
   useSessionsWithInvitations
 } from '@/hooks/sessions';
@@ -62,6 +63,12 @@ export function SessionManager({ userEmail }) {
     loadingStates, 
     setLoading 
   } = useSessionStore();
+
+  // Dialog store for user management
+  const {
+    userManagement,
+    setUserManagementOpen
+  } = useDialogStore();
 
   // Coordinated data fetching for better synchronization
   const { sessions: sessionsQuery, invitations: invitationsQuery, refreshBoth } = useSessionsWithInvitations();
@@ -94,6 +101,15 @@ export function SessionManager({ userEmail }) {
    */
   const handleDeleteSession = (session) => {
     openDialog('delete', session);
+  };
+
+  /**
+   * Handles user management dialog opening
+   * @function
+   * @param {Object} session - Session to manage users for
+   */
+  const handleManageUsers = (session) => {
+    setUserManagementOpen(true, session);
   };
 
   /**
@@ -239,6 +255,7 @@ export function SessionManager({ userEmail }) {
                 userEmail={userEmail}
                 onInvite={handleInviteUser}
                 onDelete={handleDeleteSession}
+                onManage={handleManageUsers}
               />
             </div>
           </div>
@@ -265,6 +282,12 @@ export function SessionManager({ userEmail }) {
         open={dialogs.delete}
         onClose={closeDeleteDialog}
         session={dialogs.activeData}
+        userEmail={userEmail}
+      />
+
+      {/* User Management Dialog (single instance, correct session) */}
+      <UserManagementDialog
+        session={userManagement.activeSession}
         userEmail={userEmail}
       />
     </div>

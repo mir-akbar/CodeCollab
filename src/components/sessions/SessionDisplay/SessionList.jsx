@@ -14,6 +14,7 @@
  * @param {string} props.userEmail - Current user's email for permissions
  * @param {Function} props.onInvite - Callback when invite button is clicked
  * @param {Function} [props.onDelete] - Optional callback when delete button is clicked
+ * @param {Function} [props.onManage] - Optional callback when manage button is clicked
  * 
  * @example
  * ```jsx
@@ -23,6 +24,7 @@
  *   userEmail="user@example.com"
  *   onInvite={handleInvite}
  *   onDelete={handleDelete}
+ *   onManage={handleManage}
  * />
  * ```
  */
@@ -39,7 +41,8 @@ export const SessionList = ({
   isLoading = false, 
   userEmail, 
   onInvite,
-  onDelete
+  onDelete,
+  onManage
 }) => {
   // Filter out null/undefined sessions (backend now provides consistent data structure)
   // No need for normalization since backend transformSessionForResponse ensures consistency
@@ -90,6 +93,7 @@ export const SessionList = ({
             userEmail={userEmail}
             onInvite={() => onInvite(session)}
             onDelete={onDelete ? () => onDelete(session) : undefined}
+            onManage={onManage ? () => onManage(session) : undefined}
           />
         );
       })}
@@ -153,5 +157,13 @@ SessionList.propTypes = {
    * @type {Function}
    * @optional
    */
-  onDelete: PropTypes.func
+  onDelete: PropTypes.func,
+  
+  /** 
+   * Optional callback function when manage button is clicked.
+   * Receives session object as parameter.
+   * @type {Function}
+   * @optional
+   */
+  onManage: PropTypes.func
 };

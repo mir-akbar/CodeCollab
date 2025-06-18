@@ -14,6 +14,7 @@
  * @param {string} props.userEmail - Current user's email for permissions
  * @param {Function} props.onInvite - Callback for opening invitation dialog
  * @param {Function} [props.onDelete] - Optional callback for handling deletion (opens dialog)
+ * @param {Function} [props.onManage] - Optional callback for opening user management dialog
  * 
  * @example
  * ```jsx
@@ -28,6 +29,7 @@
  *   userEmail="user@example.com"
  *   onInvite={handleInviteDialog}
  *   onDelete={handleDeleteDialog}
+ *   onManage={handleManageDialog}
  * />
  * ```
  */
@@ -44,7 +46,6 @@ import { getUserRole, canDeleteSession, canManageParticipants, getRoleDisplayNam
 import { navigateToSession } from '@/utils/sessionUtils';
 import { useDeleteSession, useLeaveSession, useSessionParticipants } from '@/hooks/sessions';
 import { useFavorites } from '@/hooks/useFavorites';
-import { UserManagementDialog } from '../dialogs';
 import { 
   formatSessionDate,
   getParticipantCount,
@@ -56,7 +57,8 @@ export const SessionCard = ({
   session,
   userEmail,
   onInvite,
-  onDelete
+  onDelete,
+  onManage
 }) => {
   const { toggleFavorite, isFavorite } = useFavorites();
   const deleteSessionMutation = useDeleteSession();
@@ -153,6 +155,16 @@ export const SessionCard = ({
     toggleFavorite(activeSession.id || activeSession.sessionId);
   };
 
+  /**
+   * Handles opening user management dialog
+   * @function
+   */
+  const handleManage = () => {
+    if (onManage) {
+      onManage(activeSession);
+    }
+  };
+
   return (
     <motion.div 
       className="border rounded-lg p-4 shadow-sm space-y-3 bg-card hover:shadow-md transition-shadow h-[240px] flex flex-col"
@@ -233,20 +245,15 @@ export const SessionCard = ({
           )}
         </div>
         {permissions.canManage && (
-          <UserManagementDialog 
-            session={activeSession} 
-            userEmail={userEmail}
-            onInvite={onInvite}
+          <Button 
+            variant="secondary" 
+            size="sm"
+            className="gap-1"
+            onClick={handleManage}
           >
-            <Button 
-              variant="secondary" 
-              size="sm"
-              className="gap-1"
-            >
-              <Settings className="h-4 w-4" />
-              <span>Manage</span>
-            </Button>
-          </UserManagementDialog>
+            <Settings className="h-4 w-4" />
+            <span>Manage</span>
+          </Button>
         )}
       </div>
 
@@ -356,7 +363,15 @@ SessionCard.propTypes = {
    * @type {Function}
    * @optional
    */
-  onDelete: PropTypes.func
+  onDelete: PropTypes.func,
+  
+  /** 
+   * Optional callback function for opening user management dialog.
+   * Receives session object as parameter.
+   * @type {Function}
+   * @optional
+   */
+  onManage: PropTypes.func
 };
 
 export default SessionCard;

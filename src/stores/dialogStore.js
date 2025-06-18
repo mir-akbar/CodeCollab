@@ -25,7 +25,8 @@ const useDialogStore = create()(
       // User Management Dialog
       userManagement: {
         userToRemove: null,
-        isOpen: false
+        isOpen: false,
+        activeSession: null
       },
       
       // Delete Session Dialog
@@ -78,12 +79,20 @@ const useDialogStore = create()(
         userManagement: { ...state.userManagement, userToRemove: user }
       }), false, 'setUserToRemove'),
       
-      setUserManagementOpen: (isOpen) => set((state) => ({
-        userManagement: { ...state.userManagement, isOpen }
+      setUserManagementOpen: (isOpen, session = null) => set((state) => ({
+        userManagement: { 
+          ...state.userManagement, 
+          isOpen,
+          activeSession: isOpen ? session || state.userManagement.activeSession : null
+        }
       }), false, 'setUserManagementOpen'),
       
+      setUserManagementActiveSession: (session) => set((state) => ({
+        userManagement: { ...state.userManagement, activeSession: session }
+      }), false, 'setUserManagementActiveSession'),
+      
       resetUserManagement: () => set({
-        userManagement: { userToRemove: null, isOpen: false }
+        userManagement: { userToRemove: null, isOpen: false, activeSession: null }
       }, false, 'resetUserManagement'),
 
       // Actions for Delete Session Dialog
