@@ -76,6 +76,7 @@ const ROLE_OPTIONS = [
 export function InvitationDialog({ 
   open, 
   onClose, 
+  onSuccess,
   session 
 }) {
   // Zustand state
@@ -167,7 +168,11 @@ export function InvitationDialog({
       
       // Reset form and close dialog
       resetForm();
-      onClose();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        onClose();
+      }
       
     } catch (error) {
       console.error('Invitation error:', error);
@@ -185,7 +190,7 @@ export function InvitationDialog({
     } finally {
       setInvitationSubmitting(false);
     }
-  }, [email, role, session, validateEmail, inviteUser, userEmail, onClose, resetForm, setInvitationSubmitting]);
+  }, [email, role, session, validateEmail, inviteUser, userEmail, onClose, onSuccess, resetForm, setInvitationSubmitting]);
 
   /**
    * Handles dialog close with form cleanup
@@ -310,6 +315,8 @@ InvitationDialog.propTypes = {
   open: PropTypes.bool.isRequired,
   /** Callback function called when dialog should close */
   onClose: PropTypes.func.isRequired,
+  /** Callback function called when invitation is successfully sent */
+  onSuccess: PropTypes.func,
   /** Session object containing invitation details */
   session: PropTypes.shape({
     /** Legacy session identifier */
