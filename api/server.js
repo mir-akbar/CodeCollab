@@ -41,6 +41,7 @@ const userRoutes = require('./routes/user');
 const fileRoutes = require('./routes/files'); // Unified file management
 const fileVersionRoutes = require('./routes/fileVersions');
 const executeRoutes = require('./routes/execute');
+// Note: videoTurnRoutes removed - using OpenRelay TURN servers instead
 
 /**
  * CodeLab API Server Class

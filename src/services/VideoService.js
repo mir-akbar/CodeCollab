@@ -11,6 +11,7 @@ class VideoService {
     this.signalingClient = new VideoSignalingClient();
     this.peerConnections = new Map(); // Map<userId, RTCPeerConnection>
     this.pendingIceCandidates = new Map(); // Map<userId, Array<RTCIceCandidate>>
+    this.restartTimeouts = new Map(); // Map<userId, timeoutId> for connection recovery
     this.localStream = null;
     this.user = null;
     this.sessionId = null;
@@ -18,12 +19,23 @@ class VideoService {
     // WebRTC configuration with environment-based STUN/TURN servers
     this.pcConfig = {
       iceServers: [
-        // Google STUN servers (reliable and fast)
+        // Free Cloudflare STUN server (unlimited usage)
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        // Google STUN servers as backup
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' }
-      ]
+        // Additional reliable STUN servers
+        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: 'stun:stun.ekiga.net' }
+        // Note: TURN servers require signup/API keys
+        // See addFreeTurnServers() method for dynamic TURN integration
+      ],
+      // More aggressive ICE settings for better connectivity
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     };
     
     // Add more STUN servers for better reliability in production
@@ -89,6 +101,9 @@ class VideoService {
     store.setCallError(null);
     
     try {
+      // Proactively set up TURN servers for better connectivity
+      await this.setupTurnServers();
+      
       // Get user media
       await this.getLocalMedia();
       
@@ -102,6 +117,31 @@ class VideoService {
       store.setCallError(error.message);
       store.setCallState(false, false);
       throw error;
+    }
+  }
+
+  /**
+   * Setup TURN servers proactively for better connectivity
+   */
+  async setupTurnServers() {
+    // Check if TURN servers are already configured
+    if (this.pcConfig.iceServers.some(server => server.urls.includes('turn:'))) {
+      console.log('🎯 [VIDEO-SERVICE] TURN servers already configured');
+      return;
+    }
+    
+    const openRelayApiKey = import.meta.env.VITE_OPENRELAY_API_KEY;
+    
+    if (openRelayApiKey) {
+      try {
+        console.log('🔧 [VIDEO-SERVICE] Setting up OpenRelay TURN servers proactively...');
+        await this.addOpenRelayTurn(openRelayApiKey);
+        console.log('✅ [VIDEO-SERVICE] OpenRelay TURN servers ready for enhanced connectivity');
+      } catch (error) {
+        console.log('⚠️ [VIDEO-SERVICE] OpenRelay setup failed, continuing with STUN-only:', error.message);
+      }
+    } else {
+      console.log('📡 [VIDEO-SERVICE] No OpenRelay API key configured, using STUN-only mode');
     }
   }
 
@@ -174,17 +214,21 @@ class VideoService {
       }
     };
     
-    // Handle connection state changes
+    // Handle connection state changes with recovery
     pc.onconnectionstatechange = () => {
       console.log(`🎥 [VIDEO-SERVICE] Connection state for ${userId}: ${pc.connectionState}`);
       
       if (pc.connectionState === 'connected') {
         console.log(`✅ [VIDEO-SERVICE] WebRTC connection established with ${userId}`);
+        // Clear any existing restart timeout
+        this.clearRestartTimeout(userId);
       } else if (pc.connectionState === 'failed') {
-        console.error(`❌ [VIDEO-SERVICE] Connection failed for user: ${userId}`);
-        // Could attempt ICE restart here
+        console.error(`❌ [VIDEO-SERVICE] Connection failed for user: ${userId} - attempting ICE restart`);
+        this.attemptICERestart(userId);
       } else if (pc.connectionState === 'disconnected') {
-        console.warn(`⚠️ [VIDEO-SERVICE] Connection disconnected for user: ${userId}`);
+        console.warn(`⚠️ [VIDEO-SERVICE] Connection disconnected for user: ${userId} - monitoring for recovery`);
+        // Set a timeout to restart if it doesn't recover
+        this.setRestartTimeout(userId, 5000); // 5 second timeout
       }
     };
     
@@ -193,9 +237,20 @@ class VideoService {
       console.log(`🎥 [VIDEO-SERVICE] Signaling state for ${userId}: ${pc.signalingState}`);
     };
     
-    // Handle ICE connection state changes
+    // Handle ICE connection state changes with recovery
     pc.oniceconnectionstatechange = () => {
       console.log(`🎥 [VIDEO-SERVICE] ICE connection state for ${userId}: ${pc.iceConnectionState}`);
+      
+      if (pc.iceConnectionState === 'failed') {
+        console.error(`❌ [VIDEO-SERVICE] ICE connection failed for user: ${userId} - attempting restart`);
+        this.attemptICERestart(userId);
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.warn(`⚠️ [VIDEO-SERVICE] ICE disconnected for user: ${userId} - will attempt restart if not recovered`);
+        this.setRestartTimeout(userId, 3000); // 3 second timeout for ICE
+      } else if (pc.iceConnectionState === 'connected') {
+        console.log(`✅ [VIDEO-SERVICE] ICE connection restored for user: ${userId}`);
+        this.clearRestartTimeout(userId);
+      }
     };
     
     this.peerConnections.set(userId, pc);
@@ -455,8 +510,9 @@ class VideoService {
       this.peerConnections.delete(userId);
     }
     
-    // Clear pending ICE candidates
+    // Clear pending ICE candidates and restart timeouts
     this.pendingIceCandidates.delete(userId);
+    this.clearRestartTimeout(userId);
     
     // Remove from store
     const store = useVideoStore.getState();
@@ -527,34 +583,108 @@ class VideoService {
   }
 
   /**
-   * Toggle mute
+   * Set restart timeout for connection recovery
    */
-  toggleMute() {
-    if (!this.localStream) return;
+  setRestartTimeout(userId, delay) {
+    // Clear existing timeout if any
+    this.clearRestartTimeout(userId);
     
-    const store = useVideoStore.getState();
-    const audioTrack = this.localStream.getAudioTracks()[0];
+    console.log(`⏰ [VIDEO-SERVICE] Setting restart timeout for ${userId} in ${delay}ms`);
+    const timeoutId = setTimeout(() => {
+      console.log(`🔄 [VIDEO-SERVICE] Restart timeout triggered for ${userId}`);
+      this.attemptICERestart(userId);
+    }, delay);
     
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      store.setMuted(!audioTrack.enabled);
-      console.log(`🎥 [VIDEO-SERVICE] Audio ${audioTrack.enabled ? 'unmuted' : 'muted'}`);
+    this.restartTimeouts.set(userId, timeoutId);
+  }
+
+  /**
+   * Clear restart timeout
+   */
+  clearRestartTimeout(userId) {
+    const timeoutId = this.restartTimeouts.get(userId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.restartTimeouts.delete(userId);
+      console.log(`⏰ [VIDEO-SERVICE] Cleared restart timeout for ${userId}`);
     }
   }
 
   /**
-   * Toggle camera
+   * Attempt ICE restart for failed connection
    */
-  toggleCamera() {
-    if (!this.localStream) return;
+  async attemptICERestart(userId) {
+    console.log(`🔄 [VIDEO-SERVICE] Attempting ICE restart for user: ${userId}`);
     
-    const store = useVideoStore.getState();
-    const videoTrack = this.localStream.getVideoTracks()[0];
+    const pc = this.peerConnections.get(userId);
+    if (!pc) {
+      console.warn(`⚠️ [VIDEO-SERVICE] No peer connection found for ICE restart: ${userId}`);
+      return;
+    }
     
-    if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      store.setCameraEnabled(videoTrack.enabled);
-      console.log(`🎥 [VIDEO-SERVICE] Camera ${videoTrack.enabled ? 'enabled' : 'disabled'}`);
+    try {
+      // Clear any pending restart timeout
+      this.clearRestartTimeout(userId);
+      
+      // Check if we should create a new offer (same collision avoidance logic)
+      const shouldCreateOffer = this.user.id > userId;
+      
+      if (shouldCreateOffer && pc.signalingState === 'stable') {
+        console.log(`🔄 [VIDEO-SERVICE] Creating ICE restart offer for ${userId}`);
+        
+        // Create offer with ICE restart
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        
+        this.signalingClient.sendOffer(userId, offer);
+        console.log(`🔄 [VIDEO-SERVICE] Sent ICE restart offer to: ${userId}`);
+      } else {
+        console.log(`🔄 [VIDEO-SERVICE] Waiting for ICE restart offer from ${userId}`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ [VIDEO-SERVICE] Failed to restart ICE for ${userId}:`, error);
+      
+      // If ICE restart fails, try recreating the entire connection
+      setTimeout(() => {
+        this.recreateConnection(userId);
+      }, 2000);
+    }
+  }
+
+  /**
+   * Recreate entire peer connection as last resort
+   */
+  async recreateConnection(userId) {
+    console.log(`🔄 [VIDEO-SERVICE] Recreating peer connection for user: ${userId}`);
+    
+    try {
+      // Close existing connection
+      const oldPc = this.peerConnections.get(userId);
+      if (oldPc) {
+        oldPc.close();
+      }
+      
+      // Clear state
+      this.peerConnections.delete(userId);
+      this.pendingIceCandidates.delete(userId);
+      this.clearRestartTimeout(userId);
+      
+      // If connection keeps failing, add TURN servers for better connectivity
+      if (!this.pcConfig.iceServers.some(server => server.urls.includes('turn:'))) {
+        console.log(`🔄 [VIDEO-SERVICE] Adding TURN servers due to repeated connection failures`);
+        await this.addFreeTurnServers();
+      }
+      
+      // Create new connection and offer (if we should)
+      const shouldCreateOffer = this.user.id > userId;
+      if (shouldCreateOffer) {
+        console.log(`🔄 [VIDEO-SERVICE] Creating new offer after connection recreation for ${userId}`);
+        await this.createOfferToUser(userId);
+      }
+      
+    } catch (error) {
+      console.error(`❌ [VIDEO-SERVICE] Failed to recreate connection for ${userId}:`, error);
     }
   }
 
@@ -593,8 +723,15 @@ class VideoService {
     });
     this.peerConnections.clear();
     
-    // Clear pending ICE candidates
+    // Clear pending ICE candidates and restart timeouts
     this.pendingIceCandidates.clear();
+    
+    // Clear all restart timeouts
+    this.restartTimeouts.forEach((timeoutId, userId) => {
+      clearTimeout(timeoutId);
+      console.log(`⏰ [VIDEO-SERVICE] Cleared restart timeout for: ${userId}`);
+    });
+    this.restartTimeouts.clear();
     
     // Cleanup store
     const store = useVideoStore.getState();
@@ -607,6 +744,169 @@ class VideoService {
   disconnect() {
     this.cleanup();
     this.signalingClient.disconnect();
+  }
+  
+  /**
+   * Add free TURN servers for enhanced connectivity
+   * Tries OpenRelay (primary), then falls back to enhanced STUN configuration
+   */
+  async addFreeTurnServers() {
+    console.log('🔄 [VIDEO-SERVICE] Adding free TURN servers for better connectivity...');
+    
+    try {
+      // Try to get OpenRelay credentials from environment
+      const openRelayApiKey = import.meta.env.VITE_OPENRELAY_API_KEY;
+      
+      if (openRelayApiKey) {
+        console.log('🔑 [VIDEO-SERVICE] Using OpenRelay Project with API key');
+        await this.addOpenRelayTurn(openRelayApiKey);
+        return;
+      }
+      
+      // Fallback: Enhanced STUN configuration
+      console.log('📡 [VIDEO-SERVICE] No OpenRelay API key found, using enhanced STUN-only configuration');
+      this.addEnhancedStunServers();
+      
+    } catch (error) {
+      console.error('❌ [VIDEO-SERVICE] Error setting up TURN servers:', error);
+      console.log('📡 [VIDEO-SERVICE] Falling back to enhanced STUN-only configuration');
+      this.addEnhancedStunServers();
+    }
+  }
+  
+  /**
+   * Add OpenRelay TURN servers with API credentials
+   */
+  async addOpenRelayTurn(apiKey) {
+    try {
+      // Fetch dynamic credentials from OpenRelay API using configurable endpoint
+      const openRelayEndpoint = env.OPENRELAY_ENDPOINT;
+      const response = await fetch(`${openRelayEndpoint}?apiKey=${apiKey}`);
+      
+      if (!response.ok) {
+        throw new Error(`OpenRelay API failed: ${response.status}`);
+      }
+      
+      const iceServers = await response.json();
+      this.addTurnServers(iceServers);
+      console.log('✅ [VIDEO-SERVICE] OpenRelay TURN servers added successfully');
+      console.log('📊 [VIDEO-SERVICE] ICE servers count:', iceServers.length);
+      
+    } catch (error) {
+      console.error('❌ [VIDEO-SERVICE] Failed to add OpenRelay TURN:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Add TURN servers to configuration and update peer connections
+   */
+  addTurnServers(turnServers) {
+    // Add TURN servers while keeping existing STUN servers
+    const existingStunServers = this.pcConfig.iceServers.filter(server => 
+      server.urls && (Array.isArray(server.urls) 
+        ? server.urls.some(url => url.includes('stun:'))
+        : server.urls.includes('stun:'))
+    );
+    
+    this.pcConfig.iceServers = [
+      ...existingStunServers,
+      ...turnServers
+    ];
+    
+    // Update all existing peer connections
+    this.peerConnections.forEach(async (pc, userId) => {
+      try {
+        await pc.setConfiguration(this.pcConfig);
+        console.log(`🔄 [VIDEO-SERVICE] Updated ICE servers for ${userId}`);
+        await this.restartIceConnection(userId);
+      } catch (error) {
+        console.error(`❌ [VIDEO-SERVICE] Failed to update ICE servers for ${userId}:`, error);
+      }
+    });
+  }
+  
+  /**
+   * Add additional STUN servers for better connectivity
+   */
+  addEnhancedStunServers() {
+    // Add more STUN servers for better connectivity
+    const additionalStunServers = [
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.freeswitch.org' },
+      { urls: 'stun:stun.voip.blackberry.com:3478' }
+    ];
+    
+    this.pcConfig.iceServers = [
+      ...this.pcConfig.iceServers,
+      ...additionalStunServers
+    ];
+    
+    console.log('📡 [VIDEO-SERVICE] Enhanced STUN configuration applied');
+    
+    // Update existing connections
+    this.peerConnections.forEach(async (pc, userId) => {
+      try {
+        await pc.setConfiguration(this.pcConfig);
+        await this.restartIceConnection(userId);
+      } catch (error) {
+        console.error(`❌ [VIDEO-SERVICE] Failed to update STUN servers for ${userId}:`, error);
+      }
+    });
+  }
+
+  /**
+   * Toggle mute
+   */
+  toggleMute() {
+    console.log('🎤 [VIDEO-SERVICE] Toggling mute');
+    
+    const store = useVideoStore.getState();
+    const isMuted = store.isLocalStreamMuted();
+    
+    // Toggle mute state
+    store.setLocalStreamMuted(!isMuted);
+    
+    // Update local stream tracks
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+      
+      console.log(`🎤 [VIDEO-SERVICE] Microphone ${isMuted ? 'unmuted' : 'muted'}`);
+    }
+  }
+
+  /**
+   * Restart ICE connection for a specific peer
+   * Useful when updating ICE servers or recovering from connection issues
+   */
+  async restartIceConnection(userId) {
+    const pc = this.peerConnections.get(userId);
+    if (!pc) {
+      console.warn(`🔄 [VIDEO-SERVICE] No peer connection found for ${userId} to restart ICE`);
+      return;
+    }
+
+    try {
+      console.log(`🔄 [VIDEO-SERVICE] Restarting ICE connection for ${userId}`);
+      
+      // Restart ICE by creating a new offer with iceRestart option
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      
+      // Send the restart offer to the peer
+      this.signalingClient.sendSignalingMessage({
+        type: 'offer',
+        to: userId,
+        offer: offer
+      });
+      
+      console.log(`✅ [VIDEO-SERVICE] ICE restart initiated for ${userId}`);
+    } catch (error) {
+      console.error(`❌ [VIDEO-SERVICE] Failed to restart ICE for ${userId}:`, error);
+    }
   }
 }
 
