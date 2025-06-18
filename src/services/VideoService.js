@@ -863,10 +863,10 @@ class VideoService {
     console.log('🎤 [VIDEO-SERVICE] Toggling mute');
     
     const store = useVideoStore.getState();
-    const isMuted = store.isLocalStreamMuted();
+    const isMuted = store.isMuted;
     
     // Toggle mute state
-    store.setLocalStreamMuted(!isMuted);
+    store.setMuted(!isMuted);
     
     // Update local stream tracks
     if (this.localStream) {
@@ -875,6 +875,32 @@ class VideoService {
       });
       
       console.log(`🎤 [VIDEO-SERVICE] Microphone ${isMuted ? 'unmuted' : 'muted'}`);
+    }
+  }
+
+  /**
+   * Toggle camera
+   */
+  toggleCamera() {
+    console.log('📹 [VIDEO-SERVICE] Toggling camera');
+    
+    const store = useVideoStore.getState();
+    const isCameraEnabled = store.isCameraEnabled;
+    
+    // Toggle camera state first
+    store.setCameraEnabled(!isCameraEnabled);
+    
+    // Update local stream tracks
+    if (this.localStream) {
+      this.localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isCameraEnabled;
+      });
+      
+      // Force store to update by re-setting the local stream
+      // This will trigger React re-renders in components using the stream
+      store.setLocalStream(this.localStream);
+      
+      console.log(`📹 [VIDEO-SERVICE] Camera ${isCameraEnabled ? 'disabled' : 'enabled'}`);
     }
   }
 

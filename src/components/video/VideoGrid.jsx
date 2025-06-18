@@ -19,6 +19,45 @@ const VideoGrid = ({ localStream, participants }) => {
     }
   }, [localStream]);
 
+  // Update video tracks when camera state changes
+  useEffect(() => {
+    console.log(`🎥 [VIDEO-GRID] Effect triggered - isCameraEnabled: ${isCameraEnabled}, hasStream: ${!!localStream}`);
+    
+    if (localStream) {
+      const videoTracks = localStream.getVideoTracks();
+      console.log(`🎥 [VIDEO-GRID] Found ${videoTracks.length} video tracks`);
+      
+      videoTracks.forEach((track, index) => {
+        console.log(`🎥 [VIDEO-GRID] Track ${index} - before: enabled=${track.enabled}, setting to: ${isCameraEnabled}`);
+        track.enabled = isCameraEnabled;
+        console.log(`🎥 [VIDEO-GRID] Track ${index} - after: enabled=${track.enabled}`);
+      });
+      
+      // Force video element refresh when camera is enabled
+      if (isCameraEnabled && localVideoRef.current) {
+        console.log('🎥 [VIDEO-GRID] Forcing video refresh for camera toggle');
+        // Multiple methods to force refresh
+        localVideoRef.current.srcObject = null;
+        localVideoRef.current.load();
+        
+        // Re-attach stream after a brief delay
+        setTimeout(() => {
+          if (localVideoRef.current && localStream) {
+            console.log('🎥 [VIDEO-GRID] Re-attaching stream to video element');
+            localVideoRef.current.srcObject = localStream;
+            localVideoRef.current.play().catch(e => {
+              console.warn('🎥 [VIDEO-GRID] Auto-play failed:', e);
+            });
+          }
+        }, 50);
+      }
+    }
+  }, [isCameraEnabled, localStream]);
+
+  // Check if video should be displayed - use both state and actual track status
+  const shouldShowVideo = isCameraEnabled && localStream && 
+    localStream.getVideoTracks().length > 0;
+
   // Calculate grid layout based on participant count
   const totalParticipants = participants.length + 1; // +1 for local user
   const getGridCols = () => {
@@ -31,8 +70,8 @@ const VideoGrid = ({ localStream, participants }) => {
     <div className="h-full p-3">
       <div className={`grid ${getGridCols()} gap-3 h-full`}>
         {/* Local video */}
-        <div className="relative bg-gray-800 rounded-md overflow-hidden border border-gray-700">
-          {isCameraEnabled && localStream ? (
+        <div className="relative bg-gray-800 rounded-md overflow-hidden border border-gray-700 min-h-[200px]">
+          {shouldShowVideo ? (
             <video
               ref={localVideoRef}
               autoPlay

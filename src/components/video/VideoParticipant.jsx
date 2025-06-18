@@ -22,7 +22,7 @@ const VideoParticipant = ({ participant }) => {
   const hasAudio = stream && stream.getAudioTracks().length > 0 && stream.getAudioTracks()[0].enabled;
 
   return (
-    <div className="relative bg-gray-800 rounded-md overflow-hidden border border-gray-700">
+    <div className="relative bg-gray-800 rounded-md overflow-hidden border border-gray-700 min-h-[200px]">
       {hasVideo && stream ? (
         <video
           ref={videoRef}
