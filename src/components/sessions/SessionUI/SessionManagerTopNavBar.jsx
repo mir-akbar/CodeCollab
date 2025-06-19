@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { useUser } from "@/contexts/UserContext";
+import { useFormattedUserData } from "@/hooks/useUserProfile";
 import { API_URL } from "@/config/environment.js";
 import {
     DropdownMenu,
@@ -21,11 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 export default function SessionManagerTopNavBar() {
     const { logout } = useAuth();
-    const { userEmail } = useUser();
-    const [userData, setUserData] = useState({
-        name: "",
-        email: "",
-    });
+    const userData = useFormattedUserData(); // Using TanStack Query hook
     const [sessionData, setSessionData] = useState(null);
     const navigate = useNavigate();
     const location = useLocation();
@@ -33,18 +29,8 @@ export default function SessionManagerTopNavBar() {
     const sessionId = searchParams.get("session");
 
     useEffect(() => {
-        // Update user data when auth context changes
-        if (userEmail) {
-            setUserData({
-                name: userEmail.split('@')[0] || "User",
-                email: userEmail,
-            });
-        }
-    }, [userEmail]);
-
-    useEffect(() => {
         // If we have a session ID, fetch the session data to determine user permissions
-        if (sessionId && userEmail) {
+        if (sessionId && userData.email) {
             const fetchSessionData = async () => {
                 try {
                     const response = await fetch(`${API_URL}/api/sessions/${sessionId}`, {
@@ -63,7 +49,7 @@ export default function SessionManagerTopNavBar() {
 
             fetchSessionData();
         }
-    }, [sessionId, userEmail]);
+    }, [sessionId, userData.email]);
 
     const handleLogout = async () => {
         try {
@@ -116,12 +102,12 @@ export default function SessionManagerTopNavBar() {
                         <Button variant="outline" className="gap-2 p-2 px-3 h-auto bg-card hover:bg-muted border-border hover:border-primary/30 transition-colors">
                             <Avatar className="h-8 w-8 ring-1 ring-border">
                                 <AvatarFallback className="text-sm font-medium bg-muted text-foreground">
-                                    {userData.name?.charAt(0)?.toUpperCase() || "U"}
+                                    {userData.isLoading ? "..." : (userData.displayName || userData.name)?.charAt(0)?.toUpperCase() || "U"}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col items-start text-left min-w-0 max-w-[200px]">
                                 <div className="text-sm font-medium truncate text-foreground">
-                                    {userData.name || "User"}
+                                    {userData.isLoading ? "Loading..." : (userData.displayName || userData.name || "User")}
                                 </div>
                                 <div className="text-xs text-muted-foreground truncate">
                                     {userData.email}
@@ -136,12 +122,12 @@ export default function SessionManagerTopNavBar() {
                             <div className="flex items-center gap-3">
                                 <Avatar className="h-10 w-10 ring-2 ring-primary/20">
                                     <AvatarFallback className="text-lg font-medium bg-primary/10 text-primary">
-                                        {userData.name?.charAt(0)?.toUpperCase() || "U"}
+                                        {userData.isLoading ? "..." : (userData.displayName || userData.name)?.charAt(0)?.toUpperCase() || "U"}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="flex flex-col min-w-0 flex-1">
                                     <div className="font-medium text-sm truncate text-foreground">
-                                        {userData.name || "User"}
+                                        {userData.isLoading ? "Loading..." : (userData.displayName || userData.name || "User")}
                                     </div>
                                     <div className="text-xs text-muted-foreground truncate">
                                         {userData.email}
@@ -164,9 +150,21 @@ export default function SessionManagerTopNavBar() {
                         
                         <div className="px-3 py-2 space-y-2 bg-card">
                             <div className="text-xs p-2 rounded bg-muted/30">
-                                <span className="text-muted-foreground">Display Name: </span>
+                                <span className="text-muted-foreground">Full Name: </span>
                                 <span className="font-medium text-foreground">{userData.name || "Not set"}</span>
                             </div>
+                            {userData.displayName && (
+                                <div className="text-xs p-2 rounded bg-muted/30">
+                                    <span className="text-muted-foreground">Display Name: </span>
+                                    <span className="font-medium text-foreground">{userData.displayName}</span>
+                                </div>
+                            )}
+                            {userData.username && (
+                                <div className="text-xs p-2 rounded bg-muted/30">
+                                    <span className="text-muted-foreground">Username: </span>
+                                    <span className="font-medium text-foreground">{userData.username}</span>
+                                </div>
+                            )}
                             <div className="text-xs p-2 rounded bg-muted/30">
                                 <span className="text-muted-foreground">Email: </span>
                                 <span className="font-medium text-foreground">{userData.email}</span>
