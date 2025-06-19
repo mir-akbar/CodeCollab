@@ -225,7 +225,7 @@ export function SignUpForm({ onSuccess, onSwitchToLogin }) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl font-bold text-center">Create Account</CardTitle>
         <CardDescription className="text-center">
-          Enter your information to create your CodeLab account
+          Enter your information to create your CodeCollab account
         </CardDescription>
       </CardHeader>
       

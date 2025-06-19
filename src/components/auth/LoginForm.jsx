@@ -148,7 +148,7 @@ export function LoginForm({ onSuccess, onSwitchToSignup }) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl font-bold text-center">Welcome Back</CardTitle>
         <CardDescription className="text-center">
-          Enter your email or username and password to access your CodeLab account
+          Enter your email or username and password to access your CodeCollab account
         </CardDescription>
       </CardHeader>
       

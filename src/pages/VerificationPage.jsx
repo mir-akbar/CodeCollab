@@ -89,7 +89,7 @@ export default function VerificationPage() {
 
   if (!email) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex min-h-screen w-full items-center justify-center p-6 md:p-10 bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Card className="w-[350px]">
           <CardHeader>
             <CardTitle>Verification Error</CardTitle>
