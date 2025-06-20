@@ -289,6 +289,7 @@ export function SessionManager({ userEmail }) {
       <UserManagementDialog
         session={userManagement.activeSession}
         userEmail={userEmail}
+        onInvite={handleInviteUser}
       />
     </div>
   );
