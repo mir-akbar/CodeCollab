@@ -420,14 +420,43 @@ module.exports = (yjsServer) => {
   /**
    * Delete file or folder
    * DELETE /api/files/:sessionId/:path
+   * Requires owner or admin role
    */
-  router.delete("/:sessionId/*", asyncHandler(async (req, res) => {
+  router.delete("/:sessionId/*", requireAuth, asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
     const filePath = req.params[0]; // Get the wildcard path
     const { userEmail } = req.body;
+    const authenticatedEmail = req.userEmail || req.user?.email;
     
     if (!filePath || !sessionId) {
       return res.status(400).json({ error: "File path and session ID are required" });
+    }
+
+    // Use authenticated user's email if not provided in body
+    const emailToCheck = userEmail || authenticatedEmail;
+    
+    if (!emailToCheck) {
+      return res.status(401).json({ 
+        error: "Authentication required",
+        hint: "Please log in to delete files"
+      });
+    }
+
+    // Check if user has admin or owner permission to delete files
+    try {
+      const hasAccess = await accessService.checkSessionAccess(sessionId, emailToCheck, 'admin');
+      if (!hasAccess) {
+        return res.status(403).json({ 
+          error: "Access denied: Admin or owner permission required to delete files",
+          hint: "Only session admins and owners can delete files"
+        });
+      }
+    } catch (error) {
+      console.error("Permission check error:", error);
+      return res.status(500).json({ 
+        error: "Failed to validate permissions", 
+        details: error.message 
+      });
     }
 
     // Get file info before deletion for notification
@@ -456,7 +485,7 @@ module.exports = (yjsServer) => {
           type: fileInfo.fileType.replace('.', ''),
           size: fileInfo.fileSize
         },
-        deletedBy: userEmail || 'Unknown user',
+        deletedBy: emailToCheck || 'Unknown user',
         message: `File "${fileInfo.fileName}" was deleted`
       });
     }

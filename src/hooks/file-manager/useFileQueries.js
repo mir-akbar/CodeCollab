@@ -301,7 +301,20 @@ export function useFileDelete(sessionId, userEmail = null) {
         queryClient.setQueryData(fileQueryKeys.hierarchy(sessionId), context.previousHierarchy);
       }
       
-      toast.error(error.message || 'Failed to delete file');
+      // Show specific error messages based on error type
+      let errorMessage = 'Failed to delete file';
+      
+      if (error.response?.status === 403) {
+        errorMessage = 'Access denied: Only admins and owners can delete files';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication required to delete files';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'File not found or already deleted';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     },
     
     onSettled: (data, error, variables) => {

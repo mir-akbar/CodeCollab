@@ -25,6 +25,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -287,13 +293,20 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
                   Open
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                onClick={(e) => handleDeleteClick(node, e)}
-                className="text-red-600"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuItem
+                    onClick={(e) => handleDeleteClick(node, e)}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Only admins and owners can delete files</p>
+                </TooltipContent>
+              </Tooltip>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -332,7 +345,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
   }
 
   return (
-    <>
+    <TooltipProvider>
       <div className={cn('space-y-1', className)}>
         {hierarchy.map(node => renderTreeNode(node))}
       </div>
@@ -344,6 +357,10 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
             <AlertDialogTitle>Delete File</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete &quot;{fileToDelete?.name}&quot;? This action cannot be undone.
+              <br /><br />
+              <span className="text-sm text-muted-foreground">
+                Note: Only session admins and owners can delete files.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -358,7 +375,7 @@ export function FileTree({ sessionId, onFileSelect, onFileDeleted, selectedFileP
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </TooltipProvider>
   );
 }
 

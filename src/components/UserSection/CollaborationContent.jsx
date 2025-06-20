@@ -1,9 +1,10 @@
 import { ParticipantAvatar } from './ParticipantAvatar';
 import { RoleBadge } from './RoleBadge';
-import { UserPlus, Mail } from 'lucide-react';
+import { UserPlus, Mail, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { InvitationDialog } from '@/components/sessions/dialogs/InvitationDialog';
+import { UserManagementDialog } from '@/components/sessions/dialogs/UserManagementDialog';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 import { useDialogStore } from '@/stores';
@@ -93,9 +94,27 @@ export function CollaborationContent({ sessionData, participants, sessionId, onR
 
       {/* Active Participants */}
       <div className="space-y-2">
-        <h3 className="text-sm font-medium flex items-center gap-2">
-          Active Participants ({activeParticipants.length})
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            Active Participants ({activeParticipants.length})
+          </h3>
+          {canInvite && activeParticipants.length > 0 && (
+            <UserManagementDialog 
+              session={sessionData} 
+              userEmail={userEmail}
+              onInvite={() => setIsInviteDialogOpen(true)}
+            >
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Settings className="h-3 w-3 mr-1" />
+                Manage
+              </Button>
+            </UserManagementDialog>
+          )}
+        </div>
         <div className="space-y-2 max-h-32 overflow-y-auto">
           {activeParticipants.length > 0 ? (
             activeParticipants.map((participant, index) => (
@@ -181,13 +200,27 @@ export function CollaborationContent({ sessionData, participants, sessionId, onR
               <UserPlus size={16} />
               Invite Collaborator
             </h3>
-            <Button 
-              onClick={() => setIsInviteDialogOpen(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Mail size={16} className="mr-2" />
-              Send Invitation
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => setIsInviteDialogOpen(true)}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Mail size={16} className="mr-2" />
+                Send Invitation
+              </Button>
+              <UserManagementDialog 
+                session={sessionData} 
+                userEmail={userEmail}
+                onInvite={() => setIsInviteDialogOpen(true)}
+              >
+                <Button 
+                  variant="outline" 
+                  className="px-3 border-[#555] hover:bg-[#3a3a3a]"
+                >
+                  <Settings size={16} />
+                </Button>
+              </UserManagementDialog>
+            </div>
           </div>
         </>
       )}
