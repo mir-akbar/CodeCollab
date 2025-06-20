@@ -188,7 +188,7 @@ export const UserManagementDialog = ({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={setUserManagementOpen}>
-        <DialogTrigger asChild>{children}</DialogTrigger>
+        {children && <DialogTrigger asChild>{children}</DialogTrigger>}
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader className="pb-4">
             <DialogTitle className="text-base font-medium">
@@ -354,13 +354,13 @@ UserManagementDialog.propTypes = {
     name: PropTypes.string.isRequired,
     creator: PropTypes.string.isRequired,
     participants: PropTypes.arrayOf(PropTypes.object)
-  }).isRequired,
+  }),
   
   /** Current user's email for permission checks */
   userEmail: PropTypes.string.isRequired,
   
-  /** Trigger element (typically a button) */
-  children: PropTypes.node.isRequired,
+  /** Trigger element (typically a button) - optional when used with external state management */
+  children: PropTypes.node,
   
   /** Optional callback for invite functionality */
   onInvite: PropTypes.func

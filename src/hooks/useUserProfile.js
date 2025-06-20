@@ -23,7 +23,7 @@ export const useUserProfile = () => {
   return useQuery({
     queryKey: userQueryKeys.profile(),
     queryFn: async () => {
-      const response = await fetch(`${API_URL}/api/user/profile`, {
+      const response = await fetch(`${API_URL}/api/users/profile`, {
         credentials: 'include'
       });
 
@@ -54,10 +54,11 @@ export const useFormattedUserData = () => {
   const { data: userProfile, isLoading, error } = useUserProfile();
 
   // Create formatted user data with smart fallbacks
+  // The API returns user data directly, not nested under 'profile'
   const userData = {
-    name: userProfile?.profile?.name || userProfile?.name || userEmail?.split('@')[0] || "User",
-    displayName: userProfile?.profile?.displayName || userProfile?.displayName || "",
-    username: userProfile?.profile?.username || userProfile?.username || "",
+    name: userProfile?.name || userEmail?.split('@')[0] || "User",
+    displayName: userProfile?.displayName || "",
+    username: userProfile?.username || "",
     email: userProfile?.email || userEmail || "",
     status: userProfile?.status || "active",
     isLoading,

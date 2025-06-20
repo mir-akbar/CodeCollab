@@ -16,7 +16,6 @@ const { asyncHandler } = require('../middleware/errorHandler');
 router.get('/profile', requireAuth, asyncHandler(async (req, res) => {
   try {
     const user = req.user.mongoUser;
-    const sessionStats = await userSyncService.getUserSessionStats(user._id);
 
     res.json({
       success: true,
@@ -24,11 +23,10 @@ router.get('/profile', requireAuth, asyncHandler(async (req, res) => {
         id: user._id,
         cognitoId: user.cognitoId,
         email: user.email,
-        profile: user.profile,
-        preferences: user.preferences,
-        subscription: user.subscription,
+        name: user.name,
+        displayName: user.displayName,
+        username: user.username,
         lastActiveAt: user.lastActiveAt,
-        sessionStats,
         status: user.status
       }
     });
@@ -47,15 +45,11 @@ router.get('/profile', requireAuth, asyncHandler(async (req, res) => {
  */
 router.put('/preferences', requireAuth, asyncHandler(async (req, res) => {
   try {
-    const { preferences } = req.body;
-    const userId = req.user.id;
-
-    const updatedUser = await userSyncService.updateUserPreferences(userId, preferences);
-
+    // User preferences functionality not yet implemented
     res.json({
       success: true,
-      message: 'Preferences updated successfully',
-      preferences: updatedUser.preferences
+      message: 'Preferences functionality not yet implemented',
+      preferences: {}
     });
   } catch (error) {
     console.error('❌ Error updating preferences:', error);
@@ -117,12 +111,15 @@ router.post('/sync', requireAuth, asyncHandler(async (req, res) => {
  */
 router.get('/session-stats', requireAuth, asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
-    const sessionStats = await userSyncService.getUserSessionStats(userId);
-
+    // Session stats functionality not yet implemented
     res.json({
       success: true,
-      sessionStats
+      sessionStats: {
+        totalSessions: 0,
+        activeSessions: 0,
+        totalHours: 0,
+        lastSession: null
+      }
     });
   } catch (error) {
     console.error('❌ Error getting session stats:', error);
@@ -139,8 +136,9 @@ router.get('/session-stats', requireAuth, asyncHandler(async (req, res) => {
  */
 router.put('/last-active', requireAuth, asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
-    await userSyncService.updateLastActive(userId);
+    const user = req.user.mongoUser;
+    user.lastActiveAt = new Date();
+    await user.save();
 
     res.json({
       success: true,

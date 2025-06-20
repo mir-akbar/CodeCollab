@@ -3,7 +3,7 @@
  * Modern, modular Monaco editor with Y-WebSocket collaboration
  */
 
-import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { Editor } from "@monaco-editor/react";
 import { AlertCircle } from "lucide-react";
@@ -19,19 +19,21 @@ export function MonacoEditor({
   filePath, 
   onContentChange, 
   readOnly = false,
-  className = "",
-  height = "100%" 
+  className = ""
 }) {
   const editorRef = useRef(null);
   const bindingRef = useRef(null);
+  const cursorListenerRef = useRef(null);
+  
+  // State to track cursor position
+  const [cursorPosition, setCursorPosition] = useState({ lineNumber: 1, column: 1 });
   
   // Zustand store for editor state
   const { 
     currentFilePath, 
     hasContentSet, 
     setCurrentFile, 
-    setContentSet,
-    resetEditor 
+    setContentSet
   } = useEditorStore();
 
   // Memoize collaboration hook to prevent unnecessary re-initializations
@@ -64,6 +66,20 @@ export function MonacoEditor({
   const handleEditorMount = useCallback((editor) => {
     console.log(`🎯 [MONACO EDITOR] Editor mounted for: ${filePath}`);
     editorRef.current = editor;
+
+    // Set up cursor position tracking
+    const updateCursorPosition = () => {
+      const position = editor.getPosition();
+      if (position) {
+        setCursorPosition({ lineNumber: position.lineNumber, column: position.column });
+      }
+    };
+
+    // Listen for cursor position changes
+    cursorListenerRef.current = editor.onDidChangeCursorPosition(updateCursorPosition);
+    
+    // Set initial cursor position
+    updateCursorPosition();
 
     // CRITICAL FIX: Initialize content ONLY here to prevent duplication
     // This is the SINGLE point of content initialization to eliminate race conditions
@@ -169,6 +185,15 @@ export function MonacoEditor({
         }
         bindingRef.current = null;
       }
+      
+      if (cursorListenerRef.current) {
+        try {
+          cursorListenerRef.current.dispose();
+        } catch (error) {
+          console.warn('Error disposing cursor listener:', error);
+        }
+        cursorListenerRef.current = null;
+      }
     };
   }, []);
 
@@ -180,8 +205,12 @@ export function MonacoEditor({
       // Reset content state immediately for new file
       setContentSet(false);
       
+      // Reset cursor position
+      setCursorPosition({ lineNumber: 1, column: 1 });
+      
       // Note: bindingRef cleanup happens automatically due to editor remount
       bindingRef.current = null;
+      cursorListenerRef.current = null;
       
       // Update currentFilePath 
       setCurrentFile(filePath);
@@ -202,10 +231,33 @@ export function MonacoEditor({
     return languageMap[extension] || "plaintext";
   }, []);
 
+  // Bottom status bar component
+  const BottomStatusBar = ({ lineNumber, column, language, filePath: currentFilePath }) => (
+    <div className="px-3 py-1 bg-gray-700 border-t border-[#444] text-gray-300 text-xs flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <span>Ln {lineNumber}, Col {column}</span>
+        {language && <span className="capitalize text-yellow-300">{language}</span>}
+      </div>
+      {currentFilePath && (
+        <div className="flex items-center gap-2">
+          <span className="text-gray-400">{currentFilePath.split('/').pop()}</span>
+        </div>
+      )}
+    </div>
+  );
+
+  // PropTypes for BottomStatusBar
+  BottomStatusBar.propTypes = {
+    lineNumber: PropTypes.number.isRequired,
+    column: PropTypes.number.isRequired,
+    language: PropTypes.string,
+    filePath: PropTypes.string
+  };
+
   // Show loading only while content is loading
   if (contentLoading) {
     return (
-      <div className={`h-full border border-[#444] rounded-xl overflow-hidden ${className}`}>
+      <div className={`h-full border border-[#444] rounded-xl overflow-hidden flex flex-col ${className}`}>
         <div className="p-2 bg-gray-700 text-yellow-300 text-sm">
           ⏳ Loading file...
         </div>
@@ -215,6 +267,13 @@ export function MonacoEditor({
             <p>Loading file content...</p>
           </div>
         </div>
+        {/* Bottom status bar for loading state */}
+        <BottomStatusBar 
+          lineNumber={1}
+          column={1}
+          language={getLanguageFromFile(filePath)}
+          filePath={filePath}
+        />
       </div>
     );
   }
@@ -222,7 +281,7 @@ export function MonacoEditor({
   // Handle errors
   if (collabError || contentError) {
     return (
-      <div className={`h-full border border-[#444] rounded-xl overflow-hidden ${className}`}>
+      <div className={`h-full border border-[#444] rounded-xl overflow-hidden flex flex-col ${className}`}>
         <div className="p-2 bg-red-700 text-red-100 text-sm">
           ❌ Connection Error
         </div>
@@ -234,6 +293,13 @@ export function MonacoEditor({
             </AlertDescription>
           </Alert>
         </div>
+        {/* Bottom status bar for error state */}
+        <BottomStatusBar 
+          lineNumber={1}
+          column={1}
+          language={filePath ? getLanguageFromFile(filePath) : 'plaintext'}
+          filePath={filePath}
+        />
       </div>
     );
   }
@@ -241,12 +307,12 @@ export function MonacoEditor({
   // Handle no file selected
   if (!filePath) {
     return (
-      <div className={`h-full border border-[#444] rounded-xl overflow-hidden ${className}`}>
+      <div className={`h-full border border-[#444] rounded-xl overflow-hidden flex flex-col ${className}`}>
         <div className="p-2 bg-gray-700 text-yellow-300 text-sm">
           No file selected
         </div>
-        <div className="flex-1 flex items-center justify-center bg-[#1e1e1e] text-gray-400 p-6 text-center">
-          <div>
+        <div className="flex-1 flex items-center justify-center bg-[#1e1e1e] text-gray-400 p-6">
+          <div className="text-center">
             <h3 className="text-xl mb-3">No file is currently open</h3>
             <p>Please select a file from the sidebar to start editing.</p>
           </div>
@@ -257,7 +323,7 @@ export function MonacoEditor({
 
   // Render the editor
   return (
-    <div className={`h-full border border-[#444] rounded-xl overflow-hidden ${className}`}>
+    <div className={`h-full border border-[#444] rounded-xl overflow-hidden flex flex-col ${className}`}>
       {/* Status bar */}
       <div className="p-2 bg-gray-700 text-yellow-300 text-sm flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -273,33 +339,43 @@ export function MonacoEditor({
       </div>
 
       {/* Monaco Editor */}
-      <Editor
-        key={filePath} // Force remount when file changes to ensure clean state
-        height={height}
-        language={getLanguageFromFile(filePath)}
-        theme="vs-dark"
-        onMount={handleEditorMount}
-        options={{
-          readOnly,
-          fontSize: 14,
-          minimap: { enabled: false },
-          automaticLayout: true,
-          cursorBlinking: 'smooth',
-          cursorSmoothCaretAnimation: true,
-          scrollBeyondLastLine: false,
-          wordWrap: 'on',
-          padding: { top: 0, bottom: 40 },
-          // Collaboration-friendly options
-          suggest: {
-            snippetsPreventQuickSuggestions: false,
-          },
-          quickSuggestions: {
-            other: true,
-            comments: true,
-            strings: true
-          }
-        }}
-      />
+      <div className="flex-1 flex flex-col">
+        <Editor
+          key={filePath} // Force remount when file changes to ensure clean state
+          height="100%"
+          language={getLanguageFromFile(filePath)}
+          theme="vs-dark"
+          onMount={handleEditorMount}
+          options={{
+            readOnly,
+            fontSize: 14,
+            minimap: { enabled: false },
+            automaticLayout: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: true,
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            padding: { top: 0, bottom: 40 },
+            // Collaboration-friendly options
+            suggest: {
+              snippetsPreventQuickSuggestions: false,
+            },
+            quickSuggestions: {
+              other: true,
+              comments: true,
+              strings: true
+            }
+          }}
+        />
+        
+        {/* Bottom status bar */}
+        <BottomStatusBar 
+          lineNumber={cursorPosition.lineNumber}
+          column={cursorPosition.column}
+          language={getLanguageFromFile(filePath)}
+          filePath={filePath}
+        />
+      </div>
     </div>
   );
 }
@@ -309,8 +385,7 @@ MonacoEditor.propTypes = {
   filePath: PropTypes.string,
   onContentChange: PropTypes.func,
   readOnly: PropTypes.bool,
-  className: PropTypes.string,
-  height: PropTypes.string
+  className: PropTypes.string
 };
 
 export default MonacoEditor;
