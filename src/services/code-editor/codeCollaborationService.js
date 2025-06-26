@@ -142,6 +142,41 @@ class CodeCollaborationService {
   }
 
   /**
+   * Disconnect from collaboration for a deleted file
+   * This is called when a file is deleted to clean up resources
+   */
+  disconnectDeletedFile(sessionId, filePath) {
+    console.log('🗑️ Cleaning up collaboration for deleted file:', `${sessionId}-${filePath}`);
+    
+    // Get connection before cleanup
+    const connection = this.connectionManager.getConnection(sessionId, filePath);
+    
+    if (!connection) {
+      console.log('No collaboration connection found for deleted file:', filePath);
+      return;
+    }
+
+    // Clean up binding
+    this.bindingManager.destroyBinding(sessionId, filePath, connection);
+
+    // Clean up cursor observers
+    this.presenceManager.cleanupCursorObserver(sessionId, filePath);
+
+    // Clean up cursor styles
+    if (connection?.awareness) {
+      const userStates = connection.awareness.getStates();
+      userStates.forEach((state, clientId) => {
+        this.cursorStyleManager.removeUserCursorStyle(clientId);
+      });
+    }
+
+    // Clean up connection more forcefully for deleted files
+    this.connectionManager.destroyConnection(`${sessionId}-${filePath}`);
+
+    console.log('✅ Collaboration cleaned up for deleted file:', filePath);
+  }
+
+  /**
    * Disconnect from collaboration
    */
   disconnect(sessionId, filePath) {
@@ -186,7 +221,23 @@ class CodeCollaborationService {
    */
   isConnected(sessionId, filePath) {
     const connection = this.connectionManager.getConnection(sessionId, filePath);
-    return connection ? connection.isConnected : false;
+    if (!connection) return false;
+    
+    // Check both our internal status and the actual WebSocket state
+    const internalStatus = connection.isConnected;
+    const wsConnected = connection.provider?.ws?.readyState === 1; // WebSocket.OPEN
+    
+    // If there's a discrepancy, log it for debugging
+    if (internalStatus !== wsConnected) {
+      console.log(`🔍 Connection status mismatch for ${filePath}:`, {
+        internal: internalStatus,
+        websocket: wsConnected,
+        wsReadyState: connection.provider?.ws?.readyState
+      });
+    }
+    
+    // Return true only if both agree it's connected
+    return internalStatus && wsConnected;
   }
 
   /**

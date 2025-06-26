@@ -3,6 +3,7 @@
  * Basic file tree with upload functionality
  */
 
+import { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { RefreshCw, Files, Upload as UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,12 +17,32 @@ import { cn } from '@/lib/utils';
 
 export function FileManager({ sessionId, onFileSelect, onFileDeleted, selectedFilePath, userEmail, className }) {
   const { isRefreshing, refreshFiles, error } = useFileManager(sessionId);
-  const { isConnected } = useFileEvents(sessionId);
+  const { isConnected, lastEvent } = useFileEvents(sessionId);
   const { activeFileManagerTab, setActiveFileManagerTab } = useUIStore();
 
   const handleRefresh = () => {
     refreshFiles();
   };
+
+  // Handle file deletion events to update the UI
+  useEffect(() => {
+    if (lastEvent?.type === 'file-deleted') {
+      const deletedFilePath = lastEvent.data.file?.path;
+      if (deletedFilePath) {
+        console.log('🗑️ File deleted event received in FileManager:', deletedFilePath);
+        
+        // Force refresh of the file list to ensure UI is updated
+        setTimeout(() => {
+          refreshFiles();
+        }, 100);
+        
+        // Notify parent component about the deletion
+        if (onFileDeleted) {
+          onFileDeleted(deletedFilePath);
+        }
+      }
+    }
+  }, [lastEvent, onFileDeleted, refreshFiles]);
 
   return (
     <div className={cn('h-full flex flex-col bg-sidebar text-sidebar-foreground', className)}>

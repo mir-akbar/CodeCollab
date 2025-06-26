@@ -38,7 +38,8 @@ export default function LandingPage() {
                 <nav className="container mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                            <Code className="h-8 w-8 text-blue-600" />
+                            {/* <Code className="h-8 w-8 text-blue-600" /> */}
+                            <img src="source.png" alt="CodeCollab Logo" className="h-8 w-8" />
                             <span className="text-2xl font-bold text-gray-800">CodeCollab</span>
                         </div>
                         <div>

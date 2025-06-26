@@ -72,8 +72,8 @@ export function useCodeCollaboration(sessionId, filePath) {
       });
 
       // Set up event listeners
-      const handleConnectionStatus = ({ connected }) => {
-        console.log('🔗 [HOOK] Connection status changed for', filePath, '- Connected:', connected);
+      const handleConnectionStatus = ({ connected, status }) => {
+        console.log('🔗 [HOOK] Connection status changed for', filePath, '- Connected:', connected, 'Status:', status);
         setIsConnected(connected);
         if (connected) {
           // Load initial users when connected
@@ -108,22 +108,58 @@ export function useCodeCollaboration(sessionId, filePath) {
       codeCollaborationService.on(sessionId, filePath, 'synced', handleSynced);
       codeCollaborationService.on(sessionId, filePath, 'awareness-changed', handleAwarenessChange);
 
+      // Set up a periodic check to ensure status stays accurate
+      const statusCheckInterval = setInterval(() => {
+        const currentConnectionStatus = codeCollaborationService.isConnected(sessionId, filePath);
+        if (currentConnectionStatus !== isConnected) {
+          console.log(`🔄 [HOOK] Status sync needed for ${filePath}: ${isConnected} -> ${currentConnectionStatus}`);
+          setIsConnected(currentConnectionStatus);
+          
+          if (currentConnectionStatus) {
+            // Update user count when connection is restored
+            const currentUsers = codeCollaborationService.getOnlineUsers(sessionId, filePath);
+            setOnlineUsers([...currentUsers]);
+          }
+        }
+      }, 2000); // Check every 2 seconds
+
       // Check if already connected (this handles the case where connection happens before event listeners are set up)
-      // Use a small timeout to ensure connection setup is complete
-      setTimeout(() => {
+      // Use multiple checks with increasing delays to catch late-connecting WebSockets
+      const checkConnectionStatus = () => {
         const isCurrentlyConnected = codeCollaborationService.isConnected(sessionId, filePath);
-        console.log('🔗 [HOOK] Delayed connection status check for', filePath, ':', isCurrentlyConnected);
+        console.log('🔗 [HOOK] Connection status check for', filePath, ':', isCurrentlyConnected);
         if (isCurrentlyConnected) {
           console.log('🔗 [HOOK] Connection already established, setting state manually');
           handleConnectionStatus({ connected: true, status: 'connected' });
           
           // Also manually trigger user count update
           handleAwarenessChange();
+          return true; // Connected successfully
         }
-      }, 100);
+        return false; // Not connected yet
+      };
+      
+      // Try immediate check first
+      if (!checkConnectionStatus()) {
+        // If not connected immediately, try with small delay
+        setTimeout(() => {
+          if (!checkConnectionStatus()) {
+            // If still not connected, try with longer delay
+            setTimeout(() => {
+              checkConnectionStatus();
+            }, 500);
+          }
+        }, 100);
+      }
 
       return () => {
         console.log('🧹 Cleaning up code collaboration for:', filePath);
+        
+        // Clear the interval
+        if (statusCheckInterval) {
+          clearInterval(statusCheckInterval);
+        }
+        
         try {
           codeCollaborationService.off(sessionId, filePath, 'connection-status', handleConnectionStatus);
           codeCollaborationService.off(sessionId, filePath, 'synced', handleSynced);
@@ -138,7 +174,7 @@ export function useCodeCollaboration(sessionId, filePath) {
       setError(err);
       setIsLoading(false);
     }
-  }, [sessionId, filePath, userEmail]);
+  }, [sessionId, filePath, userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Create Monaco binding
   const createBinding = useCallback((editor, onContentChange) => {

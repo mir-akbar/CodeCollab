@@ -16,10 +16,12 @@ import { CollaborationPanel } from "../CollaborationPanel";
 import { OutputPanel } from "../OutputPanel";
 import { TopNavBar } from "../TopNavBar";
 import { useCodeExecution } from "@/hooks/code-editor/useCodeCollaboration";
+import { codeCollaborationService } from "@/services/code-editor/codeCollaborationService";
+import { useFileEvents } from "@/hooks/file-manager/useFileEvents";
 import { decryptSessionAccess } from "@/utils/sessionUtils";
 import useEditorStore from "@/stores/editorStore";
 
-export function CodeWorkspace({ selectedFile }) {
+export function CodeWorkspace({ selectedFile, onFileDeleted }) {
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -44,6 +46,53 @@ export function CodeWorkspace({ selectedFile }) {
 
   // Hooks
   const { executeCode } = useCodeExecution();
+  const { lastEvent } = useFileEvents(sessionId);
+
+  // Handle file deletion events - centralized handler
+  const handleFileDeleted = useCallback((deletedFilePath) => {
+    console.log('🗑️ File deletion handler called in CodeWorkspace:', deletedFilePath);
+    
+    // Clear the editor content and reset state
+    setCurrentContent('');
+    setOutputVisible(false);
+    setOutput('');
+    
+    // Notify parent to clear the selected file
+    if (onFileDeleted) {
+      onFileDeleted(deletedFilePath);
+    }
+  }, [setCurrentContent, setOutputVisible, setOutput, onFileDeleted]);
+  
+  // Handle file deletion events from file events system
+  useEffect(() => {
+    if (lastEvent?.type === 'file-deleted' && selectedFile) {
+      const deletedFilePath = lastEvent.data.file?.path;
+      const deletedBy = lastEvent.data.deletedBy;
+      
+      // Check if the currently open file was deleted
+      if (deletedFilePath === selectedFile.path) {
+        console.log('🗑️ Currently open file was deleted:', deletedFilePath);
+        
+        // Show notification to user
+        toast.error(`File deleted by ${deletedBy || 'another user'}`, {
+          description: `"${selectedFile.name || selectedFile.path}" has been deleted and is no longer available.`,
+          duration: 5000
+        });
+        
+        // Clean up collaboration for this file (use special method for deleted files)
+        if (sessionId) {
+          try {
+            codeCollaborationService.disconnectDeletedFile(sessionId, selectedFile.path);
+          } catch (error) {
+            console.warn('Error disconnecting collaboration for deleted file:', error);
+          }
+        }
+        
+        // Use centralized deletion handler
+        handleFileDeleted(deletedFilePath);
+      }
+    }
+  }, [lastEvent, selectedFile, sessionId, handleFileDeleted]);
 
   // Decrypt access permissions
   useEffect(() => {
@@ -117,8 +166,42 @@ export function CodeWorkspace({ selectedFile }) {
     setOutput("Executing code...\n");
 
     try {
-      // Use current content from Monaco editor or fallback to file content
-      const codeToExecute = currentContent || selectedFile.content;
+      // Get the live collaborative content from Y.js document
+      let codeToExecute = '';
+      
+      if (sessionId && selectedFile.path) {
+        // Try to get live content from the collaboration service first
+        const liveContent = codeCollaborationService.getContent(sessionId, selectedFile.path);
+        if (liveContent && liveContent.trim()) {
+          codeToExecute = liveContent;
+          console.log('🚀 Using live collaborative content for execution:', {
+            filePath: selectedFile.path,
+            contentLength: liveContent.length,
+            preview: liveContent.substring(0, 100) + '...'
+          });
+        } else {
+          // Fallback to current content from store or file content
+          codeToExecute = currentContent || selectedFile.content;
+          console.log('🚀 Using fallback content for execution:', {
+            source: currentContent ? 'currentContent (from store)' : 'selectedFile.content',
+            filePath: selectedFile.path,
+            contentLength: codeToExecute?.length || 0
+          });
+        }
+      } else {
+        // Non-collaborative mode
+        codeToExecute = currentContent || selectedFile.content;
+        console.log('🚀 Using non-collaborative content for execution:', {
+          source: currentContent ? 'currentContent' : 'selectedFile.content',
+          contentLength: codeToExecute?.length || 0
+        });
+      }
+
+      if (!codeToExecute || !codeToExecute.trim()) {
+        setOutput("No code to execute. The file appears to be empty.");
+        return;
+      }
+
       const result = await executeCode(language, codeToExecute);
       setOutput(result);
       toast.success("Code executed successfully");
@@ -136,9 +219,16 @@ export function CodeWorkspace({ selectedFile }) {
   const saveTimeoutRef = useRef(null);
   
   const handleContentChange = useCallback(async (newContent) => {
+    // Always update the store with the latest content (collaborative or local)
     setCurrentContent(newContent);
+    console.log('📝 Content updated in CodeWorkspace:', {
+      filePath: selectedFile?.path,
+      contentLength: newContent?.length || 0,
+      isEditable,
+      source: isEditable ? 'user edit' : 'collaborative change'
+    });
     
-    // Auto-save functionality with debouncing - save 2 seconds after user stops typing
+    // Auto-save functionality with debouncing - only for editable mode
     if (selectedFile && isEditable) {
       // Clear existing timeout
       if (saveTimeoutRef.current) {
@@ -221,7 +311,8 @@ export function CodeWorkspace({ selectedFile }) {
                 <MonacoEditor
                   sessionId={sessionId}
                   filePath={selectedFile?.path}
-                  onContentChange={isEditable ? handleContentChange : null}
+                  onContentChange={handleContentChange} // Always pass handler to track collaborative changes
+                  onFileDeleted={handleFileDeleted} // Handle file deletion events
                   readOnly={!isEditable}
                   className="h-full"
                 />
@@ -263,7 +354,8 @@ CodeWorkspace.propTypes = {
     path: PropTypes.string.isRequired,
     content: PropTypes.string,
     name: PropTypes.string
-  })
+  }),
+  onFileDeleted: PropTypes.func
 };
 
 export default CodeWorkspace;

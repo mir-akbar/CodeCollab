@@ -179,16 +179,22 @@ export class YjsConnectionManager {
 
     provider.on('status', ({ status }) => {
       console.log(`🔌 WebSocket status for ${connection.filePath}: ${status}`);
+      const wasConnected = connection.isConnected;
       connection.isConnected = status === 'connected';
       
-      if (status === 'connected' && user) {
-        this._sendUserInfo(connection, user);
+      // Only emit event if status actually changed to avoid spam
+      if (wasConnected !== connection.isConnected) {
+        console.log(`🔄 Connection status changed for ${connection.filePath}: ${wasConnected} -> ${connection.isConnected}`);
+        
+        if (status === 'connected' && user) {
+          this._sendUserInfo(connection, user);
+        }
+        
+        this._emitEvent(connection, 'connection-status', { 
+          connected: connection.isConnected,
+          status 
+        });
       }
-      
-      this._emitEvent(connection, 'connection-status', { 
-        connected: connection.isConnected,
-        status 
-      });
     });
 
     provider.on('sync', (isSynced) => {
@@ -239,7 +245,25 @@ export class YjsConnectionManager {
    * Check if connection is healthy
    */
   isConnectionHealthy(connection) {
-    return connection?.provider?.ws?.readyState === 1; // WebSocket.OPEN
+    if (!connection || !connection.provider) return false;
+    
+    // Check multiple indicators of connection health
+    const wsReady = connection.provider.ws?.readyState === 1; // WebSocket.OPEN
+    const statusConnected = connection.isConnected;
+    const hasDoc = connection.doc && connection.ytext;
+    
+    const isHealthy = wsReady && statusConnected && hasDoc;
+    
+    if (!isHealthy) {
+      console.log(`🔍 Connection health check for ${connection.filePath}:`, {
+        wsReady: wsReady,
+        statusConnected: statusConnected,
+        hasDoc: hasDoc,
+        overall: isHealthy
+      });
+    }
+    
+    return isHealthy;
   }
 
   /**

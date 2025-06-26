@@ -101,6 +101,7 @@ export default function CodeWorkspacePage() {
             <CodeWorkspace 
               selectedFile={selectedFile} 
               sessionId={sessionId}
+              onFileDeleted={handleFileDeleted}
             />
           </WebSocketErrorBoundary>
         </SidebarInset>

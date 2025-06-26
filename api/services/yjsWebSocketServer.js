@@ -301,6 +301,40 @@ class YjsWebSocketServer {
   }
 
   /**
+   * Broadcast file event through Y.js document for proper frontend reception
+   */
+  broadcastFileEvent(sessionId, eventData) {
+    console.log(`📢 [FILE-EVENT] Broadcasting file event to session: ${sessionId}`, eventData);
+    
+    // Insert event into Y.js document for all connected clients
+    const clients = this.roomManager.getRoomClients(sessionId);
+    if (clients && clients.size > 0) {
+      // Find any client in the session to get access to their Y.js document
+      const clientArray = Array.from(clients);
+      for (const client of clientArray) {
+        if (client.readyState === client.OPEN && client.yDoc) {
+          try {
+            // Get the fileEvents array from the Y.js document
+            const fileEventsArray = client.yDoc.getArray('fileEvents');
+            
+            // Insert the event data into the array
+            fileEventsArray.push([eventData]);
+            
+            console.log(`✅ [FILE-EVENT] Event inserted into Y.js document for session: ${sessionId}`);
+            return true;
+          } catch (error) {
+            console.error('❌ [FILE-EVENT] Error inserting event into Y.js document:', error);
+          }
+        }
+      }
+    }
+    
+    // Fallback to direct WebSocket broadcast
+    console.log(`📡 [FILE-EVENT] Using fallback direct broadcast for session: ${sessionId}`);
+    return this.roomManager.broadcastToRoom(sessionId, eventData, null);
+  }
+
+  /**
    * Send message to specific user in room
    */
   sendToUser(room, targetUserId, message) {

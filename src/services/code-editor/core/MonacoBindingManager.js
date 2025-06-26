@@ -104,10 +104,15 @@ export class MonacoBindingManager {
    */
   _setupContentObserver(connection, binding, onContentChange) {
     const contentObserver = (event, transaction) => {
-      if (transaction.local) {
-        const newContent = connection.ytext.toString();
-        onContentChange(newContent);
-      }
+      // Call onContentChange for both local and remote changes
+      // This ensures the application state stays in sync with collaborative changes
+      const newContent = connection.ytext.toString();
+      console.log(`📝 Content changed in ${connection.filePath}:`, {
+        isLocal: transaction.local,
+        contentLength: newContent.length,
+        origin: transaction.local ? 'user input' : 'collaborative change'
+      });
+      onContentChange(newContent);
     };
 
     connection.ytext.observe(contentObserver);

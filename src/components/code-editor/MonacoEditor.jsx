@@ -10,6 +10,7 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCodeCollaboration } from "@/hooks/code-editor/useCodeCollaboration";
 import { useFileContent } from "@/hooks/file-manager/useFileQueries";
+import { useFileEvents } from "@/hooks/file-manager/useFileEvents";
 import { useEditorStore } from '@/stores';
 import { trackFileLoading } from "@/utils/performanceMonitor";
 import "../../styles/yjs-cursors.css";
@@ -18,6 +19,7 @@ export function MonacoEditor({
   sessionId, 
   filePath, 
   onContentChange, 
+  onFileDeleted,
   readOnly = false,
   className = ""
 }) {
@@ -25,8 +27,9 @@ export function MonacoEditor({
   const bindingRef = useRef(null);
   const cursorListenerRef = useRef(null);
   
-  // State to track cursor position
+  // State to track cursor position and file deletion
   const [cursorPosition, setCursorPosition] = useState({ lineNumber: 1, column: 1 });
+  const [isFileDeleted, setIsFileDeleted] = useState(false);
   
   // Zustand store for editor state
   const { 
@@ -50,7 +53,41 @@ export function MonacoEditor({
     userCount
   } = useCodeCollaboration(collaborationParams.sessionId, collaborationParams.filePath);
 
-  // Fetch file content directly - no complex caching
+  // Use file events hook to listen for file deletion
+  const { lastEvent } = useFileEvents(sessionId);
+
+  // Handle file deletion events
+  useEffect(() => {
+    if (lastEvent?.type === 'file-deleted' && filePath) {
+      const deletedFilePath = lastEvent.data.file?.path;
+      
+      // Check if the currently open file was deleted
+      if (deletedFilePath === filePath) {
+        console.log('🗑️ Currently open file was deleted in MonacoEditor:', deletedFilePath);
+        setIsFileDeleted(true);
+        
+        // Clean up editor binding
+        if (bindingRef.current) {
+          try {
+            bindingRef.current.destroy();
+          } catch (error) {
+            console.warn('Error destroying Monaco binding for deleted file:', error);
+          }
+          bindingRef.current = null;
+        }
+        
+        // Notify parent component
+        if (onFileDeleted) {
+          onFileDeleted(deletedFilePath);
+        }
+      }
+    }
+  }, [lastEvent, filePath, onFileDeleted]);
+
+  // Reset file deletion state when file path changes
+  useEffect(() => {
+    setIsFileDeleted(false);
+  }, [filePath]);
   const {
     data: fileContent,
     isLoading: contentLoading,
@@ -278,18 +315,31 @@ export function MonacoEditor({
     );
   }
 
-  // Handle errors
-  if (collabError || contentError) {
+  // Handle errors or file deletion
+  if (collabError || contentError || isFileDeleted) {
+    const isFileNotFound = contentError?.response?.status === 404 || isFileDeleted;
+    const errorTitle = isFileNotFound ? 'File Not Found' : 'Connection Error';
+    const errorMessage = isFileDeleted 
+      ? 'This file has been deleted by another user.'
+      : isFileNotFound 
+        ? 'This file may have been deleted or moved.'
+        : (collabError?.message || contentError?.message || 'Failed to load editor');
+
     return (
       <div className={`h-full border border-[#444] rounded-xl overflow-hidden flex flex-col ${className}`}>
         <div className="p-2 bg-red-700 text-red-100 text-sm">
-          ❌ Connection Error
+          ❌ {errorTitle}
         </div>
         <div className="flex-1 p-4 bg-[#1e1e1e]">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {collabError?.message || contentError?.message || 'Failed to load editor'}
+              {errorMessage}
+              {isFileNotFound && (
+                <div className="mt-2 text-sm">
+                  Please select another file from the sidebar.
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         </div>
@@ -384,6 +434,7 @@ MonacoEditor.propTypes = {
   sessionId: PropTypes.string.isRequired,
   filePath: PropTypes.string,
   onContentChange: PropTypes.func,
+  onFileDeleted: PropTypes.func,
   readOnly: PropTypes.bool,
   className: PropTypes.string
 };

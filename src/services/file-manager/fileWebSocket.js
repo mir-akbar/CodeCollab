@@ -95,102 +95,113 @@ class FileWebSocketService {
       return () => {};
     }
 
-    // Listen for broadcast messages from the server
-    const messageHandler = (data, origin) => {
-      // Only process messages from the server (not other clients)
-      if (origin === 'server' && data && typeof data === 'object') {
-        switch (data.type) {
-          case 'zipUploadStarted':
-            callback({
-              type: 'upload-started',
-              data: {
-                sessionId: data.sessionID,
-                fileName: data.fileName,
-                fileSize: data.fileSize,
-                message: data.message
-              }
-            });
-            break;
-
-          case 'fileUploaded':
-            callback({
-              type: 'file-uploaded',
-              data: {
-                sessionId: data.sessionId,
-                files: data.files,
-                action: data.action
-              }
-            });
-            break;
-
-          case 'file-deleted':
-            callback({
-              type: 'file-deleted',
-              data: {
-                sessionId: data.sessionId,
-                file: data.file,
-                deletedBy: data.deletedBy,
-                message: data.message
-              }
-            });
-            break;
-
-          case 'zipUploadComplete':
-            callback({
-              type: 'upload-complete',
-              data: {
-                sessionId: data.sessionID,
-                files: data.files,
-                totalFiles: data.totalFiles,
-                message: data.message
-              }
-            });
-            break;
-
-          case 'file-ready-for-collaboration':
-            callback({
-              type: 'collaboration-ready',
-              data: data
-            });
-            break;
-
-          default:
-            // Forward any other file-related events
-            if (data.type && data.type.includes('file')) {
+    // Listen for direct WebSocket messages from the server
+    const messageHandler = (event) => {
+      try {
+        let data;
+        
+        // Handle different message formats
+        if (typeof event.data === 'string') {
+          try {
+            data = JSON.parse(event.data);
+          } catch {
+            // Not JSON, ignore
+            return;
+          }
+        } else {
+          // Not a string message, ignore for file events
+          return;
+        }
+        
+        // Only process file-related events from the server
+        if (data && typeof data === 'object' && data.type) {
+          switch (data.type) {
+            case 'zipUploadStarted':
               callback({
-                type: data.type,
+                type: 'upload-started',
+                data: {
+                  sessionId: data.sessionID,
+                  fileName: data.fileName,
+                  fileSize: data.fileSize,
+                  message: data.message
+                }
+              });
+              break;
+
+            case 'fileUploaded':
+              callback({
+                type: 'file-uploaded',
+                data: {
+                  sessionId: data.sessionId,
+                  files: data.files,
+                  action: data.action
+                }
+              });
+              break;
+
+            case 'file-deleted':
+              console.log('🗑️ Received file deletion event:', data);
+              callback({
+                type: 'file-deleted',
+                data: {
+                  sessionId: data.sessionId,
+                  file: data.file,
+                  deletedBy: data.deletedBy,
+                  message: data.message
+                }
+              });
+              break;
+
+            case 'zipUploadComplete':
+              callback({
+                type: 'upload-complete',
+                data: {
+                  sessionId: data.sessionID,
+                  files: data.files,
+                  totalFiles: data.totalFiles,
+                  message: data.message
+                }
+              });
+              break;
+
+            case 'file-ready-for-collaboration':
+              callback({
+                type: 'collaboration-ready',
                 data: data
               });
-            }
+              break;
+
+            default:
+              // Forward any other file-related events
+              if (data.type && data.type.includes('file')) {
+                callback({
+                  type: data.type,
+                  data: data
+                });
+              }
+          }
         }
+      } catch (error) {
+        console.error('Error processing WebSocket message for file events:', error);
       }
     };
 
     // Store the handler for cleanup
     this.eventListeners.set(sessionId, messageHandler);
 
-    // Note: Y-WebSocket doesn't have a direct message event
-    // We need to implement custom message handling through the document
-    const doc = this.docs.get(sessionId);
-    const messagesArray = doc.getArray('fileEvents');
-    
-    const arrayObserver = (events) => {
-      events.forEach(event => {
-        if (event.type === 'insert') {
-          event.values.forEach(value => {
-            if (value && typeof value === 'object') {
-              messageHandler(value, 'server');
-            }
-          });
-        }
-      });
-    };
-
-    messagesArray.observe(arrayObserver);
+    // Add event listener to the WebSocket connection directly
+    if (provider.ws && provider.ws.addEventListener) {
+      provider.ws.addEventListener('message', messageHandler);
+      console.log('📡 Subscribed to direct WebSocket messages for file events:', sessionId);
+    } else {
+      console.warn('WebSocket not available for direct message listening:', sessionId);
+    }
 
     // Return cleanup function
     return () => {
-      messagesArray.unobserve(arrayObserver);
+      if (provider.ws && provider.ws.removeEventListener) {
+        provider.ws.removeEventListener('message', messageHandler);
+      }
       this.eventListeners.delete(sessionId);
     };
   }
