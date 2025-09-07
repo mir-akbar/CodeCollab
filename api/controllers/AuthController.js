@@ -9,9 +9,9 @@ const config  = require('../config/environment');
 
 const cookieOpts = {
   httpOnly: true,
-  secure: config.COOKIE_SECURE,
-  sameSite: config.COOKIE_SAME_SITE, 
-  domain: config.COOKIE_DOMAIN,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
+  // domain: config.COOKIE_DOMAIN,
   path: '/',
 }
 
@@ -152,6 +152,7 @@ class AuthController {
 
        // Debug cookie options
       console.log('Using cookie options:', cookieOptions);
+      console.log('Set-Cookie headers:', res.getHeader('Set-Cookie'));
 
 
       res.status(200).json({

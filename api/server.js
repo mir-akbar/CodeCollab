@@ -64,6 +64,8 @@ class CodeLabServer {
   setupMiddleware() {
     console.log('🔧 Setting up middleware...');
 
+    this.app.set('trust proxy', 1);
+
     // CORS configuration
     const allowedOrigins = [
       config.FRONTEND_URL,
@@ -77,7 +79,7 @@ class CodeLabServer {
     if (process.env.NODE_ENV === 'production') {
       allowedOrigins.push(
         // "https://codecollab-frontend-production.up.railway.app",
-        process.env.CORS_ORIGIN || config.FRONTEND_URL
+        process.env.CORS_ORIGIN || config.FRONTEND_URL,
       );
     }
 
@@ -90,7 +92,8 @@ class CodeLabServer {
       origin: allowedOrigins.filter(Boolean), // Remove any undefined values
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token']
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token'],
+      exposedHeaders: ['set-cookie']
     }));
 
     // Body parsing middleware
