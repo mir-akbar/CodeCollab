@@ -7,15 +7,19 @@ const userSyncService = require('../services/userSyncService');
 const cognitoService = require('../services/cognitoService');
 const { config } = require('../config/environment');
 
+const cookieOpts = {
+  httpOnly: true,
+  secure: config.COOKIE_SECURE,
+  sameSite: config.COOKIE_SAME_SITE, 
+  domain: config.COOKIE_DOMAIN || undefined,
+  path: '/',
+}
+
+const REFRESH_COOKIE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 class AuthController {
   constructor() {
-    // Cookie configuration for secure token storage
-    this.cookieConfig = {
-      httpOnly: true,
-      secure: config.COOKIE_SECURE || process.env.NODE_ENV === 'production',
-      sameSite: config.COOKIE_SAME_SITE || 'strict',
-      domain: config.COOKIE_DOMAIN === 'localhost' ? undefined : config.COOKIE_DOMAIN,
-    };
+    this.cookieConfig = {...cookieOpts}
   }
 
   // =============================================================================
@@ -139,12 +143,16 @@ class AuthController {
       res.cookie('accessToken', accessToken, cookieOptions);
       res.cookie('refreshToken', refreshToken, {
         ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        maxAge: REFRESH_COOKIE_MS
       });
       
       if (idToken) {
         res.cookie('idToken', idToken, cookieOptions);
       }
+
+      // DEBUG: log Set-Cookie headers sent
+      console.log('AuthController.refreshTokens -> Set-Cookie:', res.getHeader('Set-Cookie'));
+
 
       res.status(200).json({
         success: true,
@@ -194,9 +202,13 @@ class AuthController {
       if (newTokens.refreshToken !== refreshToken) {
         res.cookie('refreshToken', newTokens.refreshToken, {
           ...cookieOptions,
-          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+          maxAge: REFRESH_COOKIE_MS
         });
       }
+
+      // DEBUG: log Set-Cookie headers after refresh
+      console.log('AuthController.refreshTokens -> Set-Cookie:', res.getHeader('Set-Cookie'));
+
 
       res.status(200).json({
         success: true,

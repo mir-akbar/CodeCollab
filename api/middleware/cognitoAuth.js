@@ -9,7 +9,7 @@ const userSyncService = require('../services/userSyncService');
 
 // Cognito configuration
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
-const COGNITO_REGION = process.env.COGNITO_REGION || 'us-east-1';
+const COGNITO_REGION = process.env.COGNITO_REGION || 'ap-south-1';
 const COGNITO_ISSUER = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}`;
 
 // JWKS client for Cognito public keys

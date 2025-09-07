@@ -43,11 +43,14 @@ const config = {
   // Note: Using AWS Cognito JWT tokens only - no custom authentication needed
   
   // Cookie Configuration
-  COOKIE_SECURE: process.env.NODE_ENV === 'production',
-  COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE || 'lax',
+  // COOKIE_SECURE: process.env.NODE_ENV === 'production',
+  // COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE || 'lax',
+  COOKIE_SECURE: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production',
+  COOKIE_SAME_SITE: process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none': 'lax'),
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || undefined,
   
   // CORS Configuration
-  CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  CORS_ORIGIN: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   
   // WebRTC Configuration for Video Chat
