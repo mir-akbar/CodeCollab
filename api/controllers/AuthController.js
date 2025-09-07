@@ -5,7 +5,7 @@
 
 const userSyncService = require('../services/userSyncService');
 const cognitoService = require('../services/cognitoService');
-const { config } = require('../config/environment');
+const config  = require('../config/environment');
 
 const cookieOpts = {
   httpOnly: true,
@@ -150,8 +150,14 @@ class AuthController {
         res.cookie('idToken', idToken, cookieOptions);
       }
 
-      // DEBUG: log Set-Cookie headers sent
-      console.log('AuthController.refreshTokens -> Set-Cookie:', res.getHeader('Set-Cookie'));
+       // Debug cookie options
+      console.log('Using cookie options:', {
+        secure: cookieOptions.secure,
+        sameSite: cookieOptions.sameSite,
+        domain: cookieOptions.domain,
+        httpOnly: cookieOptions.httpOnly,
+        maxAge: cookieOptions.maxAge
+      });
 
 
       res.status(200).json({
