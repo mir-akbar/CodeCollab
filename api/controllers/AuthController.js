@@ -11,7 +11,7 @@ const cookieOpts = {
   httpOnly: true,
   secure: config.COOKIE_SECURE,
   sameSite: config.COOKIE_SAME_SITE, 
-  domain: config.COOKIE_DOMAIN || undefined,
+  domain: config.COOKIE_DOMAIN,
   path: '/',
 }
 
@@ -151,13 +151,7 @@ class AuthController {
       }
 
        // Debug cookie options
-      console.log('Using cookie options:', {
-        secure: cookieOptions.secure,
-        sameSite: cookieOptions.sameSite,
-        domain: cookieOptions.domain,
-        httpOnly: cookieOptions.httpOnly,
-        maxAge: cookieOptions.maxAge
-      });
+      console.log('Using cookie options:', cookieOptions);
 
 
       res.status(200).json({
