@@ -12,7 +12,7 @@ CodeCollab is a production-ready collaborative code editor built for modern deve
 
 ## **🚀 Live Deployment**
 
-**Try CodeCollab now:** [codecollab-frontend-production.up.railway.app](https://codecollab-frontend-production.up.railway.app)
+**Try CodeCollab now:** [codecollab-frontend-production.up.railway.app](https://codecollab-frontend-t93i.onrender.com)
 
 Experience the full power of collaborative coding in our production environment. No setup required - just click and start collaborating!
 
