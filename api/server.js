@@ -76,20 +76,22 @@ class CodeLabServer {
     ];
 
     // Add production frontend URL if different from FRONTEND_URL
-    if (process.env.NODE_ENV === 'production') {
       allowedOrigins.push(
         // "https://codecollab-frontend-production.up.railway.app",
         process.env.CORS_ORIGIN || config.FRONTEND_URL,
       );
     }
+    
+    // Save for debug logging
+    this.allowedOrigins = allowedOrigins.filter(Boolean);
 
     // Debug CORS origins in production
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔍 CORS allowed origins:', allowedOrigins.filter(Boolean));
+      console.log('🔍 CORS allowed origins:', this.allowedOrigins);
     }
 
     this.app.use(cors({
-      origin: allowedOrigins.filter(Boolean), // Remove any undefined values
+      origin: this.allowedOrigins, // Remove any undefined values
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token'],
@@ -106,7 +108,27 @@ class CodeLabServer {
     // Request logging middleware
     this.app.use((req, res, next) => {
       const timestamp = new Date().toISOString();
-      console.log(`${timestamp} - ${req.method} ${req.path}`);
+      // Debug logging for auth issues
+      if (process.env.NODE_ENV === 'production') {
+        // Sanitize cookies for logs but show if they exist
+        const hascookies = req.headers.cookie ? 'yes' : 'no';
+        const numCookies = req.cookies ? Object.keys(req.cookies).length : 0;
+        const cookieNames = req.cookies ? Object.keys(req.cookies) : [];
+        
+        console.log(`[REQUEST] ${req.method} ${req.path}`);
+        console.log(`   Origin: ${req.headers.origin}`);
+        console.log(`   Cookies present: ${hascookies} (${numCookies} parsed: ${cookieNames.join(', ')})`);
+        
+        // Check CORS match manually for debugging
+        const origin = req.headers.origin;
+        if (origin) {
+          const allowed = this.allowedOrigins || [];
+          const isAllowed = allowed.includes(origin);
+          console.log(`   CORS Check: Origin ${origin} is ${isAllowed ? 'ALLOWED' : 'NOT ALLOWED'} by config`);
+        }
+      } else {
+        console.log(`${timestamp} - ${req.method} ${req.path}`);
+      }
       next();
     });
 
