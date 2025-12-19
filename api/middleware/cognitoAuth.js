@@ -58,7 +58,6 @@ const requireAuth = async (req, res, next) => {
       : (req.headers['x-access-token'] || req.cookies?.accessToken);
 
     if (!token) {
-      console.log('❌ Auth failed: No token provided');
       return res.status(401).json({
         error: 'Authentication required',
         code: 'NO_TOKEN'

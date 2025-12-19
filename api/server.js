@@ -118,7 +118,6 @@ class CodeLabServer {
         
         console.log(`[REQUEST] ${req.method} ${req.path}`);
         console.log(`   Origin: ${req.headers.origin}`);
-        console.log(`   Headers: ${Object.keys(req.headers).join(', ')}`); // Log keys to see what arrives
         console.log(`   Cookies present: ${hascookies} (${numCookies} parsed: ${cookieNames.join(', ')})`);
         
         // Check CORS match manually for debugging

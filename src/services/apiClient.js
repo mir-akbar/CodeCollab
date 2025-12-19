@@ -20,20 +20,11 @@ const apiClient = axios.create({
 // Request interceptor - add auth token
 apiClient.interceptors.request.use(async (config) => {
   // Check if we have a valid token in memory
-  const hasToken = !!accessToken;
-  const now = Date.now();
-  const isExpired = tokenExpiry && now >= tokenExpiry;
-  const remainingTime = tokenExpiry ? (tokenExpiry - now) / 1000 : 'N/A';
-
-  console.error(`[DEBUG] API Interceptor Check: HasToken: ${hasToken}, IsExpired: ${isExpired}, Remaining: ${remainingTime}s`);
-  
-  if (accessToken && tokenExpiry && now < tokenExpiry) {
+  if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
     config.headers.Authorization = `Bearer ${accessToken}`;
     // Fallback: Send in custom header in case Safari/Proxy strips standard Authorization
     config.headers['x-access-token'] = accessToken;
   } else {
-    console.error(`[DEBUG] API Interceptor: Token missing or expired. Details:`, { hasToken, isExpired, now, tokenExpiry });
-    // Try to refresh token from secure httpOnly cookie via backend
     // Try to refresh token from secure httpOnly cookie via backend
     try {
       console.log('Attempting to refresh token from backend...');

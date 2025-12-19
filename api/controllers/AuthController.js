@@ -140,9 +140,6 @@ class AuthController {
         maxAge: expiresInMs
       };
       
-      console.log(`[AUTH] Setting cookies in storeTokens. Secure: ${cookieOptions.secure}, SameSite: ${cookieOptions.sameSite}`);
-      console.log(`[AUTH] Access Token length: ${accessToken?.length}`);
-
       res.cookie('accessToken', accessToken, cookieOptions);
       res.cookie('refreshToken', refreshToken, {
         ...cookieOptions,

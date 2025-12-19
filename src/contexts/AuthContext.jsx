@@ -47,11 +47,6 @@ async function getCurrentUser() {
     // Get current user from Cognito
     const cognitoUserWithSession = await getCurrentCognitoUser();
 
-    console.log('[DEBUG] AuthContext: Retrieved user from Cognito', {
-      hasSession: !!cognitoUserWithSession?.session,
-      username: cognitoUserWithSession?.username
-    });
-
     // CRITICAL FIX: Rehydrate apiClient with token from Cognito storage
     // This handles cases where cookies are blocked or reload cleared memory
     if (cognitoUserWithSession?.session) {
@@ -59,10 +54,7 @@ async function getCurrentUser() {
       // Calculate remaining validity
       const expiresIn = cognitoUserWithSession.session.getAccessToken().getExpiration() - Math.floor(Date.now() / 1000);
 
-      console.log(`[DEBUG] Rehydrating API client. Token length: ${token.length}, Expires in: ${expiresIn}s`);
       setTokens(token, expiresIn);
-    } else {
-      console.warn('[DEBUG] No session found in Cognito user object');
     }
 
     return cognitoUserWithSession; // Return full object
