@@ -45,7 +45,9 @@ export async function getCurrentCognitoUser() {
       try {
         // Get user attributes from Cognito
         const attributes = await getCognitoUserAttributes(cognitoUser);
-        resolve(attributes);
+        
+        // Return both attributes and the session (for token access)
+        resolve({ ...attributes, session, cognitoUser });
       } catch (error) {
         reject(error);
       }

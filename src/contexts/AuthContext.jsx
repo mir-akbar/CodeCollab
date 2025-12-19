@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropTypes from 'prop-types';
 import { apiClient, setTokens, clearTokens, hasValidToken } from '../services/apiClient';
 import { API_URL } from '../config/environment.js';
-import { 
+import {
   getCurrentCognitoUser,
   signupWithCognito,
   loginWithCognito,
@@ -30,12 +30,12 @@ async function getCurrentUser() {
           method: 'POST',
           credentials: 'include',
         });
-        
+
         if (!refreshResponse.ok) {
           console.log('No valid session found - user needs to login');
           return null;
         }
-        
+
         const { accessToken, expiresIn } = await refreshResponse.json();
         setTokens(accessToken, expiresIn);
       } catch (error) {
@@ -45,9 +45,21 @@ async function getCurrentUser() {
     }
 
     // Get current user from Cognito
-    const cognitoUser = await getCurrentCognitoUser();
-    return cognitoUser; // Return Cognito user directly for now
-    
+    const cognitoUserWithSession = await getCurrentCognitoUser();
+
+    // CRITICAL FIX: Rehydrate apiClient with token from Cognito storage
+    // This handles cases where cookies are blocked or reload cleared memory
+    if (cognitoUserWithSession?.session) {
+      const token = cognitoUserWithSession.session.getAccessToken().getJwtToken();
+      // Calculate remaining validity
+      const expiresIn = cognitoUserWithSession.session.getAccessToken().getExpiration() - Math.floor(Date.now() / 1000);
+
+      console.log('✅ Rehydrating API client from Cognito storage');
+      setTokens(token, expiresIn);
+    }
+
+    return cognitoUserWithSession; // Return full object
+
   } catch (error) {
     console.log('Auth check failed:', error);
     return null;
@@ -85,15 +97,15 @@ export function AuthProvider({ children }) {
   const loginMutation = useMutation({
     mutationFn: async ({ email, password, username }) => {
       console.log('Starting login process...');
-      
+
       // Login with Cognito - supports both email and username
       const result = await loginWithCognito({ email, password, username });
-      
+
       console.log('Cognito login successful, storing tokens...');
-      
+
       // Store tokens securely (memory + backend httpOnly cookies)
       setTokens(result.tokens.accessToken, result.tokens.expiresIn);
-      
+
       // Send tokens to backend for secure storage in httpOnly cookies
       await apiClient.post('/api/auth/store-tokens', {
         accessToken: result.tokens.accessToken,
@@ -101,17 +113,17 @@ export function AuthProvider({ children }) {
         idToken: result.tokens.idToken,
         expiresIn: result.tokens.expiresIn
       });
-      
+
       console.log('Login complete!');
       return result;
     },
     onSuccess: async () => {
       console.log('Login mutation onSuccess triggered, refetching auth state...');
-      
+
       // Invalidate and refetch auth queries, waiting for completion
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
       await queryClient.refetchQueries({ queryKey: ['auth', 'currentUser'] });
-      
+
       console.log('Auth state updated successfully');
     },
   });
@@ -121,7 +133,7 @@ export function AuthProvider({ children }) {
     mutationFn: async () => {
       // Logout from Cognito
       await logoutFromCognito();
-      
+
       // Clear tokens from backend (httpOnly cookies)
       try {
         await apiClient.post('/api/auth/logout');
@@ -132,7 +144,7 @@ export function AuthProvider({ children }) {
     onSuccess: () => {
       // Clear memory tokens
       clearTokens();
-      
+
       // Clear all query cache
       queryClient.clear();
     },
@@ -156,21 +168,21 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated: !!user && !error,
     isLoading: isCheckingAuth,
-    
+
     // Auth actions
     signup: signupMutation.mutateAsync,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     confirmRegistration: confirmMutation.mutateAsync,
     resendVerificationCode: resendCodeMutation.mutateAsync,
-    
+
     // Mutation states
     isSigningUp: signupMutation.isPending,
     isLoggingIn: loginMutation.isPending,
     isLoggingOut: logoutMutation.isPending,
     isConfirming: confirmMutation.isPending,
     isResendingCode: resendCodeMutation.isPending,
-    
+
     // Errors
     signupError: signupMutation.error,
     loginError: loginMutation.error,
