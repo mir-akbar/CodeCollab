@@ -76,6 +76,7 @@ class CodeLabServer {
     ];
 
     // Add production frontend URL if different from FRONTEND_URL
+    if (process.env.NODE_ENV === 'production') {
       allowedOrigins.push(
         // "https://codecollab-frontend-production.up.railway.app",
         process.env.CORS_ORIGIN || config.FRONTEND_URL,
