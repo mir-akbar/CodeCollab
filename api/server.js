@@ -95,7 +95,7 @@ class CodeLabServer {
       origin: this.allowedOrigins, // Remove any undefined values
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-session-token', 'x-access-token'],
       exposedHeaders: ['set-cookie']
     }));
 
@@ -118,6 +118,7 @@ class CodeLabServer {
         
         console.log(`[REQUEST] ${req.method} ${req.path}`);
         console.log(`   Origin: ${req.headers.origin}`);
+        console.log(`   Headers: ${Object.keys(req.headers).join(', ')}`); // Log keys to see what arrives
         console.log(`   Cookies present: ${hascookies} (${numCookies} parsed: ${cookieNames.join(', ')})`);
         
         // Check CORS match manually for debugging

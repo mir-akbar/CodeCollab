@@ -51,10 +51,11 @@ const verifyCognitoToken = (token) => {
 const requireAuth = async (req, res, next) => {
   try {
     // Get token from Authorization header or cookies
+    // Get token from Authorization header, custom header, or cookies
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') 
       ? authHeader.substring(7)
-      : req.cookies?.accessToken;
+      : (req.headers['x-access-token'] || req.cookies?.accessToken);
 
     if (!token) {
       console.log('❌ Auth failed: No token provided');

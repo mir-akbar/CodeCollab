@@ -29,6 +29,8 @@ apiClient.interceptors.request.use(async (config) => {
   
   if (accessToken && tokenExpiry && now < tokenExpiry) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+    // Fallback: Send in custom header in case Safari/Proxy strips standard Authorization
+    config.headers['x-access-token'] = accessToken;
   } else {
     console.error(`[DEBUG] API Interceptor: Token missing or expired. Details:`, { hasToken, isExpired, now, tokenExpiry });
     // Try to refresh token from secure httpOnly cookie via backend
