@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useFormattedUserData } from "@/hooks/useUserProfile";
 import { API_URL } from "@/config/environment.js";
+import { apiClient } from "@/services/apiClient";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,14 +34,11 @@ export default function SessionManagerTopNavBar() {
         if (sessionId && userData.email) {
             const fetchSessionData = async () => {
                 try {
-                    const response = await fetch(`${API_URL}/api/sessions/${sessionId}`, {
-                        credentials: 'include' // Include HTTP-only cookies
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success) {
-                            setSessionData(data.session);
-                        }
+                    const response = await apiClient.get(`/api/sessions/${sessionId}`);
+                    const data = response.data;
+
+                    if (data.success) {
+                        setSessionData(data.session);
                     }
                 } catch (error) {
                     console.error("Error fetching session data:", error);
@@ -83,8 +81,8 @@ export default function SessionManagerTopNavBar() {
                 {showAdminSettings && (
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button 
-                                variant="ghost" 
+                            <Button
+                                variant="ghost"
                                 size="icon"
                                 onClick={() => navigate(`/settings?session=${sessionId}`)}
                             >
@@ -140,14 +138,14 @@ export default function SessionManagerTopNavBar() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <DropdownMenuSeparator className="bg-border" />
-                        
+
                         {/* Profile Information */}
                         <DropdownMenuLabel className="px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/20">
                             Account Information
                         </DropdownMenuLabel>
-                        
+
                         <div className="px-3 py-2 space-y-2 bg-card">
                             <div className="text-xs p-2 rounded bg-muted/30">
                                 <span className="text-muted-foreground">Name: </span>
@@ -162,9 +160,9 @@ export default function SessionManagerTopNavBar() {
                                 <span className="font-medium text-foreground">{userData.email}</span>
                             </div>
                         </div>
-                        
+
                         <DropdownMenuSeparator className="bg-border" />
-                        
+
                         {/* Actions */}
                         <div className="p-1">
                             <DropdownMenuItem className="text-red-500 focus:text-red-500 focus:bg-red-50 dark:focus:bg-red-950/50 rounded m-1" onClick={handleLogout}>

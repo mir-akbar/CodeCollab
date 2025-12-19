@@ -270,20 +270,12 @@ export function useFileContent(sessionId, filePath) {
 export function useCodeExecution() {
   const executeCode = useCallback(async (language, code) => {
     try {
-      const response = await fetch(endpoints.execute, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ language, code }),
+      const response = await apiClient.post(endpoints.execute, {
+        language, 
+        code 
       });
 
-      if (!response.ok) {
-        throw new Error(`Execution failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      const result = response.data;
       return result.output || 'No output';
     } catch (error) {
       console.error('Code execution error:', error);

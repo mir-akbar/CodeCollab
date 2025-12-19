@@ -6,15 +6,10 @@
 import axios from 'axios';
 import { API_URL } from '../config/api';
 
-// Secure API client with cookie support
-const secureAPIClient = axios.create({
-  baseURL: API_URL,
-  timeout: 10000,
-  withCredentials: true, // Include HTTP-only cookies
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
+import { apiClient } from './apiClient';
+
+// Use shared apiClient instead of local instance
+const secureAPIClient = apiClient;
 
 // Session API functions
 export const sessionAPI = {

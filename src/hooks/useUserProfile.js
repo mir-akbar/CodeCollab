@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { API_URL } from '@/config/environment.js';
+import { apiClient } from '@/services/apiClient';
 import { useUser } from '@/contexts/UserContext';
 
 // Query keys for consistent cache management
@@ -23,15 +23,12 @@ export const useUserProfile = () => {
   return useQuery({
     queryKey: userQueryKeys.profile(),
     queryFn: async () => {
-      const response = await fetch(`${API_URL}/api/users/profile`, {
-        credentials: 'include'
-      });
+      // Use apiClient to ensure tokens (Authorization + x-access-token) are included
+      const response = await apiClient.get('/api/users/profile');
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch user profile: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      // Axios returns data directly in response.data
+      const data = response.data;
+      
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch user profile');
       }
